@@ -19,6 +19,17 @@ android {
         versionName = "0.1.0"
     }
 
+    // One fixed debug key (committed on purpose) so every build — from Android Studio
+    // or from GitHub Actions — installs as an update over the previous one.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
