@@ -43,5 +43,5 @@ _Last verified: 2026-10-19._ This page exists so nobody spends a day re-discover
 | Use another system app (recorder, screen recorder, Live Caption) | No cross-app delegation; screen recorder excludes call audio; Live Caption is Pixel/English only |
 | App pretends to be a Bluetooth headset for its own phone | Needs `BLUETOOTH_PRIVILEGED`; a phone can't pair with itself |
 | Virtual/remote-submix audio device | Capturing it needs `CAPTURE_AUDIO_OUTPUT` again |
-| Default dialer role | Control only, no audio |
+| Default dialer role for recording | Control only, no audio. **But** it does give a sanctioned speaker switch (`InCallService.setAudioRoute`) — kept as a fallback for path A if the 0.1 test shows API/tap can't enable the speaker; cost is building a full dialer UI. |
 | Root | Works (install as priv-app) but not a product path |
