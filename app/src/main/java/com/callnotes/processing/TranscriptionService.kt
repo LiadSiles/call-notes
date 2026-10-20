@@ -69,7 +69,7 @@ class TranscriptionService : Service() {
         try {
             // A call that just ended is still being saved; give it a moment to land.
             if (delayFirst) delay(6_000)
-            dao.requeueInterrupted()
+            dao.failInterrupted()
             val (spec, file) = app.models.readyModel() ?: return
 
             while (true) {

@@ -34,9 +34,13 @@ abstract class CallDao {
     @Query("UPDATE calls SET status = :status, transcriptModel = :model, error = :error WHERE id = :id")
     abstract suspend fun setStatus(id: Long, status: String, model: String?, error: String?)
 
-    /** After a crash mid-transcription, put the call back in the queue. */
-    @Query("UPDATE calls SET status = 'recorded' WHERE status = 'transcribing'")
-    abstract suspend fun requeueInterrupted()
+    /**
+     * A call still "transcribing" when a run starts means the process died mid-call
+     * (e.g. a native crash or out-of-memory). Mark it failed instead of retrying, so one
+     * bad file can't crash the app on every launch; the user can retry it by hand.
+     */
+    @Query("UPDATE calls SET status = 'transcribe_failed', error = 'התהליך נעצר באמצע (ייתכן שחסר זיכרון)' WHERE status = 'transcribing'")
+    abstract suspend fun failInterrupted()
 
     @Query("SELECT * FROM segments WHERE callId = :callId ORDER BY idx")
     abstract fun observeSegments(callId: Long): Flow<List<SegmentEntity>>

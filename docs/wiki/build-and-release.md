@@ -4,14 +4,17 @@ _Last verified: 2026-10-19_
 
 ## Toolchain
 
-Gradle 8.14.3 (wrapper), AGP 8.11.1, Kotlin 2.2.0 + KSP, Compose BOM 2025.06.01,
-Room 2.7.2. `compileSdk`/`targetSdk` 36, `minSdk` 29, JVM target 17.
+Gradle 8.14.3 (wrapper), AGP 8.11.1, Kotlin 2.4.0 + KSP 2.3.11 (Kotlin 2.4 is required by
+LiteRT-LM 0.17.1), Compose BOM 2025.06.01, Room 2.7.2, LiteRT-LM 0.17.1. APK limited to
+`arm64-v8a`. `compileSdk`/`targetSdk` 36, `minSdk` 29, JVM target 17.
 Versions live in `gradle/libs.versions.toml`.
 
 ## CI and releases
 
-`.github/workflows/build.yml` runs on every push to `main` (and manually):
-`./gradlew assembleDebug` → upload artifact → `gh release create
+`.github/workflows/build.yml` runs on every push to `main` and `dev/**` branches:
+`./gradlew testDebugUnitTest assembleDebug`. Only `main` publishes a release, so larger
+work goes on a `dev/<version>` branch until CI is green, then merges to `main`.
+Steps: build → upload artifact → `gh release create
 v<versionName>-build.<run_number>` as a **prerelease** with
 `call-notes-<version>-build.<n>.apk`.
 

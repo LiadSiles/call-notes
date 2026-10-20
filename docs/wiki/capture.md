@@ -1,6 +1,6 @@
 # Capture layer
 
-_Last verified: 2026-10-20 (code at 0.2.3)_
+_Last verified: 2026-10-20 (code at 0.3.0)_
 
 The app picks a capture path per device. Both produce the same thing — an audio file
 plus call metadata — and the pipeline downstream is shared.
@@ -96,8 +96,8 @@ Recorded so a single test call answers "does this device work?":
 | `silenced` | Android reported capture-policy silencing (`AudioRecordingConfiguration.isClientSilenced`) |
 | `speakerResult` | `on` / `failed` / `skipped_headset` / `disabled` |
 | `speakerMethod` | `api` / `user` / null (`tap` only in 0.1 data) |
-| `status` | `recorded` / `record_failed` (pipeline states added from 0.3) |
-| `kind` | `cellular` / `voip` (DB v2, migration 1→2 adds it with default `cellular`) |
+| `status` | `recorded` (awaiting transcription) / `record_failed` / `transcribing` / `transcribed` / `transcribe_failed` |
+| `kind` | `cellular` / `voip` / `import` (DB v2, migration 1→2 adds it with default `cellular`) |
 | `foreground` | mic foreground service ran during the call (DB v3); false → capture may be silenced on screen lock |
 
 ## Known gaps

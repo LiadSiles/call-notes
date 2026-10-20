@@ -1,7 +1,47 @@
 # Models
 
-_Last verified: 2026-10-19._ Facts about Gemma 4 come from Google's model cards and the
-LiteRT-LM docs as of mid-2026; re-check sizes and URLs when pinning the catalog.
+_Last verified: 2026-10-20 (code at 0.3.0)._
+
+## Status (0.3.0)
+
+Transcription is implemented; analysis (summary/tasks) is 0.4.
+
+| Piece | Where |
+|---|---|
+| Catalog with pinned files | `inference/Models.kt` → `ModelCatalog` |
+| Device choice, download, SHA-256 check | `inference/ModelManager.kt` |
+| Any audio → 16 kHz mono WAV | `audio/AudioDecoder.kt` |
+| 28 s / 3 s chunking at quiet points | `audio/Chunker.kt` |
+| Gemma via LiteRT-LM | `inference/GemmaTranscriber.kt` |
+| Overlap merge, loop detection, announcement filter | `inference/TranscriptMerger.kt` (+ unit tests) |
+| Queue in a foreground service | `processing/TranscriptionService.kt` |
+
+Pinned files (litert-community, not gated, Apache-2.0, checked 2026-10-20):
+
+| Model | File | Bytes | Min RAM reported |
+|---|---|---|---|
+| Gemma 4 E4B | `gemma-4-E4B-it.litertlm` | 3,659,530,240 | 7.0 GB |
+| Gemma 4 E2B | `gemma-4-E2B-it.litertlm` | 2,588,147,712 | 5.0 GB |
+
+SHA-256 values are in the catalog. The repos also have `-gpu`, `-web` and
+chip-specific (Tensor G5/G6, Qualcomm sm8750…) variants — unused for now.
+
+### LiteRT-LM facts we rely on (v0.17.1, `com.google.ai.edge.litertlm:litertlm-android`)
+
+- Built with **Kotlin 2.4** → the project must use Kotlin ≥ 2.4 (KSP 2.3.11).
+- `EngineConfig(modelPath, backend, audioBackend, maxNumTokens, cacheDir)`; audio needs
+  `audioBackend` set or no audio executor is created. `initialize()` takes seconds —
+  always off the main thread.
+- `Content.AudioFile(absolutePath)` — we pass a 16 kHz mono PCM16 WAV per chunk.
+- `ConversationConfig(systemInstruction, samplerConfig, maxOutputToken, thinkingConfig)`;
+  we use greedy `SamplerConfig(topK=1, topP=1.0, temperature=0.0)` and
+  `ThinkingConfig(enableThinking=false)`. A fresh conversation per chunk.
+- `Message.toString()` = concatenated text contents (thinking goes to `channels`).
+- **CPU backend** on purpose: community reports say GPU init crashes on phones with
+  < 12 GB RAM. E4B on CPU ≈ 3.3 GB RSS (S26 Ultra figure).
+- APK is limited to `arm64-v8a` to keep the native libraries small.
+
+Facts about Gemma 4 below come from Google's model cards and the LiteRT-LM docs.
 
 ## Default: Gemma 4, one model for both roles
 

@@ -3,6 +3,21 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-20 — 0.3 transcription design choices
+- **Model download via DownloadManager** into the app-specific external dir (resumes,
+  system progress notification, Wi-Fi-only by default), then SHA-256 check before use.
+  `INTERNET` permission added for this only.
+- **CPU backend**, greedy decoding, thinking off, one conversation per 28 s chunk.
+- **Kotlin 2.4** because LiteRT-LM 0.17.1 ships Kotlin 2.4 metadata.
+- **Audio import** (any format) so the pipeline can be tested without calls; imports
+  get `kind = "import"`.
+- **No crash loops:** a call left in `transcribing` at the start of a run is marked
+  failed (not retried), since a native crash/OOM would otherwise repeat every launch.
+- Transcription starts from `finish()` while the mic foreground service is still up
+  (background FGS starts can be refused); the UI also kicks the queue on resume.
+- Owner chose to continue development while unable to make test calls; the 0.2.3
+  screen-lock fix is untested.
+
 ### 2026-10-20 — Record inside a microphone foreground service
 Capture went silent when the screen locked during a call. The standard, visible fix:
 a `microphone`-type foreground service for the length of each recording, with an
