@@ -29,6 +29,9 @@ _Observed 2026-10-19, before installing 0.1._
 - 0.2.1: WhatsApp calls record with the far side audible. **Locking the screen
   mid-call made the capture silent** until the call ended → fixed attempt in 0.2.3
   (microphone foreground service); awaiting confirmation.
+- 0.3.0 call (2026-10-20): still **intermittent silent stretches**, with speakerphone on
+  throughout, screen partly locked / partly on. Type of call (cellular/WhatsApp) not
+  stated. Cause unknown → 0.3.1 adds a per-call trace; awaiting one.
 - Not yet reported: which source chip showed (`voice_recognition`/`mic`), reboot
   survival, Bluetooth headset behaviour.
 

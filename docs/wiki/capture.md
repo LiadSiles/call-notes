@@ -71,6 +71,23 @@ Starting a mic FGS from the background can be refused on some Android versions;
 failures are caught and recorded in the per-call `foreground` flag (UI chip
 "ללא שירות חזית").
 
+## Per-call trace (0.3.1)
+
+`CallTrace` writes `recordings/call_<ms>.trace.txt` next to each recording (deleted with
+it). Timings and levels only — no audio, no words — so the owner can paste it into a
+chat. Contents: device/build line; a **gap summary** that separates *digital silence*
+(≥90% exact-zero samples in a second → the system fed us zeros, i.e. capture policy)
+from *very quiet* (acoustic, e.g. echo cancellation or nobody talking, ≥3 s); events
+(screen off/on/unlock, every audio-mode change, call route changes, silenced callbacks,
+input device, foreground-service start result incl. exception, recorder read stalls /
+errors); per-second `rms/zero%` table. UI: "יומן אבחון" chip on the call card →
+dialog with "share as text".
+
+How to read it: digital-silence gaps that line up with "screen OFF" or "capture
+SILENCED" → policy/foreground problem; "read stalled" → process starved/suspended;
+quiet gaps with no event → acoustic (AEC/noise suppression on speakerphone) or real
+silence; a VoIP call split into several recordings → audio mode bounced.
+
 ## Path B — OEM dialer recordings (planned, 0.7)
 
 User enables "auto-record all calls" in the OEM dialer once; the app detects new files

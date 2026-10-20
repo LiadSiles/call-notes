@@ -10,6 +10,7 @@ _Last updated: 2026-10-20_
 | 0.2.2 | Seek bar + play/pause on each recording | ✅ built |
 | 0.2.3 | Microphone foreground service so recording survives screen lock | ✅ built, awaiting device test |
 | 0.3 | Gemma: model download + per-device choice, chunked transcription + merge, background processing, filter the dialer's recording announcement, audio import | ✅ built (CI green), awaiting device test |
+| 0.3.1 | Per-call diagnostic trace for recording gaps | ✅ built |
 | 0.4 | Summary + tasks in the fixed schema, date normalization, full call screen (summary, transcript with seek, task approval) | |
 | 0.5 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
 | 0.6 | Model swapping: catalog, Whisper + llama.cpp engines, reprocess, comparison screen | |
@@ -24,7 +25,7 @@ _Last updated: 2026-10-20_
 
 - Owner can't make calls right now. Test 0.3 with imported audio: model download,
   transcription quality in Hebrew, speed, memory/heat.
-- Later: lock the screen mid-call (0.2.3) — does recording continue?
+- A trace from a call with silent stretches (0.3.1) → decides the gap fix.
 - Still untested on the POCO: reboot survival, Bluetooth headset.
 
 ## Next
