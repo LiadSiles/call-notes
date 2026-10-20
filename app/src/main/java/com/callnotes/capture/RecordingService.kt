@@ -32,6 +32,7 @@ class RecordingService : Service() {
             true
         } catch (e: Exception) {
             // e.g. ForegroundServiceStartNotAllowedException / SecurityException on some devices.
+            lastError = "${e.javaClass.simpleName}: ${e.message}"
             stopSelf()
             false
         }
@@ -53,6 +54,10 @@ class RecordingService : Service() {
     companion object {
         /** True while the service is in the foreground. Read for per-call diagnostics. */
         @Volatile var started: Boolean = false
+            private set
+
+        /** Why the last start failed, for the call trace. */
+        @Volatile var lastError: String? = null
             private set
 
         fun start(context: Context): Boolean = try {

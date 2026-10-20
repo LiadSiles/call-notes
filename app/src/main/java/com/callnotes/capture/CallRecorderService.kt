@@ -2,6 +2,13 @@ package com.callnotes.capture
 
 import android.Manifest
 import android.accessibilityservice.AccessibilityService
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioManager
+import android.os.Build
+import android.os.PowerManager
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
@@ -41,6 +48,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         val file: File,
         val recorder: WavRecorder?,
         val kind: String,
+        val trace: CallTrace,
     ) {
         var speakerResult: String? = null
         var speakerMethod: String? = null
@@ -134,17 +142,22 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
 
     private fun startSession(incoming: Boolean, kind: String) {
         val startedAt = System.currentTimeMillis()
+        val trace = CallTrace(startedAt)
+        val audio = getSystemService(AudioManager::class.java)
+        val power = getSystemService(PowerManager::class.java)
+        trace.event("session start: kind=$kind mode=${modeName(audio.mode)} screen=${if (power.isInteractive) "on" else "off"}")
         // Foreground state first, so capture isn't silenced once the screen locks.
-        RecordingService.start(this)
+        trace.event("foreground service start requested: ${RecordingService.start(this)}")
         val dir = File(filesDir, "recordings").apply { mkdirs() }
         val file = File(dir, "call_$startedAt.wav")
 
         val recorder = if (hasMicPermission()) {
-            WavRecorder(file, mainExecutor).takeIf { it.start() }
+            WavRecorder(file, mainExecutor, trace).takeIf { it.start() }
         } else null
 
-        val current = Session(startedAt, incoming, file, recorder, kind)
+        val current = Session(startedAt, incoming, file, recorder, kind, trace)
         session = current
+        watchDevice(current)
         ServiceStatus.update { it.copy(recordingNow = recorder != null) }
 
         if (recorder == null) {
@@ -154,7 +167,11 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         } else {
             // The service reports asynchronously; sample it a few times.
             listOf(500L, 2_000L, 5_000L).forEach { at ->
-                main.postDelayed({ if (RecordingService.started) current.foreground = true }, at)
+                main.postDelayed({
+                    if (RecordingService.started) current.foreground = true
+                    current.trace.event("foreground service running=${RecordingService.started} (check at ${at}ms)" +
+                        (RecordingService.lastError?.let { " lastError=$it" } ?: ""))
+                }, at)
             }
         }
         if (kind == CallKind.CELLULAR) {
@@ -166,6 +183,8 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
 
     private fun finish(current: Session, endedAt: Long) {
         session = null
+        current.trace.event("session end")
+        unwatchDevice()
         main.removeCallbacksAndMessages(null)
         if (RecordingService.started) current.foreground = true
         current.recorder?.stop()
@@ -184,10 +203,14 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
 
     private suspend fun save(current: Session, endedAt: Long) {
         current.recorder?.awaitFinished()
+        if (current.recorder != null) {
+            try { current.trace.write(CallTrace.fileFor(current.file)) } catch (_: Exception) {}
+        }
 
         val voip = current.kind == CallKind.VOIP
         if (voip && endedAt - current.startedAt < MIN_VOIP_MS) {
             current.file.delete()
+            CallTrace.fileFor(current.file).delete()
             return
         }
 
@@ -201,6 +224,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         // An outgoing call nobody answered: we only recorded ringing — drop it.
         if (log != null && !incoming && log.durationSec == 0L) {
             current.file.delete()
+            CallTrace.fileFor(current.file).delete()
             return
         }
 
@@ -246,6 +270,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
 
         if (speaker.isSpeakerOn()) {
             current.speakerResult = SpeakerResult.ON
+            current.trace.event("speaker on (auto)")
             return
         }
         if (last) {
@@ -268,6 +293,65 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
                 watchForUserSpeaker(current)
             }
         }, 3_000)
+    }
+
+    // ---- Diagnostics -----------------------------------------------------------------
+
+    private var screenReceiver: BroadcastReceiver? = null
+    private var routeListener: Any? = null
+
+    /** Logs screen and audio-route changes into the session's trace. */
+    private fun watchDevice(current: Session) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val what = when (intent.action) {
+                    Intent.ACTION_SCREEN_OFF -> "screen OFF"
+                    Intent.ACTION_SCREEN_ON -> "screen ON"
+                    Intent.ACTION_USER_PRESENT -> "unlocked"
+                    else -> intent.action
+                }
+                current.trace.event(what ?: "?")
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        screenReceiver = receiver
+
+        if (Build.VERSION.SDK_INT >= 31) {
+            val audio = getSystemService(AudioManager::class.java)
+            val l = AudioManager.OnCommunicationDeviceChangedListener { device ->
+                current.trace.event("call audio route type=${device?.type}")
+            }
+            audio.addOnCommunicationDeviceChangedListener(mainExecutor, l)
+            routeListener = l
+        }
+    }
+
+    private fun unwatchDevice() {
+        screenReceiver?.let { try { unregisterReceiver(it) } catch (_: Exception) {} }
+        screenReceiver = null
+        if (Build.VERSION.SDK_INT >= 31) {
+            (routeListener as? AudioManager.OnCommunicationDeviceChangedListener)?.let {
+                getSystemService(AudioManager::class.java).removeOnCommunicationDeviceChangedListener(it)
+            }
+        }
+        routeListener = null
+    }
+
+    override fun onAudioMode(mode: Int) {
+        session?.trace?.event("audio mode -> ${modeName(mode)}")
+    }
+
+    private fun modeName(mode: Int) = when (mode) {
+        AudioManager.MODE_NORMAL -> "NORMAL"
+        AudioManager.MODE_RINGTONE -> "RINGTONE"
+        AudioManager.MODE_IN_CALL -> "IN_CALL"
+        AudioManager.MODE_IN_COMMUNICATION -> "IN_COMMUNICATION"
+        else -> "mode$mode"
     }
 
     private fun hasMicPermission() =

@@ -18,6 +18,7 @@ import java.util.concurrent.Executor
 class WavRecorder(
     private val file: File,
     private val callbackExecutor: Executor,
+    private val trace: CallTrace? = null,
     private val sampleRate: Int = 16_000,
 ) {
     private var record: AudioRecord? = null
@@ -36,11 +37,25 @@ class WavRecorder(
     var sourceName: String? = null
         private set
 
+    private var lastSilenced = false
+    private var lastDevice: Int? = null
+
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: List<AudioRecordingConfiguration>) {
             val session = record?.audioSessionId ?: return
             val mine = configs.firstOrNull { it.clientAudioSessionId == session } ?: return
             if (mine.isClientSilenced) silenced = true
+            if (mine.isClientSilenced != lastSilenced) {
+                lastSilenced = mine.isClientSilenced
+                trace?.event(if (mine.isClientSilenced) "capture SILENCED by system policy" else "capture un-silenced")
+            }
+            val device = mine.audioDevice?.type
+            if (device != lastDevice) {
+                lastDevice = device
+                trace?.event("input device type=$device")
+            }
+            // Other apps capturing at the same time (e.g. the call itself, the dialer).
+            trace?.event("recording configs: ${configs.size} active, ours silenced=${mine.isClientSilenced}")
         }
     }
 
@@ -83,6 +98,7 @@ class WavRecorder(
             }
             record = candidate
             sourceName = name
+            trace?.event("recorder started: source=$name buffer=${bufferBytes}B")
             break
         }
 
@@ -121,10 +137,20 @@ class WavRecorder(
             val bytes = ByteArray(samplesPerRead * 2)
             var dataBytes = 0L
             var peak = 0
+            // Per-second stats for the trace.
+            var secSumSq = 0.0
+            var secZeros = 0
+            var secCount = 0
+            var lastRead = System.nanoTime()
 
             while (running) {
                 val n = rec.read(samples, 0, samples.size)
-                if (n < 0) break      // error code
+                val now = System.nanoTime()
+                val gapMs = (now - lastRead) / 1_000_000
+                lastRead = now
+                // A read covers ≤ ~0.25 s of audio; much longer means the thread was starved.
+                if (gapMs > 800) trace?.event("read stalled ${gapMs}ms")
+                if (n < 0) { trace?.event("read error $n — recording stopped"); break }
                 if (n == 0) continue
                 for (i in 0 until n) {
                     val s = samples[i].toInt()
@@ -132,6 +158,13 @@ class WavRecorder(
                     if (abs > peak) peak = abs
                     bytes[2 * i] = (s and 0xFF).toByte()
                     bytes[2 * i + 1] = ((s shr 8) and 0xFF).toByte()
+                    secSumSq += s.toDouble() * s
+                    if (s == 0) secZeros++
+                    secCount++
+                    if (secCount == sampleRate) {
+                        trace?.second(kotlin.math.sqrt(secSumSq / secCount), secZeros.toDouble() / secCount)
+                        secSumSq = 0.0; secZeros = 0; secCount = 0
+                    }
                 }
                 peakLevel = peak
                 out.write(bytes, 0, n * 2)

@@ -22,12 +22,15 @@ class AudioModeMonitor(
     interface Listener {
         fun onVoipStarted()
         fun onVoipEnded()
+        /** Every raw mode change (for diagnostics). */
+        fun onAudioMode(mode: Int) {}
     }
 
     private val audio = context.getSystemService(AudioManager::class.java)
     private val main = Handler(Looper.getMainLooper())
     private val executor = context.mainExecutor
     private var inCommunication = false
+    private var lastMode = Int.MIN_VALUE
     private var modernListener: Any? = null
     private var polling = false
 
@@ -67,6 +70,7 @@ class AudioModeMonitor(
     }
 
     private fun handle(mode: Int) {
+        if (mode != lastMode) { lastMode = mode; listener.onAudioMode(mode) }
         val now = mode == AudioManager.MODE_IN_COMMUNICATION
         if (now == inCommunication) return
         inCommunication = now

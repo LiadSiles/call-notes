@@ -149,6 +149,7 @@ fun MainScreen() {
         }
     }
     var pendingDelete by remember { mutableStateOf<CallEntity?>(null) }
+    var traceOf by remember { mutableStateOf<File?>(null) }
 
     val setup = remember(refresh) {
         SetupState(
@@ -234,6 +235,9 @@ fun MainScreen() {
                             TranscriptionService.start(context)
                         }
                     },
+                    onTrace = call.filePath?.let { path ->
+                        com.callnotes.capture.CallTrace.fileFor(File(path)).takeIf { it.exists() }
+                    }?.let { f -> { traceOf = f } },
                     onPlay = { call.filePath?.let { player.toggle(call.id, it) } },
                     onShare = { call.filePath?.let { share(context, it) } },
                     onDelete = { pendingDelete = call },
@@ -241,6 +245,8 @@ fun MainScreen() {
             }
         }
     }
+
+    traceOf?.let { file -> TraceDialog(file, onDismiss = { traceOf = null }) }
 
     pendingDelete?.let { call ->
         AlertDialog(
@@ -253,7 +259,10 @@ fun MainScreen() {
                     if (player.loadedId == call.id) player.release()
                     scope.launch {
                         withContext(Dispatchers.IO) {
-                            call.filePath?.let { File(it).delete() }
+                            call.filePath?.let {
+                                File(it).delete()
+                                com.callnotes.capture.CallTrace.fileFor(File(it)).delete()
+                            }
                             app.database.calls().delete(call.id)
                         }
                     }
@@ -480,6 +489,7 @@ private fun CallCard(
     onToggleTranscript: () -> Unit,
     transcript: @Composable () -> Unit,
     onTranscribe: () -> Unit,
+    onTrace: (() -> Unit)?,
     onPlay: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
@@ -553,6 +563,9 @@ private fun CallCard(
 
             // Diagnostics: what the prototype is here to learn about each device.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (onTrace != null) AssistChip(onClick = onTrace, label = {
+                    Text("יומן אבחון", style = MaterialTheme.typography.labelSmall)
+                })
                 when {
                     failed -> Chip("ההקלטה נכשלה", warn = true)
                     quiet -> Chip("התקבל שקט", warn = true)
