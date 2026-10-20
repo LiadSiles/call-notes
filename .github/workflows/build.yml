@@ -16,19 +16,27 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
+      # Compiler and resource errors are re-emitted as annotations so they can be read
+      # through the checks API (raw job logs aren't reachable from every environment).
       - name: Build debug APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          set -o pipefail
+          if ! ./gradlew assembleDebug --console=plain 2>&1 | tee build.log; then
+            grep -E '^e: |error:|ERROR:|AAPT|What went wrong' -A3 build.log | head -40 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
 
       - name: Name the APK
         run: |
