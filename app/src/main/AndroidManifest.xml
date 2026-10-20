@@ -15,6 +15,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Install-time (no prompt): downloading the model files. Audio and text never leave the device. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Install-time (no prompt): foreground service for transcription after a call. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <!-- Install-time (no prompt): lets the app show the battery-exemption dialog. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -52,6 +57,15 @@
             android:name=".capture.RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <service
+            android:name=".processing.TranscriptionService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|mediaProcessing" />
+
+        <!-- Optional GPU acceleration for LiteRT-LM (CPU is used today). -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -12,6 +12,7 @@ import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SpeakerResult
+import com.callnotes.processing.TranscriptionService
 import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
 import kotlinx.coroutines.CoroutineScope
@@ -168,6 +169,11 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         main.removeCallbacksAndMessages(null)
         if (RecordingService.started) current.foreground = true
         current.recorder?.stop()
+        // Start transcription while still in the foreground state (background FGS starts
+        // can be refused); it waits a few seconds for this call to be saved.
+        if (prefs.autoTranscribe && current.recorder != null) {
+            TranscriptionService.start(this, afterCall = true)
+        }
         RecordingService.stop(this)
         speaker.restore()
         Notifications.cancelSpeakerPrompt(this)

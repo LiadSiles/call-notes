@@ -23,4 +23,24 @@ class Prefs(context: Context) {
     var autoSpeaker: Boolean
         get() = sp.getBoolean("auto_speaker_v2", false)
         set(value) = sp.edit().putBoolean("auto_speaker_v2", value).apply()
+
+    /** Transcribe each recording automatically once the model is ready. */
+    var autoTranscribe: Boolean
+        get() = sp.getBoolean("auto_transcribe", true)
+        set(value) = sp.edit().putBoolean("auto_transcribe", value).apply()
+
+    /** Download models only on Wi-Fi. */
+    var wifiOnly: Boolean
+        get() = sp.getBoolean("wifi_only", true)
+        set(value) = sp.edit().putBoolean("wifi_only", value).apply()
+
+    /** Chosen model id (see ModelCatalog); null = device recommendation. */
+    var modelId: String?
+        get() = sp.getString("model_id", null)
+        set(value) = sp.edit().putString("model_id", value).apply()
+
+    /** Active DownloadManager id for the model, or -1. */
+    var downloadId: Long
+        get() = sp.getLong("download_id", -1L)
+        set(value) = sp.edit().putLong("download_id", value).apply()
 }

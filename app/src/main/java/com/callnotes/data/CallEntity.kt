@@ -1,12 +1,17 @@
 package com.callnotes.data
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /** Where a call stands in the pipeline. Later stages (transcription, analysis) extend this. */
 object CallStatus {
+    /** Has audio; waiting for transcription. */
     const val RECORDED = "recorded"
     const val RECORD_FAILED = "record_failed"
+    const val TRANSCRIBING = "transcribing"
+    const val TRANSCRIBED = "transcribed"
+    const val TRANSCRIBE_FAILED = "transcribe_failed"
 }
 
 /** What happened when the app tried to put the call on speakerphone. */
@@ -29,6 +34,8 @@ object CallKind {
     const val CELLULAR = "cellular"
     /** Internet call — WhatsApp, Telegram, Meet… (detected from MODE_IN_COMMUNICATION). */
     const val VOIP = "voip"
+    /** Audio file imported by the user (any format). */
+    const val IMPORT = "import"
 }
 
 @Entity(tableName = "calls")
@@ -56,4 +63,19 @@ data class CallEntity(
     val kind: String = CallKind.CELLULAR,
     /** The microphone foreground service was running (DB v3). False = may go silent on lock. */
     val foreground: Boolean = false,
+    /** Model that produced the transcript (DB v4). */
+    val transcriptModel: String? = null,
+    /** Last processing error, shown to the user (DB v4). */
+    val error: String? = null,
+)
+
+/** One stretch of transcript with its position in the recording (DB v4). */
+@Entity(tableName = "segments", indices = [Index("callId")])
+data class SegmentEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val callId: Long,
+    val idx: Int,
+    val startMs: Long,
+    val endMs: Long,
+    val text: String,
 )

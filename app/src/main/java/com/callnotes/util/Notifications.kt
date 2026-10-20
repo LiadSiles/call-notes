@@ -21,6 +21,7 @@ object Notifications {
     private const val CHANNEL_ALERTS = "alerts"
 
     const val ID_RECORDING = 1
+    const val ID_PROCESSING = 4
     private const val ID_SPEAKER = 2
     private const val ID_PROBLEM = 3
 
@@ -42,6 +43,24 @@ object Notifications {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
+
+    /** Ongoing notification of [com.callnotes.processing.TranscriptionService]. */
+    fun processing(context: Context, progress: String?): Notification =
+        builder(context, CHANNEL_RECORDING, "מתמלל שיחות",
+            if (progress == null) "טוען את המודל…" else "מקטע $progress")
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .build()
+
+    fun updateProcessing(context: Context, progress: String) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) return
+        NotificationManagerCompat.from(context).notify(ID_PROCESSING, processing(context, progress))
+    }
 
     fun cancelSpeakerPrompt(context: Context) {
         NotificationManagerCompat.from(context).cancel(ID_SPEAKER)

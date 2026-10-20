@@ -15,8 +15,11 @@ android {
         applicationId = "com.callnotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.2.3"
+        versionCode = 6
+        versionName = "0.3.0"
+
+        // LiteRT-LM ships native libraries; phones are arm64. Keeps the APK small.
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     // One fixed debug key (committed on purpose) so every build — from Android Studio
@@ -79,4 +82,9 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.kotlinx.coroutines.android)
+
+    // On-device Gemma 4 inference (text + audio).
+    implementation(libs.litertlm.android)
+
+    testImplementation(libs.junit)
 }
