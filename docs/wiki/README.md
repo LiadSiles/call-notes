@@ -9,6 +9,7 @@ change that made it stale.
 | [product.md](product.md) | You need the goal, scope and user-facing behaviour |
 | [android-call-audio.md](android-call-audio.md) | Touching anything about how a call gets recorded |
 | [capture.md](capture.md) | Working in `capture/` — paths A and B, speaker logic, diagnostics |
+| [storage.md](storage.md) | Anything about files, the database, retention or what leaves the device |
 | [devices.md](devices.md) | Something behaves differently on a specific phone |
 | [models.md](models.md) | Working on transcription, summarization or model management |
 | [build-and-release.md](build-and-release.md) | Building, signing, CI, installing on a phone |

@@ -37,11 +37,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -53,6 +56,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -68,6 +73,7 @@ import com.callnotes.data.CallStatus
 import com.callnotes.data.SpeakerResult
 import com.callnotes.util.Prefs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -111,7 +117,14 @@ fun MainScreen() {
     val calls by app.database.calls().observeAll().collectAsStateWithLifecycle(emptyList())
 
     val player = remember { AudioPlayer() }
-    DisposableEffect(Unit) { onDispose { player.stop() } }
+    DisposableEffect(Unit) { onDispose { player.release() } }
+    // Keep the seek bar moving while something plays.
+    LaunchedEffect(player.isPlaying) {
+        while (player.isPlaying) {
+            player.refreshPosition()
+            delay(200)
+        }
+    }
     var pendingDelete by remember { mutableStateOf<CallEntity?>(null) }
 
     val setup = remember(refresh) {
@@ -178,7 +191,7 @@ fun MainScreen() {
             items(calls, key = { it.id }) { call ->
                 CallCard(
                     call = call,
-                    playing = player.playingId == call.id,
+                    player = player,
                     onPlay = { call.filePath?.let { player.toggle(call.id, it) } },
                     onShare = { call.filePath?.let { share(context, it) } },
                     onDelete = { pendingDelete = call },
@@ -195,7 +208,7 @@ fun MainScreen() {
             confirmButton = {
                 TextButton(onClick = {
                     pendingDelete = null
-                    if (player.playingId == call.id) player.stop()
+                    if (player.loadedId == call.id) player.release()
                     scope.launch {
                         withContext(Dispatchers.IO) {
                             call.filePath?.let { File(it).delete() }
@@ -419,7 +432,7 @@ private fun ToggleRow(
 @Composable
 private fun CallCard(
     call: CallEntity,
-    playing: Boolean,
+    player: AudioPlayer,
     onPlay: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
@@ -449,15 +462,20 @@ private fun CallCard(
                     )
                 }
                 if (!failed) {
+                    val playing = player.loadedId == call.id && player.isPlaying
                     IconButton(onClick = onPlay) {
                         Icon(
-                            if (playing) Icons.Filled.Close else Icons.Filled.PlayArrow,
-                            contentDescription = if (playing) "עצירה" else "השמעה",
+                            if (playing) PauseIcon else Icons.Filled.PlayArrow,
+                            contentDescription = if (playing) "השהיה" else "השמעה",
                         )
                     }
                     IconButton(onClick = onShare) { Icon(Icons.Filled.Share, contentDescription = "שיתוף") }
                 }
                 IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, contentDescription = "מחיקה") }
+            }
+
+            if (player.loadedId == call.id && player.durationMs > 0) {
+                SeekBar(player)
             }
 
             // Diagnostics: what the prototype is here to learn about each device.
@@ -470,6 +488,34 @@ private fun CallCard(
                     Chip(speakerLabel(call), warn = call.speakerResult == SpeakerResult.FAILED)
                 }
                 call.audioSource?.let { Chip(if (it == "mic") "מקור: MIC" else "מקור: זיהוי דיבור") }
+            }
+        }
+    }
+}
+
+/** Seek bar for the loaded recording; drag to scrub, release to jump. */
+@Composable
+private fun SeekBar(player: AudioPlayer) {
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val duration = player.durationMs.toFloat()
+    val shown = dragging ?: player.positionMs.toFloat()
+
+    // Media timelines read left-to-right even in Hebrew.
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Column(Modifier.padding(end = 8.dp)) {
+            Slider(
+                value = shown.coerceIn(0f, duration),
+                onValueChange = { dragging = it },
+                onValueChangeFinished = {
+                    dragging?.let { player.seekTo(it.toInt()) }
+                    dragging = null
+                },
+                valueRange = 0f..duration,
+            )
+            Row(Modifier.fillMaxWidth()) {
+                Text(formatDuration(shown.toLong()), style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.weight(1f))
+                Text(formatDuration(player.durationMs.toLong()), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
