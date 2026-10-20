@@ -17,6 +17,11 @@ v<versionName>-build.<run_number>` as a **prerelease** with
 
 - This is the reference compile check. Sessions without Google Maven access should
   push and read the run result (REST: `repos/LiadSiles/call-notes/actions/runs`).
+- Raw job logs may be unreachable (blob storage blocked by a proxy). On failure the
+  workflow re-emits compiler/AAPT errors as `::error::` annotations — read them with
+  `gh api repos/LiadSiles/call-notes/check-runs/<id>/annotations`.
+- Gotcha hit in 0.2: `android:accessibilityEventTypes="0"` fails resource linking
+  (it's a flags attribute); omit it to subscribe to no events.
 - The repo is private; downloading a release on the phone requires being signed in to
   GitHub in the browser.
 
