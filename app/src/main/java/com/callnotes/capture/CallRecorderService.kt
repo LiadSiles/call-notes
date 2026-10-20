@@ -9,6 +9,7 @@ import android.view.accessibility.AccessibilityEvent
 import androidx.core.content.ContextCompat
 import com.callnotes.CallNotesApp
 import com.callnotes.data.CallEntity
+import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SpeakerResult
 import com.callnotes.util.Notifications
@@ -22,20 +23,23 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * Records every call from the microphone.
+ * Records every call from the microphone — phone calls (telephony state) and,
+ * if enabled, internet calls (audio mode, see [AudioModeMonitor]).
  *
  * It is an accessibility service because Android delivers microphone audio to an
  * ordinary app as silence while a call is active; accessibility services are the
  * documented exception. It subscribes to no accessibility events and cannot read
  * the screen.
  */
-class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
+class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
+    AudioModeMonitor.Listener {
 
     private class Session(
         val startedAt: Long,
         val incoming: Boolean,
         val file: File,
         val recorder: WavRecorder?,
+        val kind: String,
     ) {
         var speakerResult: String? = null
         var speakerMethod: String? = null
@@ -43,6 +47,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
 
     private lateinit var prefs: Prefs
     private lateinit var monitor: CallStateMonitor
+    private lateinit var modeMonitor: AudioModeMonitor
     private lateinit var speaker: SpeakerController
 
     private val main = Handler(Looper.getMainLooper())
@@ -54,6 +59,8 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
         prefs = Prefs(this)
         speaker = SpeakerController(this)
         monitor = CallStateMonitor(this, this)
+        modeMonitor = AudioModeMonitor(this, this)
+        modeMonitor.start() // no permission needed; the pref is checked per call
         instance = this
         ServiceStatus.update { it.copy(connected = true) }
         ensureMonitoring()
@@ -67,6 +74,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
         if (instance === this) instance = null
         session?.let { finish(it, System.currentTimeMillis()) }
         if (::monitor.isInitialized) monitor.stop()
+        if (::modeMonitor.isInitialized) modeMonitor.stop()
         main.removeCallbacksAndMessages(null)
         ServiceStatus.update { ServiceStatus.State() }
         super.onDestroy()
@@ -91,13 +99,37 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
         }
 
         private val SPEAKER_CHECKS_MS = listOf(1_000L, 2_200L, 3_800L, 6_000L)
+
+        /** Shorter internet "calls" are usually voice messages played via the earpiece. */
+        private const val MIN_VOIP_MS = 8_000L
     }
 
     // ---- Call lifecycle -----------------------------------------------------------
 
     override fun onCallStarted(incoming: Boolean) {
-        if (!prefs.recordingEnabled || session != null) return
+        if (!prefs.recordingEnabled) return
+        // A phone call takes over from an internet call in progress (rare).
+        session?.takeIf { it.kind == CallKind.VOIP }?.let { finish(it, System.currentTimeMillis()) }
+        if (session != null) return
+        startSession(incoming, CallKind.CELLULAR)
+    }
 
+    override fun onCallEnded() {
+        val current = session?.takeIf { it.kind == CallKind.CELLULAR } ?: return
+        finish(current, System.currentTimeMillis())
+    }
+
+    override fun onVoipStarted() {
+        if (!prefs.recordingEnabled || !prefs.recordVoip || session != null) return
+        startSession(incoming = false, kind = CallKind.VOIP)
+    }
+
+    override fun onVoipEnded() {
+        val current = session?.takeIf { it.kind == CallKind.VOIP } ?: return
+        finish(current, System.currentTimeMillis())
+    }
+
+    private fun startSession(incoming: Boolean, kind: String) {
         val startedAt = System.currentTimeMillis()
         val dir = File(filesDir, "recordings").apply { mkdirs() }
         val file = File(dir, "call_$startedAt.wav")
@@ -106,7 +138,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
             WavRecorder(file, mainExecutor).takeIf { it.start() }
         } else null
 
-        val current = Session(startedAt, incoming, file, recorder)
+        val current = Session(startedAt, incoming, file, recorder, kind)
         session = current
         ServiceStatus.update { it.copy(recordingNow = recorder != null) }
 
@@ -116,12 +148,11 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
         } else {
             Notifications.showRecording(this)
         }
-        startSpeakerFlow(current)
-    }
-
-    override fun onCallEnded() {
-        val current = session ?: return
-        finish(current, System.currentTimeMillis())
+        if (kind == CallKind.CELLULAR) {
+            startSpeakerFlow(current)
+        } else {
+            current.speakerResult = SpeakerResult.NOT_APPLICABLE
+        }
     }
 
     private fun finish(current: Session, endedAt: Long) {
@@ -137,9 +168,18 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
 
     private suspend fun save(current: Session, endedAt: Long) {
         current.recorder?.awaitFinished()
-        delay(2_000) // give the dialer time to write the call-log entry
 
-        val log = CallLogResolver.resolve(this, current.startedAt, endedAt)
+        val voip = current.kind == CallKind.VOIP
+        if (voip && endedAt - current.startedAt < MIN_VOIP_MS) {
+            current.file.delete()
+            return
+        }
+
+        // The call log only covers phone calls; give the dialer time to write it.
+        val log = if (voip) null else {
+            delay(2_000)
+            CallLogResolver.resolve(this, current.startedAt, endedAt)
+        }
         val incoming = log?.incoming ?: current.incoming
 
         // An outgoing call nobody answered: we only recorded ringing — drop it.
@@ -162,6 +202,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
             speakerResult = current.speakerResult ?: SpeakerResult.FAILED,
             speakerMethod = current.speakerMethod,
             status = if (recorder != null) CallStatus.RECORDED else CallStatus.RECORD_FAILED,
+            kind = current.kind,
         )
         if (recorder == null) current.file.delete()
         (application as CallNotesApp).database.calls().insert(entity)

@@ -19,6 +19,16 @@ object SpeakerResult {
     const val SKIPPED_HEADSET = "skipped_headset"
     /** Auto-speaker is turned off in settings. */
     const val DISABLED = "disabled"
+    /** Not attempted: internet calls keep the calling app's own audio route. */
+    const val NOT_APPLICABLE = "na"
+}
+
+/** What kind of call was recorded. */
+object CallKind {
+    /** Regular phone call (detected through telephony state). */
+    const val CELLULAR = "cellular"
+    /** Internet call — WhatsApp, Telegram, Meet… (detected from MODE_IN_COMMUNICATION). */
+    const val VOIP = "voip"
 }
 
 @Entity(tableName = "calls")
@@ -26,6 +36,7 @@ data class CallEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val startedAt: Long,
     val endedAt: Long,
+    /** Meaningless for [CallKind.VOIP] (direction unknown; stored as false). */
     val incoming: Boolean,
     val number: String?,
     val contactName: String?,
@@ -41,4 +52,6 @@ data class CallEntity(
     /** "api", "user" or null — how the speaker got turned on. ("tap" in 0.1 data.) */
     val speakerMethod: String?,
     val status: String,
+    /** [CallKind]; added in DB version 2, older rows are cellular. */
+    val kind: String = CallKind.CELLULAR,
 )

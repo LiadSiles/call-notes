@@ -37,6 +37,26 @@ Android). Flow, all in `capture/CallRecorderService.kt`:
    **optional** — without `READ_CALL_LOG` the call is saved without number/name and
    unanswered outgoing calls are kept.
 
+## Internet calls (VoIP) — experimental (0.2.1)
+
+WhatsApp, Telegram, Meet etc. Toggle "שיחות אינטרנט (ניסיוני)", default on.
+
+- Detection: `AudioModeMonitor` watches `AudioManager` mode — `MODE_IN_COMMUNICATION`
+  = a VoIP call is active. `addOnModeChangedListener` on API 31+, 2 s polling below.
+  No permission. Can't tell which app or who's on the line (names would need
+  notification-listener access — deliberately not added yet).
+- Capture: same `WavRecorder` inside the accessibility service. The capture policy
+  treats `MODE_IN_COMMUNICATION` as a voice call, so the accessibility exemption
+  applies.
+- **Open question:** the VoIP app's echo canceller. When several apps capture, the
+  highest-priority client's pre-processing applies to the shared input, so the AEC may
+  strip the far side from our stream. Device-dependent; test per device.
+- Sessions under 8 s are discarded (apps also enter this mode to play voice messages
+  through the earpiece). No speaker flow (`speakerResult = "na"`), no call-log lookup;
+  `incoming` is stored as false and the UI shows "אינטרנט".
+- A phone call arriving during a VoIP session ends the VoIP session and starts a
+  cellular one.
+
 ## Path B — OEM dialer recordings (planned, 0.7)
 
 User enables "auto-record all calls" in the OEM dialer once; the app detects new files
@@ -63,6 +83,7 @@ Recorded so a single test call answers "does this device work?":
 | `speakerResult` | `on` / `failed` / `skipped_headset` / `disabled` |
 | `speakerMethod` | `api` / `user` / null (`tap` only in 0.1 data) |
 | `status` | `recorded` / `record_failed` (pipeline states added from 0.3) |
+| `kind` | `cellular` / `voip` (DB v2, migration 1→2 adds it with default `cellular`) |
 
 ## Known gaps
 

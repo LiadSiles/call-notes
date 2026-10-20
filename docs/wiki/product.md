@@ -10,13 +10,13 @@ and suggested tasks with due dates — all produced locally.
 
 ## Scope
 
-**In (1.0):** Android 10+; cellular calls; Hebrew and English; fully on-device
+**In (1.0):** Android 10+; cellular calls; internet calls (WhatsApp etc., experimental); Hebrew and English; fully on-device
 processing; tasks inside the app plus reminders and export to the device calendar.
 
-**Out (1.0):** iPhone (no API to call audio); cloud processing; WhatsApp/VoIP calls;
+**Out (1.0):** iPhone (no API to call audio); cloud processing;
 speaker diarization beyond "me / the other side".
 
-**After 1.0 (candidates):** VoIP calling mode (SIP trunk), WhatsApp calls,
+**After 1.0 (candidates):** VoIP calling mode (SIP trunk), names for internet calls,
 diarization, a Bluetooth recording accessory.
 
 ## Users and setup

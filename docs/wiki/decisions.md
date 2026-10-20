@@ -3,6 +3,12 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-20 — Record internet calls (experimental), no names yet
+Owner asked for WhatsApp recording. Detected via audio mode (no permission), recorded
+by the same accessibility-service capture. Names deferred: they'd need notification
+listener access (reads all notifications) — owner chose "no names for now". Default
+on; pulled forward from "after 1.0".
+
 ### 2026-10-20 — Minimal permissions (0.2)
 The owner asked to drop everything recording doesn't use. The 0.1 test showed both
 sides are captured without speakerphone, so:

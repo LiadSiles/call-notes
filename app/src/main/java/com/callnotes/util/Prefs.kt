@@ -11,6 +11,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("recording_enabled", true)
         set(value) = sp.edit().putBoolean("recording_enabled", value).apply()
 
+    /** Also record internet calls (WhatsApp, Telegram, Meet…). Experimental. */
+    var recordVoip: Boolean
+        get() = sp.getBoolean("record_voip", true)
+        set(value) = sp.edit().putBoolean("record_voip", value).apply()
+
     /**
      * Put each call on speakerphone. Off by default: on tested devices the mic
      * already captures both sides. Kept for devices where the far side is too quiet.

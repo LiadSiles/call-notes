@@ -63,6 +63,7 @@ import com.callnotes.CallNotesApp
 import com.callnotes.capture.CallRecorderService
 import com.callnotes.capture.ServiceStatus
 import com.callnotes.data.CallEntity
+import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SpeakerResult
 import com.callnotes.util.Prefs
@@ -370,6 +371,7 @@ private fun SetupRow(done: Boolean?, title: String, body: String, action: String
 private fun SettingsSection(prefs: Prefs) {
     var recording by remember { mutableStateOf(prefs.recordingEnabled) }
     var autoSpeaker by remember { mutableStateOf(prefs.autoSpeaker) }
+    var voip by remember { mutableStateOf(prefs.recordVoip) }
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -377,6 +379,14 @@ private fun SettingsSection(prefs: Prefs) {
             ToggleRow("הקלטת שיחות", "מתג ראשי", recording) {
                 recording = it; prefs.recordingEnabled = it
             }
+            HorizontalDivider()
+            ToggleRow(
+                "שיחות אינטרנט (ניסיוני)",
+                "מקליט גם שיחות WhatsApp, טלגרם, Meet וכדומה. ללא שם הצד השני. " +
+                    "ייתכן שבחלק מהמכשירים הצד השני לא יישמע.",
+                voip,
+                enabled = recording,
+            ) { voip = it; prefs.recordVoip = it }
             HorizontalDivider()
             ToggleRow(
                 "רמקול אוטומטי",
@@ -421,12 +431,18 @@ private fun CallCard(
         Column(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
+                    val voip = call.kind == CallKind.VOIP
                     Text(
-                        call.contactName ?: call.number ?: "מספר לא ידוע",
+                        call.contactName ?: call.number ?: if (voip) "שיחת אינטרנט" else "מספר לא ידוע",
                         style = MaterialTheme.typography.titleMedium,
                     )
+                    val direction = when {
+                        voip -> "אינטרנט"
+                        call.incoming -> "נכנסת"
+                        else -> "יוצאת"
+                    }
                     Text(
-                        "${if (call.incoming) "נכנסת" else "יוצאת"} · ${formatDate(call.startedAt)} · " +
+                        "$direction · ${formatDate(call.startedAt)} · " +
                             formatDuration(call.endedAt - call.startedAt),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -450,7 +466,9 @@ private fun CallCard(
                     failed -> Chip("ההקלטה נכשלה", warn = true)
                     quiet -> Chip("התקבל שקט", warn = true)
                 }
-                Chip(speakerLabel(call), warn = call.speakerResult == SpeakerResult.FAILED)
+                if (call.speakerResult != SpeakerResult.NOT_APPLICABLE) {
+                    Chip(speakerLabel(call), warn = call.speakerResult == SpeakerResult.FAILED)
+                }
                 call.audioSource?.let { Chip(if (it == "mic") "מקור: MIC" else "מקור: זיהוי דיבור") }
             }
         }
