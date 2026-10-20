@@ -1,21 +1,44 @@
 package com.callnotes.ui
 
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.callnotes.CallNotesApp
+import com.callnotes.capture.CallRecorderService
+import com.callnotes.processing.TranscriptionService
+import com.callnotes.ui.theme.CallNotesTheme
+import com.callnotes.util.Prefs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,24 +46,103 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CallNotesTheme {
-                // The app is Hebrew-first: keep the layout right-to-left whatever the system language.
+                // Hebrew-first: right-to-left whatever the system language.
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    MainScreen()
+                    AppRoot()
                 }
             }
         }
     }
 }
 
+private enum class Tab { Calls, Settings }
+
 @Composable
-private fun CallNotesTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+private fun AppRoot() {
     val context = LocalContext.current
-    val colors = when {
-        Build.VERSION.SDK_INT >= 31 && dark -> dynamicDarkColorScheme(context)
-        Build.VERSION.SDK_INT >= 31 -> dynamicLightColorScheme(context)
-        dark -> darkColorScheme()
-        else -> lightColorScheme()
+    val app = context.applicationContext as CallNotesApp
+    val prefs = remember { Prefs(context) }
+    val scope = rememberCoroutineScope()
+
+    var tab by rememberSaveable { mutableStateOf(Tab.Calls) }
+    var openCallId by rememberSaveable { mutableStateOf<Long?>(null) }
+
+    // System settings may change while we're away (permissions, accessibility, battery).
+    var resumeTick by remember { mutableIntStateOf(0) }
+    val kickQueue: () -> Unit = {
+        scope.launch(Dispatchers.IO) {
+            if (prefs.autoTranscribe && app.database.calls().pendingCount() > 0) {
+                TranscriptionService.start(context)
+            }
+        }
     }
-    MaterialTheme(colorScheme = colors, content = content)
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        resumeTick++
+        CallRecorderService.refreshFromUi()
+        app.models.refresh()
+        kickQueue()
+    }
+
+    val player = remember { AudioPlayer() }
+    DisposableEffect(Unit) { onDispose { player.release() } }
+    LaunchedEffect(player.isPlaying) {
+        while (player.isPlaying) { player.refreshPosition(); delay(200) }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch(Dispatchers.IO) {
+            try {
+                Importer.import(context, uri)
+                if (prefs.autoTranscribe) TranscriptionService.start(context)
+            } catch (_: Exception) {
+                // Unreadable file: nothing was added.
+            }
+        }
+    }
+
+    val detail = openCallId
+    if (detail != null) {
+        BackHandler { openCallId = null }
+        CallDetailScreen(
+            callId = detail,
+            player = player,
+            onBack = { openCallId = null },
+            onTranscribe = kickQueue,
+        )
+        return
+    }
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = tab == Tab.Calls,
+                    onClick = { tab = Tab.Calls },
+                    icon = { Icon(Icons.Filled.Call, null) },
+                    label = { Text("שיחות") },
+                )
+                NavigationBarItem(
+                    selected = tab == Tab.Settings,
+                    onClick = { tab = Tab.Settings },
+                    icon = { Icon(Icons.Filled.Settings, null) },
+                    label = { Text("הגדרות") },
+                )
+            }
+        },
+    ) { padding ->
+        when (tab) {
+            Tab.Calls -> CallsScreen(
+                contentPadding = padding,
+                resumeTick = resumeTick,
+                onOpen = { openCallId = it },
+                onOpenSettings = { tab = Tab.Settings },
+                onImport = { importLauncher.launch(arrayOf("audio/*")) },
+            )
+            Tab.Settings -> SettingsScreen(
+                contentPadding = padding,
+                resumeTick = resumeTick,
+                onModelReady = kickQueue,
+            )
+        }
+    }
 }

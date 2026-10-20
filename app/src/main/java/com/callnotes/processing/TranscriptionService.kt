@@ -49,6 +49,7 @@ class TranscriptionService : Service() {
             ServiceCompat.startForeground(this, Notifications.ID_PROCESSING,
                 Notifications.processing(this, null), type)
         } catch (e: Exception) {
+            note("לא ניתן היה להפעיל את שירות התמלול: ${e.javaClass.simpleName}")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -70,8 +71,10 @@ class TranscriptionService : Service() {
             // A call that just ended is still being saved; give it a moment to land.
             if (delayFirst) delay(6_000)
             dao.failInterrupted()
-            val (spec, file) = app.models.readyModel() ?: return
+            val (spec, file) = app.models.readyModel() ?: run { note("אין מודל מותקן"); return }
 
+            var done = 0
+            var failed = 0
             while (true) {
                 val call = dao.nextPending() ?: break
                 waitWhileHot()
@@ -79,8 +82,13 @@ class TranscriptionService : Service() {
                     ProcessingStatus.set(ProcessingStatus.State(running = true, phase = "loading"))
                     transcriber = GemmaTranscriber(this, spec, file)
                 }
-                process(call, transcriber)
+                if (process(call, transcriber)) done++ else failed++
             }
+            note(when {
+                done == 0 && failed == 0 -> "אין הקלטות שממתינות לתמלול"
+                failed == 0 -> "תומללו $done הקלטות (${spec.displayName})"
+                else -> "תומללו $done, נכשלו $failed (${spec.displayName})"
+            })
         } finally {
             transcriber?.close()
             ProcessingStatus.set(ProcessingStatus.State())
@@ -89,7 +97,8 @@ class TranscriptionService : Service() {
         }
     }
 
-    private suspend fun process(call: CallEntity, transcriber: Transcriber) {
+    /** Returns true if the call was transcribed. */
+    private suspend fun process(call: CallEntity, transcriber: Transcriber): Boolean {
         val dao = (application as CallNotesApp).database.calls()
         dao.setStatus(call.id, CallStatus.TRANSCRIBING, null, null)
         val converted = File(cacheDir, "convert_${call.id}.wav")
@@ -104,13 +113,15 @@ class TranscriptionService : Service() {
                 SegmentEntity(callId = call.id, idx = i, startMs = s.startMs, endMs = s.endMs, text = s.text)
             }
             dao.replaceTranscript(call.id, rows, transcriber.modelId)
+            return true
         } catch (e: Throwable) {
             if (e is kotlinx.coroutines.CancellationException) {
                 dao.setStatus(call.id, CallStatus.RECORDED, null, null)
                 throw e
             }
             dao.setStatus(call.id, CallStatus.TRANSCRIBE_FAILED, null,
-                (e.message ?: e.javaClass.simpleName).take(300))
+                "${e.javaClass.simpleName}: ${e.message ?: ""}".take(300))
+            return false
         } finally {
             converted.delete()
         }
@@ -124,6 +135,8 @@ class TranscriptionService : Service() {
         }
     }
 
+    private fun note(text: String) = note(this, text)
+
     override fun onDestroy() {
         scope.cancel()
         wakeLock?.takeIf { it.isHeld }?.release()
@@ -136,7 +149,10 @@ class TranscriptionService : Service() {
         /** Starts processing if a model is ready. Safe to call often. */
         fun start(context: Context, afterCall: Boolean = false): Boolean {
             val app = context.applicationContext as CallNotesApp
-            if (app.models.readyModel() == null) return false
+            if (app.models.readyModel() == null) {
+                note(context, "אין מודל מותקן — התמלול לא הופעל")
+                return false
+            }
             return try {
                 ContextCompat.startForegroundService(
                     context,
@@ -144,8 +160,17 @@ class TranscriptionService : Service() {
                 )
                 true
             } catch (e: Exception) {
-                false // e.g. background start not allowed; picked up when the app opens
+                // e.g. background start not allowed; picked up when the app opens.
+                note(context, "התמלול יתחיל כשהאפליקציה תיפתח (${e.javaClass.simpleName})")
+                false
             }
+        }
+
+        /** Records the outcome of the last run where the settings screen can show it. */
+        fun note(context: Context, text: String) {
+            val time = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).format(java.util.Date())
+            com.callnotes.util.Prefs(context).lastProcessing = "$time · $text"
+            ProcessingStatus.touch()
         }
     }
 }

@@ -79,3 +79,9 @@ data class SegmentEntity(
     val endMs: Long,
     val text: String,
 )
+
+/** A call row plus the first line of its transcript (null if none). */
+data class CallListItem(
+    @androidx.room.Embedded val call: CallEntity,
+    val preview: String?,
+)

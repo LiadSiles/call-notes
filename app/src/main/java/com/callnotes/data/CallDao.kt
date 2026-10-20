@@ -12,6 +12,16 @@ abstract class CallDao {
     @Query("SELECT * FROM calls ORDER BY startedAt DESC")
     abstract fun observeAll(): Flow<List<CallEntity>>
 
+    /** Calls with the first line of their transcript, for the list. */
+    @Query(
+        "SELECT calls.*, (SELECT text FROM segments WHERE segments.callId = calls.id " +
+            "ORDER BY idx LIMIT 1) AS preview FROM calls ORDER BY startedAt DESC"
+    )
+    abstract fun observeList(): Flow<List<CallListItem>>
+
+    @Query("SELECT * FROM calls WHERE id = :id")
+    abstract fun observe(id: Long): Flow<CallEntity?>
+
     @Insert
     abstract suspend fun insert(call: CallEntity): Long
 

@@ -34,7 +34,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("wifi_only", true)
         set(value) = sp.edit().putBoolean("wifi_only", value).apply()
 
-    /** Chosen model id (see ModelCatalog); null = device recommendation. */
+    /** Model being downloaded (ModelCatalog id), or null. */
+    var downloadModelId: String?
+        get() = sp.getString("download_model_id", null)
+        set(value) = sp.edit().putString("download_model_id", value).apply()
+
+    /** Human-readable result of the last transcription run, for the settings screen. */
+    var lastProcessing: String?
+        get() = sp.getString("last_processing", null)
+        set(value) = sp.edit().putString("last_processing", value).apply()
+
+    /** Active model id (see ModelCatalog). Only ever set to an installed model. */
     var modelId: String?
         get() = sp.getString("model_id", null)
         set(value) = sp.edit().putString("model_id", value).apply()

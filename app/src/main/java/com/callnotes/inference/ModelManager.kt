@@ -16,34 +16,51 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Picks the model for this device, downloads it with the system DownloadManager (resumes
- * across network drops, shows its own progress notification), verifies the SHA-256 and
- * exposes the state to the UI.
+ * Tracks which models are installed, which one is active, and the (single) download in
+ * progress. Downloads use the system DownloadManager (resumes across network drops,
+ * shows its own notification); a file is used only after its SHA-256 matches.
+ *
+ * The active model changes only when the user picks an installed model, or when a
+ * download they started finishes and verifies — never just by tapping a model that
+ * isn't on the phone (0.3.x bug).
  *
  * Models live in the app-specific external dir (`Android/data/<pkg>/files/models`):
- * DownloadManager can't write to internal storage, and on Android 11+ that directory is
- * private to the app. Removed on uninstall.
+ * DownloadManager can't write to internal storage; on Android 11+ the dir is private.
  */
 class ModelManager(private val context: Context) {
 
-    sealed interface State {
-        data object NotDownloaded : State
-        data class Downloading(val bytes: Long, val total: Long) : State
-        data object Verifying : State
-        data object Ready : State
-        data class Failed(val message: String) : State
-        /** Device below the minimum RAM for any model. */
-        data object Unsupported : State
+    sealed interface Download {
+        data object Idle : Download
+        data class Running(val spec: ModelSpec, val bytes: Long) : Download
+        data class Verifying(val spec: ModelSpec) : Download
+        data class Failed(val spec: ModelSpec, val message: String) : Download
+    }
+
+    data class Snapshot(
+        val active: ModelSpec?,
+        val installed: Set<String>,
+        val download: Download,
+    ) {
+        val ready get() = active != null
     }
 
     private val prefs = Prefs(context)
     private val downloads = context.getSystemService(DownloadManager::class.java)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val _state = MutableStateFlow<State>(State.NotDownloaded)
-    val state: StateFlow<State> = _state.asStateFlow()
+    private val _state = MutableStateFlow(Snapshot(null, emptySet(), Download.Idle))
+    val state: StateFlow<Snapshot> = _state.asStateFlow()
 
-    @Volatile private var verifying = false
+    @Volatile private var verifying: ModelSpec? = null
+
+    init {
+        // 0.3.x didn't record which model a download was for; drop such orphans.
+        if (prefs.downloadId != -1L && prefs.downloadModelId == null) {
+            downloads.remove(prefs.downloadId)
+            prefs.downloadId = -1L
+        }
+        refresh()
+    }
 
     val modelsDir: File
         get() = (context.getExternalFilesDir("models") ?: File(context.filesDir, "models")).apply { mkdirs() }
@@ -55,26 +72,34 @@ class ModelManager(private val context: Context) {
             return info.totalMem / 1_000_000_000.0
         }
 
-    /** Largest model the device can hold, or null if none. */
+    /** Largest model the device can run, or null if none. */
     fun recommended(): ModelSpec? = ModelCatalog.all.firstOrNull { totalRamGb >= it.minRamGb }
 
-    /** The user's choice if set and still supported, else the recommendation. */
-    fun selected(): ModelSpec? =
-        ModelCatalog.byId(prefs.modelId)?.takeIf { totalRamGb >= it.minRamGb } ?: recommended()
-
-    fun select(spec: ModelSpec) {
-        prefs.modelId = spec.id
-        refresh()
-    }
+    /** Models worth offering on this device (supported, or already installed). */
+    fun offered(): List<ModelSpec> =
+        ModelCatalog.all.filter { totalRamGb >= it.minRamGb || isInstalled(it) }
 
     fun fileFor(spec: ModelSpec) = File(modelsDir, spec.fileName)
     private fun partFor(spec: ModelSpec) = File(modelsDir, spec.fileName + ".part")
 
-    /** The verified model file, or null if not ready. */
-    fun readyModel(): Pair<ModelSpec, File>? {
-        val spec = selected() ?: return null
-        val file = fileFor(spec)
-        return if (file.exists() && file.length() == spec.sizeBytes) spec to file else null
+    fun isInstalled(spec: ModelSpec): Boolean {
+        val f = fileFor(spec)
+        return f.exists() && f.length() == spec.sizeBytes
+    }
+
+    /** The model transcription uses: the user's choice if installed, else any installed one. */
+    fun active(): ModelSpec? =
+        ModelCatalog.byId(prefs.modelId)?.takeIf { isInstalled(it) }
+            ?: ModelCatalog.all.firstOrNull { isInstalled(it) }
+
+    /** The active model and its file, or null if no model is installed. */
+    fun readyModel(): Pair<ModelSpec, File>? = active()?.let { it to fileFor(it) }
+
+    /** Switches to an installed model. Does nothing for a model that isn't installed. */
+    fun select(spec: ModelSpec) {
+        if (!isInstalled(spec)) return
+        prefs.modelId = spec.id
+        refresh()
     }
 
     fun hasSpaceFor(spec: ModelSpec): Boolean =
@@ -90,71 +115,88 @@ class ModelManager(private val context: Context) {
             .setAllowedOverMetered(!wifiOnly)
             .setAllowedOverRoaming(false)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-        prefs.modelId = spec.id
+        prefs.downloadModelId = spec.id
         prefs.downloadId = downloads.enqueue(request)
-        _state.value = State.Downloading(0, spec.sizeBytes)
+        publish(Download.Running(spec, 0))
     }
 
     fun cancelDownload() {
         val id = prefs.downloadId
         if (id != -1L) downloads.remove(id)
         prefs.downloadId = -1L
+        prefs.downloadModelId?.let { ModelCatalog.byId(it) }?.let { partFor(it).delete() }
+        prefs.downloadModelId = null
+        publish(Download.Idle)
     }
 
     fun delete(spec: ModelSpec) {
-        cancelDownload()
+        if (prefs.downloadModelId == spec.id) cancelDownload()
         fileFor(spec).delete()
         partFor(spec).delete()
         refresh()
     }
 
-    /** Re-reads the download / file state. Cheap; the UI calls it every second while downloading. */
+    /** Re-reads files and the download. Cheap; the UI polls it while a download runs. */
     fun refresh() {
-        val spec = selected()
-        if (spec == null) { _state.value = State.Unsupported; return }
-        if (verifying) return
-        if (readyModel() != null) { _state.value = State.Ready; return }
-
+        val current = _state.value.download
+        val spec = ModelCatalog.byId(prefs.downloadModelId)
         val id = prefs.downloadId
-        if (id == -1L) {
-            if (_state.value !is State.Failed) _state.value = State.NotDownloaded
-            return
+        val download: Download = when {
+            verifying != null -> Download.Verifying(verifying!!)
+            spec == null || id == -1L -> if (current is Download.Failed) current else Download.Idle
+            else -> queryDownload(spec, id)
         }
-        downloads.query(DownloadManager.Query().setFilterById(id))?.use { c ->
+        publish(download)
+    }
+
+    private fun queryDownload(spec: ModelSpec, id: Long): Download {
+        val cursor = downloads.query(DownloadManager.Query().setFilterById(id))
+            ?: return Download.Idle
+        cursor.use { c ->
             if (!c.moveToFirst()) {
-                prefs.downloadId = -1L
-                _state.value = State.NotDownloaded
-                return
+                prefs.downloadId = -1L; prefs.downloadModelId = null
+                return Download.Idle
             }
             val status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
             val done = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-            when (status) {
-                DownloadManager.STATUS_SUCCESSFUL -> verify(spec)
+            return when (status) {
+                DownloadManager.STATUS_SUCCESSFUL -> { verify(spec); Download.Verifying(spec) }
                 DownloadManager.STATUS_FAILED -> {
                     val reason = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    prefs.downloadId = -1L
-                    _state.value = State.Failed("ההורדה נכשלה (קוד $reason). נסה שוב.")
+                    prefs.downloadId = -1L; prefs.downloadModelId = null
+                    Download.Failed(spec, "ההורדה נכשלה (קוד $reason). נסה שוב.")
                 }
-                else -> _state.value = State.Downloading(done, spec.sizeBytes)
+                else -> Download.Running(spec, done)
             }
         }
     }
 
     private fun verify(spec: ModelSpec) {
-        verifying = true
-        _state.value = State.Verifying
+        if (verifying != null) return
+        verifying = spec
         scope.launch {
             val part = partFor(spec)
             val ok = part.exists() && part.length() == spec.sizeBytes && sha256(part) == spec.sha256
             prefs.downloadId = -1L
-            if (ok && part.renameTo(fileFor(spec))) {
-                _state.value = State.Ready
+            prefs.downloadModelId = null
+            val result = if (ok && part.renameTo(fileFor(spec))) {
+                prefs.modelId = spec.id // the user asked for this model: switch to it
+                Download.Idle
             } else {
                 part.delete()
-                _state.value = State.Failed("הקובץ שהורד פגום. נסה להוריד שוב.")
+                Download.Failed(spec, "הקובץ שהורד פגום. נסה להוריד שוב.")
             }
-            verifying = false
+            verifying = null
+            publish(result)
         }
+    }
+
+    private fun publish(download: Download) {
+        _state.value = Snapshot(
+            active = active(),
+            installed = ModelCatalog.all.filter { isInstalled(it) }.map { it.id }.toSet(),
+            download = download,
+        )
     }
 
     private fun sha256(file: File): String {
