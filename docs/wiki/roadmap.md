@@ -1,11 +1,11 @@
 # Roadmap and status
 
-_Last updated: 2026-10-19_
+_Last updated: 2026-10-20_
 
 | Version | Scope | Status |
 |---|---|---|
-| 0.1 | Capture layer: call detection, recording, auto speaker, storage, per-call diagnostics, setup checklist | ✅ built (CI green), awaiting device test |
-| 0.2 | Fixes from the POCO test: speaker, far-side quality, HyperOS background survival | next |
+| 0.1 | Capture layer: call detection, recording, auto speaker, storage, per-call diagnostics, setup checklist | ✅ tested on POCO: both sides clear, with or without speaker |
+| 0.2 | Minimal permissions: drop contacts + screen access, call log/notifications optional, speaker opt-in | ✅ built |
 | 0.3 | Gemma: model download + per-device choice, chunked transcription + merge, background processing, filter the dialer's recording announcement | |
 | 0.4 | Summary + tasks in the fixed schema, date normalization, full call screen (summary, transcript with seek, task approval) | |
 | 0.5 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
@@ -19,4 +19,9 @@ _Last updated: 2026-10-19_
 
 ## Waiting on
 
-- Owner's 0.1 test results on the POCO (see README test plan) → drives 0.2.
+- Owner installs 0.2 and confirms recording still works with the reduced permissions.
+- Still untested on the POCO: reboot survival, Bluetooth headset.
+
+## Next
+
+0.3 — Gemma transcription.

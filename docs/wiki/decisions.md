@@ -3,6 +3,24 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-20 — Minimal permissions (0.2)
+The owner asked to drop everything recording doesn't use. The 0.1 test showed both
+sides are captured without speakerphone, so:
+- **Required:** accessibility service (with no event types and
+  `canRetrieveWindowContent=false` — it can't read the screen), `RECORD_AUDIO`,
+  `READ_PHONE_STATE`.
+- **Optional:** `READ_CALL_LOG` (number, cached name, direction, unanswered-call
+  cleanup), `POST_NOTIFICATIONS`. App records fine without them.
+- **Removed:** `READ_CONTACTS` (the call log's cached name suffices) and the
+  speaker-button tap (needed window content).
+- **Kept, invisible to the user:** `MODIFY_AUDIO_SETTINGS` (normal permission) for an
+  opt-in auto-speaker, default off, for devices whose far side turns out quiet.
+- Since the service no longer receives events, the UI calls
+  `CallRecorderService.refreshFromUi()` on resume to start call detection if
+  `READ_PHONE_STATE` was granted after the service connected.
+Possible further step: detect calls from `AudioManager` mode (`MODE_IN_CALL`, no
+permission) instead of `READ_PHONE_STATE` — untested, not done.
+
 ### 2026-10-19 — Build APKs in GitHub Actions, install from Releases
 Owner wants to install without developer options or Android Studio. CI builds every
 push and publishes a prerelease. Side benefit: CI is the compile check for sessions

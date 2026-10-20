@@ -17,10 +17,17 @@ _Observed 2026-10-19, before installing 0.1._
   it isn't used. → **No path B on this phone; it runs path A.**
 - RAM ≥ 8 GB (all X6 Pro variants) → Gemma 4 E4B tier.
 
-### 0.1 test results
+### 0.1 test results (2026-10-20)
 
-_Pending._ Fill in per test from the README test plan: speaker label, source label,
-"silence" flag, far-side audibility, survives reboot?
+- Install: Play Protect blocked the APK at first; installed after allowing it.
+  Accessibility service was blocked by **restricted settings** until App info → ⋮ →
+  "Allow restricted settings" (only appears after one attempt to enable the service).
+- **Recording works, both sides clearly audible — with and without speakerphone.**
+  On this device the accessibility-service mic capture during a call includes the far
+  side at good quality without the loudspeaker. → Auto-speaker is not needed here;
+  made opt-in (default off) in 0.2 and the speaker-button tap was removed.
+- Not yet reported: which source chip showed (`voice_recognition`/`mic`), reboot
+  survival, Bluetooth headset behaviour.
 
 ## Template
 

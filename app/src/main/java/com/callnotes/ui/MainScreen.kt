@@ -60,6 +60,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
+import com.callnotes.capture.CallRecorderService
 import com.callnotes.capture.ServiceStatus
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallStatus
@@ -76,7 +77,13 @@ import java.util.Locale
 /** Below this peak level (~-40 dBFS) the recording is effectively silent. */
 private const val SILENT_PEAK = 330
 
-private data class SetupState(val permissionsOk: Boolean, val a11yOn: Boolean, val batteryOk: Boolean)
+private data class SetupState(
+    val permissionsOk: Boolean,
+    val a11yOn: Boolean,
+    val batteryOk: Boolean,
+    val callLogOk: Boolean,
+    val notificationsOk: Boolean,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,11 +94,17 @@ fun MainScreen() {
 
     // Re-read system settings each time the user comes back from a settings screen.
     var refresh by remember { mutableIntStateOf(0) }
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refresh++ }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        refresh++
+        CallRecorderService.refreshFromUi() // start call detection if permissions just arrived
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { refresh++ }
+    ) {
+        refresh++
+        CallRecorderService.refreshFromUi()
+    }
 
     val service by ServiceStatus.state.collectAsStateWithLifecycle()
     val calls by app.database.calls().observeAll().collectAsStateWithLifecycle(emptyList())
@@ -102,9 +115,11 @@ fun MainScreen() {
 
     val setup = remember(refresh) {
         SetupState(
-            permissionsOk = SetupChecks.missingPermissions(context).isEmpty(),
+            permissionsOk = SetupChecks.allGranted(context, SetupChecks.requiredPermissions),
             a11yOn = SetupChecks.accessibilityEnabled(context),
             batteryOk = SetupChecks.batteryUnrestricted(context),
+            callLogOk = SetupChecks.granted(context, SetupChecks.CALL_LOG),
+            notificationsOk = SetupChecks.allGranted(context, SetupChecks.notificationPermission),
         )
     }
     val ready = setup.permissionsOk && setup.a11yOn && service.connected && service.monitoring
@@ -121,14 +136,21 @@ fun MainScreen() {
 
             item {
                 SetupSection(
-                    permissionsOk = setup.permissionsOk,
-                    a11yOn = setup.a11yOn,
-                    batteryOk = setup.batteryOk,
-                    onPermissions = { permissionLauncher.launch(SetupChecks.runtimePermissions) },
+                    setup = setup,
+                    onPermissions = { permissionLauncher.launch(SetupChecks.requiredPermissions) },
                     onAccessibility = { context.startActivity(SetupChecks.accessibilitySettings()) },
                     onAppDetails = { context.startActivity(SetupChecks.appDetails(context)) },
                     onBattery = { context.startActivity(SetupChecks.batteryRequest(context)) },
                     onAutostart = { SetupChecks.startXiaomiAutostart(context) },
+                )
+            }
+
+            item {
+                OptionalSection(
+                    setup = setup,
+                    onCallLog = { permissionLauncher.launch(arrayOf(SetupChecks.CALL_LOG)) },
+                    onNotifications = { permissionLauncher.launch(SetupChecks.notificationPermission) },
+                    onAppDetails = { context.startActivity(SetupChecks.appDetails(context)) },
                 )
             }
 
@@ -210,26 +232,28 @@ private fun StatusCard(ready: Boolean, recordingNow: Boolean) {
 
 @Composable
 private fun SetupSection(
-    permissionsOk: Boolean,
-    a11yOn: Boolean,
-    batteryOk: Boolean,
+    setup: SetupState,
     onPermissions: () -> Unit,
     onAccessibility: () -> Unit,
     onAppDetails: () -> Unit,
     onBattery: () -> Unit,
     onAutostart: () -> Unit,
 ) {
+    val a11yOn = setup.a11yOn
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("הגדרה", style = MaterialTheme.typography.titleMedium)
 
             SetupRow(
-                done = permissionsOk,
+                done = setup.permissionsOk,
                 title = "1. הרשאות",
-                body = "מיקרופון, מצב טלפון, יומן שיחות, אנשי קשר והתראות.",
+                body = "מיקרופון (ההקלטה עצמה) ומצב טלפון (לדעת מתי שיחה מתחילה ומסתיימת).",
                 action = "אישור הרשאות",
                 onAction = onPermissions,
             )
+            if (!setup.permissionsOk) {
+                TextButton(onClick = onAppDetails) { Text("לא נפתח חלון? אשר מפרטי האפליקציה ← הרשאות") }
+            }
             SetupRow(
                 done = a11yOn,
                 title = "2. שירות ההקלטה",
@@ -248,7 +272,7 @@ private fun SetupSection(
                 TextButton(onClick = onAppDetails) { Text("פרטי האפליקציה") }
             }
             SetupRow(
-                done = batteryOk,
+                done = setup.batteryOk,
                 title = "3. ללא הגבלת סוללה",
                 body = "כדי שהמערכת לא תעצור את השירות ברקע.",
                 action = "ביטול הגבלה",
@@ -265,6 +289,55 @@ private fun SetupSection(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun OptionalSection(
+    setup: SetupState,
+    onCallLog: () -> Unit,
+    onNotifications: () -> Unit,
+    onAppDetails: () -> Unit,
+) {
+    if (setup.callLogOk && setup.notificationsOk) return
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text("אופציונלי", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "ההקלטה עובדת גם בלי אלה.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!setup.callLogOk) {
+                OptionalRow(
+                    title = "יומן שיחות",
+                    body = "מוסיף לכל שיחה מספר, שם וכיוון, ומוחק הקלטות של שיחות יוצאות שלא נענו.",
+                    action = "אישור",
+                    onAction = onCallLog,
+                )
+            }
+            if (!setup.notificationsOk) {
+                OptionalRow(
+                    title = "התראות",
+                    body = "התראה בזמן הקלטה ועל תקלות.",
+                    action = "אישור",
+                    onAction = onNotifications,
+                )
+            }
+            TextButton(onClick = onAppDetails) { Text("לא נפתח חלון? פרטי האפליקציה ← הרשאות") }
+        }
+    }
+}
+
+@Composable
+private fun OptionalRow(title: String, body: String, action: String, onAction: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        TextButton(onClick = onAction) { Text(action) }
     }
 }
 
@@ -297,7 +370,6 @@ private fun SetupRow(done: Boolean?, title: String, body: String, action: String
 private fun SettingsSection(prefs: Prefs) {
     var recording by remember { mutableStateOf(prefs.recordingEnabled) }
     var autoSpeaker by remember { mutableStateOf(prefs.autoSpeaker) }
-    var tapButton by remember { mutableStateOf(prefs.tapSpeakerButton) }
 
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -308,17 +380,9 @@ private fun SettingsSection(prefs: Prefs) {
             HorizontalDivider()
             ToggleRow(
                 "רמקול אוטומטי",
-                "מעביר כל שיחה לרמקול כדי שהמיקרופון יקלוט את שני הצדדים. לא פועל כשמחוברות אוזניות.",
+                "הפעל רק אם בהקלטות הצד השני נשמע חלש. מעביר כל שיחה לרמקול; לא פועל כשמחוברות אוזניות.",
                 autoSpeaker,
             ) { autoSpeaker = it; prefs.autoSpeaker = it }
-            HorizontalDivider()
-            ToggleRow(
-                "לחיצה על כפתור הרמקול",
-                "אם המערכת לא מאפשרת להפעיל רמקול ישירות, השירות לוחץ על כפתור הרמקול במסך השיחה. " +
-                    "הוא לא פותח שום מסך אחר.",
-                tapButton,
-                enabled = autoSpeaker,
-            ) { tapButton = it; prefs.tapSpeakerButton = it }
         }
     }
 }

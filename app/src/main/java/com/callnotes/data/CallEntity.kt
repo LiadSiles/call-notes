@@ -38,7 +38,7 @@ data class CallEntity(
     /** Android reported that it fed this recording silence (capture policy). */
     val silenced: Boolean,
     val speakerResult: String,
-    /** "api", "tap", "user" or null — how the speaker got turned on. */
+    /** "api", "user" or null — how the speaker got turned on. ("tap" in 0.1 data.) */
     val speakerMethod: String?,
     val status: String,
 )

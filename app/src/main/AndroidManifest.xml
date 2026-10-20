@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Recording from the microphone during a call (allowed only for accessibility services). -->
+    <!-- Required: the recording itself (captured inside the accessibility service). -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Detecting call start/end. -->
+    <!-- Required: knowing when a call starts and ends. -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <!-- Number, direction and real duration of the call that was recorded. -->
+    <!-- Optional: number, name (cached by the dialer), direction, answered or not. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
-    <!-- Contact name for numbers the call log has no cached name for. -->
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
-    <!-- Turning on the speakerphone through the audio API. -->
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Optional: "recording now" and problem notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Install-time (no prompt): optional auto-speaker for devices whose mic misses the far side. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Install-time (no prompt): lets the app show the battery-exemption dialog. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application

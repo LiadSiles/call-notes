@@ -26,8 +26,8 @@ import java.io.File
  *
  * It is an accessibility service because Android delivers microphone audio to an
  * ordinary app as silence while a call is active; accessibility services are the
- * documented exception. It reads nothing from the screen except, optionally, the
- * speaker button on the in-call screen (see [SpeakerButtonTapper]).
+ * documented exception. It subscribes to no accessibility events and cannot read
+ * the screen.
  */
 class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
 
@@ -39,7 +39,6 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
     ) {
         var speakerResult: String? = null
         var speakerMethod: String? = null
-        var tapped = false
     }
 
     private lateinit var prefs: Prefs
@@ -55,18 +54,17 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
         prefs = Prefs(this)
         speaker = SpeakerController(this)
         monitor = CallStateMonitor(this, this)
+        instance = this
         ServiceStatus.update { it.copy(connected = true) }
         ensureMonitoring()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Permissions may be granted after the service connects; pick them up here.
-        ensureMonitoring()
-    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit // subscribes to none
 
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         session?.let { finish(it, System.currentTimeMillis()) }
         if (::monitor.isInitialized) monitor.stop()
         main.removeCallbacksAndMessages(null)
@@ -79,6 +77,20 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
     private fun ensureMonitoring() {
         if (ServiceStatus.state.value.monitoring) return
         if (monitor.start()) ServiceStatus.update { it.copy(monitoring = true) }
+    }
+
+    companion object {
+        @Volatile private var instance: CallRecorderService? = null
+
+        /**
+         * The service receives no events, so a permission granted after it connected
+         * is picked up when the app UI comes back to the foreground.
+         */
+        fun refreshFromUi() {
+            instance?.let { svc -> svc.main.post { svc.ensureMonitoring() } }
+        }
+
+        private val SPEAKER_CHECKS_MS = listOf(1_000L, 2_200L, 3_800L, 6_000L)
     }
 
     // ---- Call lifecycle -----------------------------------------------------------
@@ -176,7 +188,6 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
 
         if (speaker.isSpeakerOn()) {
             current.speakerResult = SpeakerResult.ON
-            current.speakerMethod = if (current.tapped) "tap" else current.speakerMethod
             return
         }
         if (last) {
@@ -184,12 +195,8 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
             current.speakerMethod = null
             Notifications.askForSpeaker(this)
             watchForUserSpeaker(current)
-            return
         }
-        // API didn't take (yet). Try the button once; the next check verifies it.
-        if (prefs.tapSpeakerButton && !current.tapped && SpeakerButtonTapper.tap(this)) {
-            current.tapped = true
-        }
+        // Otherwise the route may still be settling; the next check looks again.
     }
 
     /** After asking the user, notice if they turn the speaker on themselves. */
@@ -208,8 +215,4 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener {
     private fun hasMicPermission() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
-
-    private companion object {
-        val SPEAKER_CHECKS_MS = listOf(1_000L, 2_200L, 3_800L, 6_000L)
-    }
 }

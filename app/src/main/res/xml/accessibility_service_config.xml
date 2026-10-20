@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The service exists mainly because Android lets only accessibility services
-  capture the microphone during a call. Window content access is used for one
-  thing: tapping the speaker button on the in-call screen when the audio API
-  cannot turn the speakerphone on (opt-in setting).
+  The service exists only because Android lets accessibility services capture the
+  microphone during a call. It subscribes to no events and cannot read the screen
+  (no canRetrieveWindowContent), so the system grants it the least it can.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="0"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
-    android:canRetrieveWindowContent="true"
+    android:canRetrieveWindowContent="false"
     android:description="@string/a11y_description"
-    android:notificationTimeout="200"
     android:settingsActivity="com.callnotes.ui.MainActivity" />

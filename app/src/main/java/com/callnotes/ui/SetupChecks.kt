@@ -16,17 +16,24 @@ import com.callnotes.capture.CallRecorderService
 /** Everything the recording flow depends on, checked fresh every time the app resumes. */
 object SetupChecks {
 
-    val runtimePermissions: Array<String> = buildList {
-        add(Manifest.permission.RECORD_AUDIO)
-        add(Manifest.permission.READ_PHONE_STATE)
-        add(Manifest.permission.READ_CALL_LOG)
-        add(Manifest.permission.READ_CONTACTS)
-        if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-    }.toTypedArray()
+    /** Recording can't work without these. */
+    val requiredPermissions: Array<String> = arrayOf(
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.READ_PHONE_STATE,
+    )
 
-    fun missingPermissions(context: Context): List<String> = runtimePermissions.filter {
-        ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
-    }
+    /** Call details (number, name, direction) — the app records fine without it. */
+    const val CALL_LOG = Manifest.permission.READ_CALL_LOG
+
+    /** Recording / problem notifications — optional. Empty below Android 13. */
+    val notificationPermission: Array<String> =
+        if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.POST_NOTIFICATIONS) else emptyArray()
+
+    fun granted(context: Context, permission: String): Boolean =
+        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+
+    fun allGranted(context: Context, permissions: Array<String>): Boolean =
+        permissions.all { granted(context, it) }
 
     fun accessibilityEnabled(context: Context): Boolean {
         val enabled = Settings.Secure.getString(

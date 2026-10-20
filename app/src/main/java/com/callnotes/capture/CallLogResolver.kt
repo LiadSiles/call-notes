@@ -3,12 +3,14 @@ package com.callnotes.capture
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.provider.CallLog
-import android.provider.ContactsContract
 import androidx.core.content.ContextCompat
 
-/** Matches a finished recording to its call-log entry (number, name, real duration). */
+/**
+ * Matches a finished recording to its call-log entry (number, name, real duration).
+ * Optional: without READ_CALL_LOG it returns null and the call is saved without them.
+ * The name is the one the dialer cached in the log — no contacts permission needed.
+ */
 object CallLogResolver {
 
     data class Info(
@@ -20,7 +22,9 @@ object CallLogResolver {
     )
 
     fun resolve(context: Context, startedAt: Long, endedAt: Long): Info? {
-        if (!granted(context, Manifest.permission.READ_CALL_LOG)) return null
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG)
+            != PackageManager.PERMISSION_GRANTED
+        ) return null
 
         val projection = arrayOf(
             CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME,
@@ -30,7 +34,7 @@ object CallLogResolver {
         val selection = "${CallLog.Calls.DATE} BETWEEN ? AND ?"
         val args = arrayOf((startedAt - 90_000).toString(), endedAt.toString())
 
-        val info = try {
+        return try {
             context.contentResolver.query(
                 CallLog.Calls.CONTENT_URI, projection, selection, args,
                 "${CallLog.Calls.DATE} DESC"
@@ -39,7 +43,8 @@ object CallLogResolver {
                 val type = c.getInt(c.getColumnIndexOrThrow(CallLog.Calls.TYPE))
                 Info(
                     number = c.getString(c.getColumnIndexOrThrow(CallLog.Calls.NUMBER)),
-                    name = c.getString(c.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME)),
+                    name = c.getString(c.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME))
+                        ?.takeIf { it.isNotBlank() },
                     incoming = when (type) {
                         CallLog.Calls.INCOMING_TYPE -> true
                         CallLog.Calls.OUTGOING_TYPE -> false
@@ -50,26 +55,6 @@ object CallLogResolver {
             }
         } catch (e: SecurityException) {
             null
-        } ?: return null
-
-        val name = info.name?.takeIf { it.isNotBlank() } ?: lookupContact(context, info.number)
-        return info.copy(name = name)
-    }
-
-    private fun lookupContact(context: Context, number: String?): String? {
-        if (number.isNullOrBlank() || !granted(context, Manifest.permission.READ_CONTACTS)) return null
-        val uri = Uri.withAppendedPath(
-            ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number)
-        )
-        return try {
-            context.contentResolver.query(
-                uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null
-            )?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
-        } catch (e: Exception) {
-            null
         }
     }
-
-    private fun granted(context: Context, permission: String) =
-        ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 }
