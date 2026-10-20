@@ -67,6 +67,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
 import com.callnotes.capture.CallRecorderService
 import com.callnotes.capture.ServiceStatus
+import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.TranscriptionService
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
@@ -101,10 +103,31 @@ fun MainScreen() {
 
     // Re-read system settings each time the user comes back from a settings screen.
     var refresh by remember { mutableIntStateOf(0) }
+    val prefs = remember { Prefs(context) }
+    val kickQueue: () -> Unit = {
+        scope.launch(Dispatchers.IO) {
+            if (prefs.autoTranscribe && app.database.calls().pendingCount() > 0) {
+                TranscriptionService.start(context)
+            }
+        }
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         refresh++
         CallRecorderService.refreshFromUi() // start call detection if permissions just arrived
+        kickQueue() // recordings that couldn't start processing in the background
     }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch(Dispatchers.IO) {
+            try {
+                Importer.import(context, uri)
+                if (prefs.autoTranscribe) TranscriptionService.start(context)
+            } catch (e: Exception) {
+                // Unreadable file: nothing was added.
+            }
+        }
+    }
+    val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
+    var expanded by remember { mutableStateOf(setOf<Long>()) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -168,14 +191,17 @@ fun MainScreen() {
                 )
             }
 
-            item { SettingsSection(remember { Prefs(context) }) }
+            item { SettingsSection(prefs) }
+
+            item { ModelCard(app.models, prefs, onReady = kickQueue) }
 
             item {
-                Text(
-                    "שיחות",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("שיחות", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { importLauncher.launch(arrayOf("audio/*")) }) {
+                        Text("ייבוא קובץ אודיו")
+                    }
+                }
             }
 
             if (calls.isEmpty()) {
@@ -192,6 +218,22 @@ fun MainScreen() {
                 CallCard(
                     call = call,
                     player = player,
+                    processing = processing,
+                    expanded = call.id in expanded,
+                    onToggleTranscript = {
+                        expanded = if (call.id in expanded) expanded - call.id else expanded + call.id
+                    },
+                    transcript = {
+                        TranscriptView(app.database.calls(), call.id) { ms ->
+                            call.filePath?.let { player.playFrom(call.id, it, ms.toInt()) }
+                        }
+                    },
+                    onTranscribe = {
+                        scope.launch(Dispatchers.IO) {
+                            app.database.calls().setStatus(call.id, CallStatus.RECORDED, null, null)
+                            TranscriptionService.start(context)
+                        }
+                    },
                     onPlay = { call.filePath?.let { player.toggle(call.id, it) } },
                     onShare = { call.filePath?.let { share(context, it) } },
                     onDelete = { pendingDelete = call },
@@ -433,6 +475,11 @@ private fun ToggleRow(
 private fun CallCard(
     call: CallEntity,
     player: AudioPlayer,
+    processing: ProcessingStatus.State,
+    expanded: Boolean,
+    onToggleTranscript: () -> Unit,
+    transcript: @Composable () -> Unit,
+    onTranscribe: () -> Unit,
     onPlay: () -> Unit,
     onShare: () -> Unit,
     onDelete: () -> Unit,
@@ -450,6 +497,7 @@ private fun CallCard(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     val direction = when {
+                        call.kind == CallKind.IMPORT -> "קובץ מיובא"
                         voip -> "אינטרנט"
                         call.incoming -> "נכנסת"
                         else -> "יוצאת"
@@ -476,6 +524,31 @@ private fun CallCard(
 
             if (player.loadedId == call.id && player.durationMs > 0) {
                 SeekBar(player)
+            }
+
+            // Transcription state.
+            when (call.status) {
+                CallStatus.TRANSCRIBED -> TextButton(onClick = onToggleTranscript) {
+                    Text(if (expanded) "הסתרת התמלול" else "תמלול")
+                }
+                CallStatus.TRANSCRIBING -> {
+                    val label = if (processing.callId == call.id && processing.chunksTotal > 0)
+                        "מתמלל… ${processing.chunksDone}/${processing.chunksTotal}" else "מתמלל…"
+                    Text(label, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(vertical = 6.dp))
+                }
+                CallStatus.RECORDED -> Text("ממתין לתמלול", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 6.dp))
+                CallStatus.TRANSCRIBE_FAILED -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("התמלול נכשל${call.error?.let { ": $it" } ?: ""}",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f))
+                    TextButton(onClick = onTranscribe) { Text("נסה שוב") }
+                }
+            }
+            if (expanded && call.status == CallStatus.TRANSCRIBED) {
+                transcript()
+                TextButton(onClick = onTranscribe) { Text("תמלל מחדש") }
             }
 
             // Diagnostics: what the prototype is here to learn about each device.

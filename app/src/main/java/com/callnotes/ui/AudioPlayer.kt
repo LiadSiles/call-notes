@@ -53,6 +53,13 @@ class AudioPlayer {
         isPlaying = true
     }
 
+    /** Jumps to [ms] in recording [id], loading and playing it if needed (tap on a transcript line). */
+    fun playFrom(id: Long, path: String, ms: Int) {
+        if (loadedId != id || player == null) toggle(id, path)
+        seekTo(ms)
+        player?.let { if (!it.isPlaying) { it.start(); isPlaying = true } }
+    }
+
     fun seekTo(ms: Int) {
         val p = player ?: return
         val target = ms.coerceIn(0, durationMs)
