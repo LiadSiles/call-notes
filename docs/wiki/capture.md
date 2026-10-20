@@ -1,6 +1,6 @@
 # Capture layer
 
-_Last verified: 2026-10-20 (code at 0.2)_
+_Last verified: 2026-10-20 (code at 0.2.3)_
 
 The app picks a capture path per device. Both produce the same thing — an audio file
 plus call metadata — and the pipeline downstream is shared.
@@ -56,6 +56,20 @@ WhatsApp, Telegram, Meet etc. Toggle "שיחות אינטרנט (ניסיוני)
   `incoming` is stored as false and the UI shows "אינטרנט".
 - A phone call arriving during a VoIP session ends the VoIP session and starts a
   cellular one.
+- Device finding (POCO, 0.2.1): far side audible; but **capture went silent when the
+  screen was locked mid-call** → microphone foreground service added in 0.2.3 (below).
+
+## Foreground service during recording (0.2.3)
+
+`RecordingService` is a `foregroundServiceType="microphone"` service started at the
+beginning of every recording (cellular and VoIP) and stopped at the end. The recorder
+stays in `CallRecorderService`; the FGS only keeps the process in the foreground state
+Android requires for mic access once the screen locks. It shows the ongoing
+"מקליט את השיחה" notification (`Notifications.recording`) and holds a partial wake
+lock (4 h cap). The system's own mic-in-use indicator is shown as usual.
+Starting a mic FGS from the background can be refused on some Android versions;
+failures are caught and recorded in the per-call `foreground` flag (UI chip
+"ללא שירות חזית").
 
 ## Path B — OEM dialer recordings (planned, 0.7)
 
@@ -84,6 +98,7 @@ Recorded so a single test call answers "does this device work?":
 | `speakerMethod` | `api` / `user` / null (`tap` only in 0.1 data) |
 | `status` | `recorded` / `record_failed` (pipeline states added from 0.3) |
 | `kind` | `cellular` / `voip` (DB v2, migration 1→2 adds it with default `cellular`) |
+| `foreground` | mic foreground service ran during the call (DB v3); false → capture may be silenced on screen lock |
 
 ## Known gaps
 
@@ -93,5 +108,5 @@ Recorded so a single test call answers "does this device work?":
   from a non-dialer app is itself untested).
 - The Google dialer's spoken "call is being recorded" notice only plays when its own
   recording is on; tell testers to switch it off.
-- No foreground service; if a device kills the accessibility service process
-  mid-call, the recording is lost. Watch for this on HyperOS.
+- If a device refuses the mic foreground service, capture may still go silent on lock;
+  the `foreground` flag shows it.

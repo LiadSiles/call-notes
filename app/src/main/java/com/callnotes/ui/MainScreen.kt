@@ -488,6 +488,7 @@ private fun CallCard(
                     Chip(speakerLabel(call), warn = call.speakerResult == SpeakerResult.FAILED)
                 }
                 call.audioSource?.let { Chip(if (it == "mic") "מקור: MIC" else "מקור: זיהוי דיבור") }
+                if (!failed && !call.foreground) Chip("ללא שירות חזית", warn = true)
             }
         }
     }

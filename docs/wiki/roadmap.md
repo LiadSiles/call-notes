@@ -6,8 +6,9 @@ _Last updated: 2026-10-20_
 |---|---|---|
 | 0.1 | Capture layer: call detection, recording, auto speaker, storage, per-call diagnostics, setup checklist | ✅ tested on POCO: both sides clear, with or without speaker |
 | 0.2 | Minimal permissions: drop contacts + screen access, call log/notifications optional, speaker opt-in | ✅ built |
-| 0.2.1 | Internet-call recording (WhatsApp etc.), experimental, no names | ✅ built, awaiting device test |
+| 0.2.1 | Internet-call recording (WhatsApp etc.), experimental, no names | ✅ works on POCO (far side audible) |
 | 0.2.2 | Seek bar + play/pause on each recording | ✅ built |
+| 0.2.3 | Microphone foreground service so recording survives screen lock | ✅ built, awaiting device test |
 | 0.3 | Gemma: model download + per-device choice, chunked transcription + merge, background processing, filter the dialer's recording announcement | |
 | 0.4 | Summary + tasks in the fixed schema, date normalization, full call screen (summary, transcript with seek, task approval) | |
 | 0.5 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
@@ -21,7 +22,7 @@ _Last updated: 2026-10-20_
 
 ## Waiting on
 
-- Owner installs 0.2.1: phone call still records with reduced permissions; WhatsApp call — is the far side audible?
+- Owner installs 0.2.3: lock the screen mid-call (WhatsApp and phone) — does recording continue?
 - Still untested on the POCO: reboot survival, Bluetooth headset.
 
 ## Next

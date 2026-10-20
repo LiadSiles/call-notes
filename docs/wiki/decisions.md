@@ -3,6 +3,12 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-20 — Record inside a microphone foreground service
+Capture went silent when the screen locked during a call. The standard, visible fix:
+a `microphone`-type foreground service for the length of each recording, with an
+ongoing notification. Chosen over any approach that would hide the recording from the
+user; the notification and the system mic indicator stay.
+
 ### 2026-10-20 — Record internet calls (experimental), no names yet
 Owner asked for WhatsApp recording. Detected via audio mode (no permission), recorded
 by the same accessibility-service capture. Names deferred: they'd need notification

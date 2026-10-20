@@ -43,6 +43,8 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
     ) {
         var speakerResult: String? = null
         var speakerMethod: String? = null
+        /** The microphone foreground service reached the foreground during this call. */
+        var foreground = false
     }
 
     private lateinit var prefs: Prefs
@@ -131,6 +133,8 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
 
     private fun startSession(incoming: Boolean, kind: String) {
         val startedAt = System.currentTimeMillis()
+        // Foreground state first, so capture isn't silenced once the screen locks.
+        RecordingService.start(this)
         val dir = File(filesDir, "recordings").apply { mkdirs() }
         val file = File(dir, "call_$startedAt.wav")
 
@@ -143,10 +147,14 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         ServiceStatus.update { it.copy(recordingNow = recorder != null) }
 
         if (recorder == null) {
+            RecordingService.stop(this)
             Notifications.problem(this, "השיחה לא מוקלטת",
                 "לא ניתן היה להתחיל הקלטה. פתח את האפליקציה כדי לבדוק הרשאות.")
         } else {
-            Notifications.showRecording(this)
+            // The service reports asynchronously; sample it a few times.
+            listOf(500L, 2_000L, 5_000L).forEach { at ->
+                main.postDelayed({ if (RecordingService.started) current.foreground = true }, at)
+            }
         }
         if (kind == CallKind.CELLULAR) {
             startSpeakerFlow(current)
@@ -158,9 +166,11 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
     private fun finish(current: Session, endedAt: Long) {
         session = null
         main.removeCallbacksAndMessages(null)
+        if (RecordingService.started) current.foreground = true
         current.recorder?.stop()
+        RecordingService.stop(this)
         speaker.restore()
-        Notifications.cancelRecording(this)
+        Notifications.cancelSpeakerPrompt(this)
         ServiceStatus.update { it.copy(recordingNow = false) }
 
         io.launch { save(current, endedAt) }
@@ -203,6 +213,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
             speakerMethod = current.speakerMethod,
             status = if (recorder != null) CallStatus.RECORDED else CallStatus.RECORD_FAILED,
             kind = current.kind,
+            foreground = current.foreground,
         )
         if (recorder == null) current.file.delete()
         (application as CallNotesApp).database.calls().insert(entity)

@@ -1,6 +1,7 @@
 package com.callnotes.util
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -19,7 +20,7 @@ object Notifications {
     private const val CHANNEL_RECORDING = "recording"
     private const val CHANNEL_ALERTS = "alerts"
 
-    private const val ID_RECORDING = 1
+    const val ID_RECORDING = 1
     private const val ID_SPEAKER = 2
     private const val ID_PROBLEM = 3
 
@@ -33,15 +34,16 @@ object Notifications {
         )
     }
 
-    fun showRecording(context: Context) = post(
-        context, ID_RECORDING,
-        builder(context, CHANNEL_RECORDING, "מקליט את השיחה", "הסיכום יופיע באפליקציה בסיום השיחה")
+    /** The ongoing notification shown by [com.callnotes.capture.RecordingService]. */
+    fun recording(context: Context): Notification =
+        builder(context, CHANNEL_RECORDING, "מקליט את השיחה", "ההקלטה תופיע באפליקציה בסיום השיחה")
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-    )
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .build()
 
-    fun cancelRecording(context: Context) {
-        NotificationManagerCompat.from(context).cancel(ID_RECORDING)
+    fun cancelSpeakerPrompt(context: Context) {
         NotificationManagerCompat.from(context).cancel(ID_SPEAKER)
     }
 

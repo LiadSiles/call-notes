@@ -26,6 +26,9 @@ _Observed 2026-10-19, before installing 0.1._
   On this device the accessibility-service mic capture during a call includes the far
   side at good quality without the loudspeaker. → Auto-speaker is not needed here;
   made opt-in (default off) in 0.2 and the speaker-button tap was removed.
+- 0.2.1: WhatsApp calls record with the far side audible. **Locking the screen
+  mid-call made the capture silent** until the call ended → fixed attempt in 0.2.3
+  (microphone foreground service); awaiting confirmation.
 - Not yet reported: which source chip showed (`voice_recognition`/`mic`), reboot
   survival, Bluetooth headset behaviour.
 

@@ -54,4 +54,6 @@ data class CallEntity(
     val status: String,
     /** [CallKind]; added in DB version 2, older rows are cellular. */
     val kind: String = CallKind.CELLULAR,
+    /** The microphone foreground service was running (DB v3). False = may go silent on lock. */
+    val foreground: Boolean = false,
 )

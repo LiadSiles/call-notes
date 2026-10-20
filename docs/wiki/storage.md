@@ -1,6 +1,6 @@
 # What the app stores, and where
 
-_Last verified: 2026-10-20 (code at 0.2.2)_
+_Last verified: 2026-10-20 (code at 0.2.3)_
 
 Everything lives in the app's private internal storage
 (`/data/data/com.callnotes/`, also reachable as `/data/user/0/com.callnotes/`).
