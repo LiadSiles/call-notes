@@ -52,3 +52,28 @@ class AnalysisPromptTest {
         assertEquals(a.copy(tasks = emptyList()), back)
     }
 }
+
+class AnalysisPromptRepairTest {
+    private val callDate = java.time.LocalDate.of(2026, 10, 21)
+
+    @Test fun hebrewAcronymWithAsciiQuoteIsRepaired() {
+        // The answer that failed on the POCO (shortened).
+        val answer = "{\"title\": \"תכנון נסיעה לנתב\"ג והארגונים\", \"summary\": \"הדוברים דנים בתחבורה לנתב\"ג.\", " +
+            "\"key_points\": [\"צה\"ל\"], \"decisions\": [], \"tasks\": [], \"follow_ups\": []}"
+        val a = AnalysisPrompt.parse(answer, callDate)
+        assertEquals("תכנון נסיעה לנתב״ג והארגונים", a.title)
+        assertEquals("הדוברים דנים בתחבורה לנתב״ג.", a.summary)
+        assertEquals(listOf("צה״ל"), a.keyPoints)
+    }
+
+    @Test fun strayQuoteBeforeNonHebrewIsEscaped() {
+        val answer = "{\"title\": \"שיחה על \"Zoom\" מחר\", \"summary\": \"\", \"key_points\": [], " +
+            "\"decisions\": [], \"tasks\": [], \"follow_ups\": []}"
+        assertEquals("שיחה על \"Zoom\" מחר", AnalysisPrompt.parse(answer, callDate).title)
+    }
+
+    @Test fun validJsonIsUntouched() {
+        val json = "{\"title\": \"a \\\"b\\\" c\"}"
+        assertEquals(json, AnalysisPrompt.repairQuotes(json))
+    }
+}

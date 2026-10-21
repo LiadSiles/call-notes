@@ -24,6 +24,7 @@ _Last updated: 2026-10-21_
 | 0.5.1 | Fix: diarization without sherpa's JNI progress callback (invokedynamic lambda → NoSuchMethodError → ART abort) | ✅ no crash; but handset call → everything one speaker |
 | 0.5.2 | Speakers by loudness for handset calls (per-word dBFS, 2-means, Viterbi); voice diarizer as fallback on equalised audio | ✅ built, awaiting device test |
 | 0.5.3 | Drop sherpa's diarization pipeline (exit(-1) killed the app); voice fallback = own clustering of fingerprinted Whisper word windows; pyannote no longer downloaded | ✅ built, awaiting device test |
+| 0.5.4 | Summary JSON: Hebrew acronyms with ASCII quotes (נתב"ג) broke parsing → prompt asks for ״, parser repairs | ✅ built, awaiting device test |
 | 0.6 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
 | 0.6+ | Model swapping UI: reprocess, comparison screen, quantized Whisper | |
 | 0.7 | Path B adapters: Samsung, OnePlus/Oppo/Realme, Vivo | |

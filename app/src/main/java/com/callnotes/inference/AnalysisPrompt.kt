@@ -49,6 +49,8 @@ object AnalysisPrompt {
             appendLine("- \"due\": compute from the call date (for example \"מחר\" is ${date.plusDays(1)}). null if no time was mentioned.")
             appendLine("- Do not invent facts that are not in the transcript. Empty lists are fine.")
             appendLine("- If the transcript has no meaningful content, return empty strings and empty lists.")
+            appendLine("- Hebrew acronyms and abbreviations (נתב״ג, צה״ל, ת״א) must use the Hebrew gershayim ״ or geresh ׳, " +
+                "never the ASCII double quote \", which would break the JSON.")
         }
     }
 
@@ -68,7 +70,12 @@ object AnalysisPrompt {
         val start = answer.indexOf('{')
         val end = answer.lastIndexOf('}')
         require(start >= 0 && end > start) { "no JSON object in the answer" }
-        val o = JSONObject(answer.substring(start, end + 1))
+        val raw = answer.substring(start, end + 1)
+        val o = try {
+            JSONObject(raw)
+        } catch (e: org.json.JSONException) {
+            JSONObject(repairQuotes(raw)) // Hebrew acronyms written with ASCII quotes (נתב"ג)
+        }
 
         fun strings(key: String): List<String> {
             val a = o.optJSONArray(key) ?: return emptyList()
@@ -99,6 +106,36 @@ object AnalysisPrompt {
             followUps = strings("follow_ups"),
             language = "he",
         )
+    }
+
+    /**
+     * Fixes the most common way the model breaks its JSON in Hebrew: an ASCII `"` used as
+     * gershayim inside a string (`"נתב"ג"`). First letter-quote-letter becomes ״; then any
+     * remaining `"` inside a string that isn't followed by `,` `:` `}` `]` (or the end) is
+     * escaped, since it can't be the closing quote.
+     */
+    fun repairQuotes(json: String): String {
+        val hebrew = Regex("([\\u05D0-\\u05EA])\"([\\u05D0-\\u05EA])")
+        val s = hebrew.replace(json, "$1\u05F4$2")
+        val out = StringBuilder(s.length + 16)
+        var inString = false
+        var i = 0
+        while (i < s.length) {
+            val ch = s[i]
+            when {
+                inString && ch == '\\' && i + 1 < s.length -> { out.append(ch).append(s[i + 1]); i += 2; continue }
+                ch == '"' && !inString -> inString = true
+                ch == '"' && inString -> {
+                    var j = i + 1
+                    while (j < s.length && s[j].isWhitespace()) j++
+                    if (j >= s.length || s[j] in ",:}]") inString = false
+                    else { out.append("\\\""); i++; continue }
+                }
+            }
+            out.append(ch)
+            i++
+        }
+        return out.toString()
     }
 
     fun validDate(s: String, callDate: LocalDate): String? = runCatching {

@@ -142,6 +142,10 @@ The log line says which method ran and why (levels, gap, shares, voice-sample sc
 | Pass: after all transcriptions, Whisper + diarizer are closed first (memory), then requested calls, then (auto on) newest unanalysed | `TranscriptionService.analysePending` |
 | Storage: `calls.analysisStatus/analysisJson/summaryTitle/analysisModel/analysisError`, `tasks` table (DB v6) | `data/` |
 
+- **Hebrew gotcha (0.5.4):** Gemma writes acronyms with an ASCII `"` as gershayim
+  (`נתב"ג`), which ends the JSON string early ("Unterminated object"). The prompt asks for
+  ״ / ׳, and `AnalysisPrompt.repairQuotes` fixes answers that still do it: letter-`"`-letter
+  → ״, then any `"` inside a string not followed by `,` `:` `}` `]` is escaped.
 - A new transcript clears the old analysis (`CallDao.replaceTranscript` → `clearAnalysis`).
 - The model's answer is call content: the log records only sizes, counts and timings.
 - Speaker labels in the prompt: "אני" / contact name when the owner is known, else
