@@ -90,6 +90,15 @@ abstract class CallDao {
     @Query("DELETE FROM segments WHERE callId = :callId")
     abstract suspend fun deleteSegments(callId: Long)
 
+    @Query("UPDATE calls SET speakerEmbeddings = :embeddings, meSpeaker = :me WHERE id = :id")
+    abstract suspend fun setSpeakers(id: Long, embeddings: ByteArray?, me: Int?)
+
+    @Query("UPDATE calls SET meSpeaker = :me WHERE id = :id")
+    abstract suspend fun setMeSpeaker(id: Long, me: Int?)
+
+    @Query("SELECT id, speakerEmbeddings FROM calls WHERE speakerEmbeddings IS NOT NULL")
+    abstract suspend fun allSpeakerEmbeddings(): List<CallVoices>
+
     @Transaction
     open suspend fun replaceTranscript(callId: Long, segments: List<SegmentEntity>, model: String) {
         deleteSegments(callId)

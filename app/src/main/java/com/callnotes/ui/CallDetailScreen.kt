@@ -17,7 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -171,9 +172,29 @@ fun CallDetailScreen(
                     Text("לא זוהה דיבור בהקלטה.", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(4.dp))
                 }
-                items(segments, key = { it.id }) { seg ->
+                val conversation = segments.any { it.speaker != null }
+                itemsIndexed(segments, key = { _, it -> it.id }) { i, seg ->
                     val active = player.loadedId == c.id && player.positionMs in seg.startMs..seg.endMs
-                    SegmentRow(seg, active) { path?.let { player.playFrom(c.id, it, seg.startMs.toInt()) } }
+                    val seek = { path?.let { player.playFrom(c.id, it, seg.startMs.toInt()) }; Unit }
+                    if (conversation) {
+                        // Name above the first line of each turn.
+                        val newTurn = i == 0 || segments[i - 1].speaker != seg.speaker
+                        val isMe = seg.speaker != null && seg.speaker == c.meSpeaker
+                        // Mine on the start side (right, in Hebrew); otherwise speaker 1 / the other side on the end.
+                        val alignEnd = if (c.meSpeaker != null) !isMe else seg.speaker == 1
+                        ChatLine(seg, speakerLabel(c, seg.speaker), isMe = isMe, alignEnd = alignEnd,
+                            showName = newTurn, active = active, onClick = seek)
+                    } else {
+                        SegmentRow(seg, active, onClick = seek)
+                    }
+                }
+                if (conversation && c.meSpeaker == null) item {
+                    Text(
+                        "כדי שיופיע \"אני\" ושם הצד השני, הקלט דגימת קול בהגדרות ← מי אמר מה.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                    )
                 }
                 item {
                     TextButton(onClick = startTranscription, modifier = Modifier.padding(top = 4.dp)) { Text("תמלל מחדש") }
@@ -317,6 +338,12 @@ private fun TranscriptState(
             "בטעינה הראשונה זה יכול לקחת עד דקה או שתיים.",
             null,
         )
+        c.status == CallStatus.TRANSCRIBING && onThis && processing.phase == "speakers" -> Progress(
+            "מזהה מי אמר מה…" +
+                if (processing.chunksTotal > 0) " ${processing.chunksDone * 100 / processing.chunksTotal}%" else "",
+            "הפרדת הדוברים לפי הקול, על הטלפון.",
+            if (processing.chunksTotal > 0) processing.chunksDone.toFloat() / processing.chunksTotal else null,
+        )
         c.status == CallStatus.TRANSCRIBING && onThis -> Progress(
             if (processing.chunksTotal > 0) "מתמלל… ${processing.chunksDone * 100 / processing.chunksTotal}%"
             else "מכין את האודיו…",
@@ -403,6 +430,50 @@ private fun SegmentRow(seg: SegmentEntity, active: Boolean, onClick: () -> Unit)
         }
         Spacer(Modifier.width(10.dp))
         Text(seg.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+    }
+}
+
+/** "אני", the other side's name, or "דובר 1/2" when it isn't known who is who. */
+private fun speakerLabel(c: CallEntity, speaker: Int?): String = when {
+    speaker == null -> ""
+    c.meSpeaker == null -> "דובר ${speaker + 1}"
+    speaker == c.meSpeaker -> "אני"
+    else -> c.contactName ?: c.number ?: "הצד השני"
+}
+
+/** One line of the conversation as a chat bubble: mine on the start side, theirs on the end side. */
+@Composable
+private fun ChatLine(
+    seg: SegmentEntity,
+    name: String,
+    isMe: Boolean,
+    alignEnd: Boolean,
+    showName: Boolean,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val base = if (isMe || (!alignEnd)) cs.primaryContainer else cs.surfaceContainerHigh
+    val bg by animateColorAsState(if (active) cs.tertiaryContainer else base, label = "bubble")
+    Column(
+        Modifier.fillMaxWidth().padding(top = if (showName) 10.dp else 3.dp),
+        horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start,
+    ) {
+        if (showName) {
+            Text("$name · ${formatDuration(seg.startMs)}", style = MaterialTheme.typography.labelMedium,
+                color = cs.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp))
+        }
+        Box(
+            Modifier
+                .fillMaxWidth(0.86f)
+                .wrapContentWidth(if (alignEnd) Alignment.End else Alignment.Start)
+                .clip(MaterialTheme.shapes.medium)
+                .background(bg)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Text(seg.text, style = MaterialTheme.typography.bodyLarge)
+        }
     }
 }
 

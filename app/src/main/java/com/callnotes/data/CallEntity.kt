@@ -69,6 +69,14 @@ data class CallEntity(
     val transcriptModel: String? = null,
     /** Last processing error, shown to the user (DB v4). */
     val error: String? = null,
+    /**
+     * Voice fingerprints of the two speakers found in the call (DB v5): 2 × dim floats,
+     * little-endian, speaker 0 first. Lets the app tell "me" from the other side again
+     * later (e.g. after the owner records a voice sample) without re-running anything.
+     */
+    val speakerEmbeddings: ByteArray? = null,
+    /** Which speaker index is the owner, when known (DB v5). */
+    val meSpeaker: Int? = null,
 )
 
 /** One stretch of transcript with its position in the recording (DB v4). */
@@ -80,7 +88,12 @@ data class SegmentEntity(
     val startMs: Long,
     val endMs: Long,
     val text: String,
+    /** Speaker index 0/1 from diarization, or null if speakers weren't separated (DB v5). */
+    val speaker: Int? = null,
 )
+
+/** The stored voices of one call, for re-labelling "me" after a new voice sample. */
+data class CallVoices(val id: Long, val speakerEmbeddings: ByteArray?)
 
 /** A call row plus the first line of its transcript (null if none). */
 data class CallListItem(

@@ -111,6 +111,21 @@ class ModelManager(private val context: Context) {
 
     fun startDownload(spec: ModelSpec, wifiOnly: Boolean) {
         cancelDownload()
+        begin(spec, wifiOnly)
+    }
+
+    /** Downloads every missing file of [specs], one after the other (e.g. the speaker pack). */
+    fun startDownloads(specs: List<ModelSpec>, wifiOnly: Boolean) {
+        val missing = specs.filterNot { isInstalled(it) }
+        if (missing.isEmpty()) return
+        cancelDownload()
+        prefs.downloadQueue = missing.drop(1).joinToString(",") { it.id }
+        begin(missing.first(), wifiOnly)
+    }
+
+    fun allInstalled(specs: List<ModelSpec>) = specs.all { isInstalled(it) }
+
+    private fun begin(spec: ModelSpec, wifiOnly: Boolean) {
         partFor(spec).delete()
         val request = DownloadManager.Request(Uri.parse(spec.downloadUrl))
             .setTitle("${spec.displayName} — מודל לתמלול")
@@ -125,6 +140,7 @@ class ModelManager(private val context: Context) {
     }
 
     fun cancelDownload() {
+        prefs.downloadQueue = ""
         val id = prefs.downloadId
         if (id != -1L) downloads.remove(id)
         prefs.downloadId = -1L
@@ -188,11 +204,21 @@ class ModelManager(private val context: Context) {
                 Download.Idle
             } else {
                 part.delete()
+                prefs.downloadQueue = ""
                 Download.Failed(spec, "הקובץ שהורד פגום. נסה להוריד שוב.")
             }
             verifying = null
-            publish(result)
+            // Rest of a pack: start the next file.
+            val next = if (result is Download.Idle) nextQueued() else null
+            if (next != null) begin(next, prefs.wifiOnly) else publish(result)
         }
+    }
+
+    private fun nextQueued(): ModelSpec? {
+        val ids = prefs.downloadQueue.split(',').filter { it.isNotBlank() }
+        val next = ids.firstNotNullOfOrNull { id -> ModelCatalog.byId(id)?.takeIf { !isInstalled(it) } }
+        prefs.downloadQueue = ids.dropWhile { it != next?.id }.drop(1).joinToString(",")
+        return next
     }
 
     private fun publish(download: Download) {

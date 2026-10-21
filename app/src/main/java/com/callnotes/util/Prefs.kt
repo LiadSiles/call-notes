@@ -82,6 +82,11 @@ class Prefs(context: Context) {
         get() = sp.getString("model_id", null)
         set(value) = sp.edit().putString("model_id", value).apply()
 
+    /** Model ids still to download after the current one (comma-separated), for packs. */
+    var downloadQueue: String
+        get() = sp.getString("download_queue", "") ?: ""
+        set(value) = sp.edit().putString("download_queue", value).apply()
+
     /** Active DownloadManager id for the model, or -1. */
     var downloadId: Long
         get() = sp.getLong("download_id", -1L)

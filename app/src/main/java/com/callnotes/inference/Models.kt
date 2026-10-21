@@ -38,7 +38,8 @@ data class Transcript(
     /** Word timing when the engine provides it (Whisper); used to split speakers by word. */
     val words: List<Word> = emptyList(),
 ) {
-    data class Segment(val startMs: Long, val endMs: Long, val text: String)
+    /** [speaker]: 0/1 after speaker separation, null before / without it. */
+    data class Segment(val startMs: Long, val endMs: Long, val text: String, val speaker: Int? = null)
     data class Word(val startMs: Long, val endMs: Long, val text: String, val probability: Float = 1f)
 
     val text: String get() = segments.joinToString(" ") { it.text }
@@ -73,10 +74,17 @@ data class CallAnalysis(
     )
 }
 
-enum class ModelRole { TRANSCRIBE, ANALYZE }
+enum class ModelRole {
+    TRANSCRIBE,
+    ANALYZE,
+    /** pyannote segmentation (who speaks when). */
+    SPEAKER_SEGMENTATION,
+    /** Voice fingerprint model (which voice is which). */
+    SPEAKER_EMBEDDING,
+}
 
 /** Runtime that executes a model. (Not to be confused with LiteRT-LM's `Engine` class.) */
-enum class InferenceEngine { LITERT_LM, LLAMA_CPP, WHISPER_CPP }
+enum class InferenceEngine { LITERT_LM, LLAMA_CPP, WHISPER_CPP, SHERPA_ONNX }
 
 /** One entry in the downloadable model catalog. */
 data class ModelSpec(
@@ -138,8 +146,42 @@ object ModelCatalog {
         minRamGb = 5.0,
     )
 
+    /**
+     * Speaker separation, run by sherpa-onnx v1.13.8 (k2-fsa). pyannote segmentation-3.0
+     * exported to ONNX (MIT), from the sherpa-onnx author's HF mirror, pinned commit.
+     */
+    val PYANNOTE_SEGMENTATION = ModelSpec(
+        id = "pyannote-segmentation-3.0",
+        displayName = "pyannote segmentation 3.0",
+        roles = setOf(ModelRole.SPEAKER_SEGMENTATION),
+        engine = InferenceEngine.SHERPA_ONNX,
+        fileName = "pyannote-segmentation-3.0.onnx",
+        downloadUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/" +
+            "9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.onnx",
+        sizeBytes = 5_992_913,
+        sha256 = "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079",
+        minRamGb = 2.0,
+    )
+
+    /** WeSpeaker ResNet34-LM (VoxCeleb, CC-BY-4.0) — the embedding pyannote's own pipeline uses. */
+    val WESPEAKER_RESNET34 = ModelSpec(
+        id = "wespeaker-resnet34-lm",
+        displayName = "WeSpeaker ResNet34",
+        roles = setOf(ModelRole.SPEAKER_EMBEDDING),
+        engine = InferenceEngine.SHERPA_ONNX,
+        fileName = "wespeaker-en-voxceleb-resnet34-lm.onnx",
+        downloadUrl = "https://huggingface.co/csukuangfj/speaker-embedding-models/resolve/" +
+            "0743f301363dec56491a490f6d6cbc9d67f9a3bf/wespeaker_en_voxceleb_resnet34_LM.onnx",
+        sizeBytes = 26_530_550,
+        sha256 = "e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012",
+        minRamGb = 2.0,
+    )
+
+    /** Both files speaker separation needs; downloaded together. */
+    val SPEAKER_PACK = listOf(PYANNOTE_SEGMENTATION, WESPEAKER_RESNET34)
+
     /** Best first within each role. */
-    val all = listOf(WHISPER_HE_TURBO, GEMMA_4_E4B, GEMMA_4_E2B)
+    val all = listOf(WHISPER_HE_TURBO, GEMMA_4_E4B, GEMMA_4_E2B, PYANNOTE_SEGMENTATION, WESPEAKER_RESNET34)
 
     fun byId(id: String?): ModelSpec? = all.firstOrNull { it.id == id }
 

@@ -17,6 +17,13 @@ import com.callnotes.data.CallEntity
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SegmentEntity
 import com.callnotes.inference.Transcribers
+import com.callnotes.util.CpuInfo
+import com.callnotes.inference.speakers.VoiceProfile
+import com.callnotes.inference.speakers.Voice
+import com.callnotes.inference.speakers.SpeakerDiarizer
+import com.callnotes.inference.speakers.SpeakerAligner
+import com.callnotes.inference.Transcript
+import com.callnotes.inference.ModelCatalog
 import com.callnotes.inference.whisper.WhisperNative
 import com.callnotes.inference.whisper.WhisperTranscriber
 import com.callnotes.inference.ModelSpec
@@ -70,6 +77,9 @@ class TranscriptionService : Service() {
     /** Set when the user cancelled [currentCallId]: it is held, not re-queued. */
     @Volatile private var userCancelled: Long? = null
     @Volatile private var runJob: Job? = null
+    /** Speaker separation, loaded on first use in a run (null if its models aren't installed). */
+    private var diarizer: SpeakerDiarizer? = null
+    private var diarizerTried = false
     @Volatile private var stopping = false
 
     override fun onCreate() {
@@ -227,6 +237,7 @@ class TranscriptionService : Service() {
             // A cancelled chunk finishes its native call first; never close the engine under it.
             withContext(NonCancellable) { lastWork?.join() }
             transcriber?.close()
+            diarizer?.close(); diarizer = null; diarizerTried = false
             ProcessingStatus.set(ProcessingStatus.State())
             wakeLock?.takeIf { it.isHeld }?.release()
             main.post { finishRun() }
@@ -305,10 +316,14 @@ class TranscriptionService : Service() {
                 ProcessingStatus.set(ProcessingStatus.State(true, call.id, done, total, "transcribing"))
                 Notifications.updateProcessing(this, "$pct%")
             }
-            val rows = transcript.segments.mapIndexed { i, s ->
-                SegmentEntity(callId = call.id, idx = i, startMs = s.startMs, endMs = s.endMs, text = s.text)
+            val speakers = separateSpeakers(call, audio, transcript)
+            val lines = speakers?.lines ?: transcript.segments
+            val rows = lines.mapIndexed { i, s ->
+                SegmentEntity(callId = call.id, idx = i, startMs = s.startMs, endMs = s.endMs, text = s.text,
+                    speaker = s.speaker)
             }
             dao.replaceTranscript(call.id, rows, transcriber.modelId)
+            dao.setSpeakers(call.id, speakers?.let { Voice.pack(it.embeddings) }, speakers?.me)
             // Proof that transcription only reads the recording (owner reported worse playback after it).
             val after = fingerprint(source)
             ProcessingLog.write(this, "call ${call.id}: done in ${secs(started)} (${audioSec} s audio), " +
@@ -330,6 +345,50 @@ class TranscriptionService : Service() {
             return false
         } finally {
             converted.delete()
+        }
+    }
+
+    private class Speakers(val lines: List<Transcript.Segment>, val embeddings: Map<Int, FloatArray>, val me: Int?)
+
+    /**
+     * Splits the transcript by speaker if the speaker models are installed. Never fails the
+     * transcription: on any error the transcript is kept without speakers.
+     */
+    private suspend fun separateSpeakers(call: CallEntity, audio: File, transcript: Transcript): Speakers? {
+        val models = (application as CallNotesApp).models
+        if (!models.allInstalled(ModelCatalog.SPEAKER_PACK)) return null
+        val started = System.currentTimeMillis()
+        return try {
+            if (!diarizerTried) {
+                diarizerTried = true
+                diarizer = SpeakerDiarizer(
+                    models.fileFor(ModelCatalog.PYANNOTE_SEGMENTATION),
+                    models.fileFor(ModelCatalog.WESPEAKER_RESNET34),
+                    CpuInfo.inferenceThreads(),
+                )
+            }
+            val d = diarizer ?: return null
+            ProcessingLog.step(this, "call ${call.id}: separating speakers")
+            ProcessingStatus.set(ProcessingStatus.State(true, call.id, 0, 0, "speakers"))
+            val info = com.callnotes.audio.Wav.readInfo(audio) ?: return null
+            val pcm = com.callnotes.audio.Wav.readSamples(audio, info, 0, info.sampleCount.toInt())
+            val samples = FloatArray(pcm.size) { pcm[it] / 32768f }
+            val result = d.diarize(samples) { done, total ->
+                ProcessingStatus.set(ProcessingStatus.State(true, call.id, done, total, "speakers"))
+            }
+            currentCoroutineContext().ensureActive()
+            val owner = VoiceProfile.load(this)
+            val me = if (owner != null && !result.merged) Voice.whichIsMe(owner, result.embeddings) else null
+            val lines = SpeakerAligner.align(transcript, result.turns)
+            val similarity = if (result.embeddings.size == 2) "%.2f".format(Voice.cosine(result.embeddings[0]!!, result.embeddings[1]!!)) else "-"
+            ProcessingLog.write(this, "call ${call.id}: speakers in ${secs(started)} · ${result.turns.size} turns · " +
+                "voices ${result.embeddings.size} (similarity $similarity${if (result.merged) ", merged" else ""}) · " +
+                "me=${me ?: "?"}${if (owner == null) " (no voice sample)" else ""} · ${lines.size} lines")
+            Speakers(lines, result.embeddings, me)
+        } catch (e: Throwable) {
+            if (e is CancellationException) throw e
+            ProcessingLog.write(this, "call ${call.id}: speaker separation FAILED, keeping plain transcript: ${describe(e)}")
+            null
         }
     }
 

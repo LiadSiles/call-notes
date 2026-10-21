@@ -70,6 +70,8 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
         item { SectionHeader("תמלול") }
         item { key(resetKey) { ModelSection(app.models, prefs, ModelRole.TRANSCRIBE, onModelReady) } }
         item { key(resetKey) { TranscriptionSwitches(prefs) } }
+        item { SectionHeader("מי אמר מה") }
+        item { key(resetKey) { SpeakerSection(prefs) } }
         item { SectionHeader("סיכומים ומשימות") }
         item {
             Text(
