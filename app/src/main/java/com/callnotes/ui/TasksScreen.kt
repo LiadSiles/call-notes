@@ -52,7 +52,7 @@ fun TasksScreen(
     contentPadding: PaddingValues,
     focusTaskId: Long?,
     onFocusConsumed: () -> Unit,
-    onOpenCall: (callId: Long, segment: Int?) -> Unit,
+    onOpenCall: (callId: Long, segment: Int?, text: String?) -> Unit,
 ) {
     val context = LocalContext.current
     val dao = (context.applicationContext as CallNotesApp).database.calls()
@@ -104,7 +104,7 @@ fun TasksScreen(
         items(open, key = { it.task.id }) { t ->
             TaskCard(t, highlight == t.task.id,
                 onDone = { v -> scope.launch(Dispatchers.IO) { dao.setTaskDone(t.task.id, v) } },
-                onOpen = { onOpenCall(t.task.callId, t.task.firstSegment) })
+                onOpen = { onOpenCall(t.task.callId, t.task.firstSegment, t.task.quote ?: t.task.title) })
         }
         if (done.isNotEmpty()) item {
             TextButton(onClick = { showDone = !showDone }, modifier = Modifier.padding(top = 8.dp)) {
@@ -114,7 +114,7 @@ fun TasksScreen(
         if (showDone) items(done, key = { it.task.id }) { t ->
             TaskCard(t, highlight == t.task.id,
                 onDone = { v -> scope.launch(Dispatchers.IO) { dao.setTaskDone(t.task.id, v) } },
-                onOpen = { onOpenCall(t.task.callId, t.task.firstSegment) })
+                onOpen = { onOpenCall(t.task.callId, t.task.firstSegment, t.task.quote ?: t.task.title) })
         }
     }
 }

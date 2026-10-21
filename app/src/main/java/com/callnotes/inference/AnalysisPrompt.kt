@@ -111,10 +111,10 @@ object AnalysisPrompt {
                 if (item is JSONObject) {
                     val text = item.optString("text").clean() ?: return@mapNotNull null
                     val (ls, ok) = checked(item.optBoolean("certain", false), lines(item.optJSONArray("lines")))
-                    CallAnalysis.Point(text, ls, ok)
+                    CallAnalysis.Point(text, ls.ifEmpty { located(text, lineTexts) }, ok)
                 } else {
                     // Older/looser answers: a plain string, no citation → not verified.
-                    a.optString(i).clean()?.let { CallAnalysis.Point(it, emptyList(), n == 0) }
+                    a.optString(i).clean()?.let { CallAnalysis.Point(it, located(it, lineTexts), n == 0) }
                 }
             }
         }
@@ -137,7 +137,8 @@ object AnalysisPrompt {
                     dueDate = due,
                     confidence = 1f,
                     sourceQuote = quote,
-                    lines = ls,
+                    // Uncited: still link it to the line its quote/title matches (stays "not sure").
+                    lines = ls.ifEmpty { located(quote ?: title, lineTexts) },
                     certain = citedOk && quoteOk && (rawDue == null || due != null),
                 )
             }
@@ -153,6 +154,10 @@ object AnalysisPrompt {
             summaryCertain = o.optBoolean("summary_certain", true),
         )
     }
+
+    /** 1-based line found by text when the model cited none (empty if nothing matches). */
+    private fun located(text: String, lineTexts: List<String>): List<Int> =
+        SourceFinder.bestLine(text, lineTexts)?.let { listOf(it + 1) } ?: emptyList()
 
     /** Loose containment for Hebrew ASR text: punctuation, niqqud and final letters ignored. */
     fun contains(line: String, quote: String): Boolean {

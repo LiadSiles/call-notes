@@ -20,12 +20,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.CallEntity
 import com.callnotes.data.TaskEntity
 import com.callnotes.inference.AnalysisPrompt
+import com.callnotes.inference.SourceFinder
 import com.callnotes.processing.ProcessingStatus
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -49,6 +51,8 @@ fun SummarySection(
     onShowLine: (Int) -> Unit,
     /** The user corrected speakers since this summary was made. */
     speakersEdited: Boolean,
+    /** Transcript lines, to find an item's place when the summary didn't cite one. */
+    lineTexts: List<String>,
 ) {
     val cs = MaterialTheme.colorScheme
     val running = processing.running && processing.callId == c.id &&
@@ -90,16 +94,19 @@ fun SummarySection(
                 if (analysis.summary.isNotBlank()) {
                     Text(analysis.summary, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 6.dp))
                 }
-                Points("עיקרי הדברים", analysis.keyPoints, onShowLine)
-                Points("החלטות", analysis.decisions, onShowLine)
+                Points("עיקרי הדברים", analysis.keyPoints, lineTexts, onShowLine)
+                Points("החלטות", analysis.decisions, lineTexts, onShowLine)
             }
             if (tasks.isNotEmpty()) {
                 Text("משימות", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 14.dp))
                 tasks.forEach { t ->
-                    TaskRow(t, ownerLabel(c, t.owner), onOpen = { t.firstSegment?.let(onShowLine) }) { onTaskDone(t, it) }
+                    val target = remember(t.id, lineTexts.size) {
+                        t.firstSegment ?: SourceFinder.bestLine(t.quote ?: t.title, lineTexts)
+                    }
+                    TaskRow(t, ownerLabel(c, t.owner), target?.let { line -> { onShowLine(line) } }) { onTaskDone(t, it) }
                 }
             }
-            Points("להמשך", analysis.followUps, onShowLine)
+            Points("להמשך", analysis.followUps, lineTexts, onShowLine)
             Text("לחיצה על פריט מראה את המקום בשיחה שממנו הוא נלקח.", style = MaterialTheme.typography.bodySmall,
                 color = cs.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
             TextButton(onClick = onSummarise, modifier = Modifier.padding(top = 4.dp)) { Text("סכם מחדש") }
@@ -130,31 +137,56 @@ fun SummarySection(
 
 /** Extracted items; each opens its source line in the transcript. Unverified ones say so. */
 @Composable
-private fun Points(title: String, items: List<com.callnotes.inference.CallAnalysis.Point>, onShowLine: (Int) -> Unit) {
+private fun Points(
+    title: String,
+    items: List<com.callnotes.inference.CallAnalysis.Point>,
+    lineTexts: List<String>,
+    onShowLine: (Int) -> Unit,
+) {
     if (items.isEmpty()) return
     val cs = MaterialTheme.colorScheme
     Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 14.dp))
     items.forEach { p ->
-        val line = p.lines.firstOrNull()?.minus(1)
+        // Cited line, else the line its words match (summaries without citations).
+        val line = remember(p, lineTexts.size) {
+            p.lines.firstOrNull()?.minus(1)?.takeIf { it in lineTexts.indices } ?: SourceFinder.bestLine(p.text, lineTexts)
+        }
         Column(
             Modifier.fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
                 .then(if (line != null) Modifier.clickable { onShowLine(line) } else Modifier)
-                .padding(vertical = 4.dp),
+                .padding(vertical = 6.dp, horizontal = 4.dp),
         ) {
-            Text("• ${p.text}", style = MaterialTheme.typography.bodyMedium,
-                color = if (line != null) cs.onSurface else cs.onSurfaceVariant)
-            if (!p.certain) Pill("לא בטוח", Tone.Bad, Modifier.padding(start = 12.dp, top = 2.dp))
+            Text("• ${p.text}", style = MaterialTheme.typography.bodyMedium)
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, top = 2.dp)) {
+                if (line != null) ShowInCall()
+                if (!p.certain) {
+                    if (line != null) Spacer(Modifier.width(8.dp))
+                    Pill("לא בטוח", Tone.Bad)
+                }
+            }
         }
     }
 }
 
+/** The visible cue that an item opens its place in the transcript. */
 @Composable
-private fun TaskRow(t: TaskEntity, owner: String?, onOpen: () -> Unit, onDone: (Boolean) -> Unit) {
+private fun ShowInCall() {
+    Text("הצג בשיחה ›", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+}
+
+@Composable
+private fun TaskRow(t: TaskEntity, owner: String?, onOpen: (() -> Unit)?, onDone: (Boolean) -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Checkbox(checked = t.done, onCheckedChange = onDone)
         Spacer(Modifier.width(4.dp))
-        Column(Modifier.weight(1f).clickable(onClick = onOpen).padding(top = 12.dp)) {
+        Column(
+            Modifier.weight(1f)
+                .clip(MaterialTheme.shapes.small)
+                .then(if (onOpen != null) Modifier.clickable(onClick = onOpen) else Modifier)
+                .padding(top = 12.dp, bottom = 4.dp),
+        ) {
             Text(
                 t.title,
                 style = MaterialTheme.typography.bodyLarge,
@@ -167,7 +199,13 @@ private fun TaskRow(t: TaskEntity, owner: String?, onOpen: () -> Unit, onDone: (
                 Text("\"$it\"", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp))
             }
-            if (!t.certain) Pill("לא בטוח", Tone.Bad, Modifier.padding(top = 4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                if (onOpen != null) ShowInCall()
+                if (!t.certain) {
+                    if (onOpen != null) Spacer(Modifier.width(8.dp))
+                    Pill("לא בטוח", Tone.Bad)
+                }
+            }
         }
     }
     Spacer(Modifier.size(2.dp))

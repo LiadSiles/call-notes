@@ -89,6 +89,8 @@ fun CallDetailScreen(
     onTranscribe: () -> Unit,
     /** Transcript line (segment index) to show on open, e.g. from the tasks screen. */
     focusSegment: Int? = null,
+    /** Text to locate when there's no line number (task quote / title). */
+    focusText: String? = null,
     onFocusConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -132,10 +134,12 @@ fun CallDetailScreen(
             }
         }
     }
-    LaunchedEffect(focusSegment, segments.size) {
-        if (focusSegment != null && segments.isNotEmpty()) {
+    LaunchedEffect(focusSegment, focusText, segments.size) {
+        if ((focusSegment != null || focusText != null) && segments.isNotEmpty()) {
+            val target = focusSegment?.takeIf { it in segments.indices }
+                ?: focusText?.let { com.callnotes.inference.SourceFinder.bestLine(it, segments.map { s -> s.text }) }
             onFocusConsumed()
-            showLine(focusSegment.coerceIn(0, segments.size - 1))
+            target?.let(showLine)
         }
     }
     // Shown as "starting" at once (the request is visible before any database write), then
@@ -211,6 +215,7 @@ fun CallDetailScreen(
                     onTaskDone = { t, done -> scope.launch(Dispatchers.IO) { dao.setTaskDone(t.id, done) } },
                     onShowLine = showLine,
                     speakersEdited = speakersEdited,
+                    lineTexts = segments.map { it.text },
                 )
             }
 

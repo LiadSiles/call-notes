@@ -101,6 +101,7 @@ private fun AppRoot() {
     var openCallId by rememberSaveable { mutableStateOf<Long?>(null) }
     /** Transcript line to scroll to when the call opens (from a task / key point). */
     var openFocus by remember { mutableStateOf<Int?>(null) }
+    var openFocusText by remember { mutableStateOf<String?>(null) }
     /** Task to scroll to and highlight in the tasks screen (from a notification). */
     var focusTask by remember { mutableStateOf<Long?>(null) }
     val openRequest by MainActivity.openRequest.collectAsState()
@@ -176,7 +177,8 @@ private fun AppRoot() {
                 onBack = { openCallId = null },
                 onTranscribe = { transcribeNow(detail) },
                 focusSegment = openFocus,
-                onFocusConsumed = { openFocus = null },
+                focusText = openFocusText,
+                onFocusConsumed = { openFocus = null; openFocusText = null },
             )
         } else {
             Scaffold(
@@ -222,7 +224,9 @@ private fun AppRoot() {
                             contentPadding = padding,
                             focusTaskId = focusTask,
                             onFocusConsumed = { focusTask = null },
-                            onOpenCall = { callId, segment -> openFocus = segment; openCallId = callId },
+                            onOpenCall = { callId, segment, text ->
+                                openFocus = segment; openFocusText = text; openCallId = callId
+                            },
                         )
                         Tab.Settings -> SettingsScreen(
                             contentPadding = padding,
