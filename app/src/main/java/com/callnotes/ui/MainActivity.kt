@@ -10,7 +10,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -100,49 +110,70 @@ private fun AppRoot() {
         }
     }
 
-    val detail = openCallId
-    if (detail != null) {
-        BackHandler { openCallId = null }
-        CallDetailScreen(
-            callId = detail,
-            player = player,
-            onBack = { openCallId = null },
-            onTranscribe = kickQueue,
-        )
-        return
+    // Manual "transcribe now": doesn't depend on the auto-transcribe switch.
+    val transcribeNow: () -> Unit = {
+        scope.launch(Dispatchers.IO) { TranscriptionService.start(context) }
     }
+    val listState = rememberLazyListState()
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = tab == Tab.Calls,
-                    onClick = { tab = Tab.Calls },
-                    icon = { Icon(Icons.Filled.Call, null) },
-                    label = { Text("שיחות") },
-                )
-                NavigationBarItem(
-                    selected = tab == Tab.Settings,
-                    onClick = { tab = Tab.Settings },
-                    icon = { Icon(Icons.Filled.Settings, null) },
-                    label = { Text("הגדרות") },
-                )
-            }
+    // One animated host for list <-> detail, so moving between them slides and fades
+    // instead of tearing the screen down (which flashed the window background).
+    AnimatedContent(
+        targetState = openCallId,
+        transitionSpec = {
+            val opening = targetState != null
+            val dir = if (opening) 1 else -1
+            (slideInHorizontally(tween(260)) { w -> -dir * w / 5 } + fadeIn(tween(220)))
+                .togetherWith(slideOutHorizontally(tween(260)) { w -> dir * w / 8 } + fadeOut(tween(160)))
         },
-    ) { padding ->
-        when (tab) {
-            Tab.Calls -> CallsScreen(
-                contentPadding = padding,
-                resumeTick = resumeTick,
-                onOpen = { openCallId = it },
-                onOpenSettings = { tab = Tab.Settings },
-                onImport = { importLauncher.launch(arrayOf("audio/*")) },
+        label = "nav",
+    ) { detail ->
+        if (detail != null) {
+            BackHandler { openCallId = null }
+            CallDetailScreen(
+                callId = detail,
+                player = player,
+                onBack = { openCallId = null },
+                onTranscribe = transcribeNow,
             )
-            Tab.Settings -> SettingsScreen(
-                contentPadding = padding,
-                resumeTick = resumeTick,
-                onModelReady = kickQueue,
-            )
+        } else {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                bottomBar = {
+                    NavigationBar {
+                        NavigationBarItem(
+                            selected = tab == Tab.Calls,
+                            onClick = { tab = Tab.Calls },
+                            icon = { Icon(Icons.Filled.Call, null) },
+                            label = { Text("שיחות") },
+                        )
+                        NavigationBarItem(
+                            selected = tab == Tab.Settings,
+                            onClick = { tab = Tab.Settings },
+                            icon = { Icon(Icons.Filled.Settings, null) },
+                            label = { Text("הגדרות") },
+                        )
+                    }
+                },
+            ) { padding ->
+                Crossfade(targetState = tab, animationSpec = tween(180), label = "tabs") { current ->
+                    when (current) {
+                        Tab.Calls -> CallsScreen(
+                            contentPadding = padding,
+                            resumeTick = resumeTick,
+                            listState = listState,
+                            onOpen = { openCallId = it },
+                            onOpenSettings = { tab = Tab.Settings },
+                            onImport = { importLauncher.launch(arrayOf("audio/*")) },
+                        )
+                        Tab.Settings -> SettingsScreen(
+                            contentPadding = padding,
+                            resumeTick = resumeTick,
+                            onModelReady = kickQueue,
+                        )
+                    }
+                }
+            }
         }
     }
 }

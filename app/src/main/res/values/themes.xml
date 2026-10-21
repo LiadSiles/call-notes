@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Window background matches the Compose theme so nothing flashes behind screens. -->
     <style name="Theme.CallNotes" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/ic_launcher_background</item>
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
+    <color name="window_background">#FFF7F5F0</color>
     <color name="ic_launcher_background">#FFF4F1EA</color>
 </resources>

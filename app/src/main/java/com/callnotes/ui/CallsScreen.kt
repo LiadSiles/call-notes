@@ -43,13 +43,15 @@ import com.callnotes.processing.ProcessingStatus
 fun CallsScreen(
     contentPadding: PaddingValues,
     resumeTick: Int,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onOpen: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onImport: () -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as CallNotesApp
-    val items by remember { app.database.calls().observeList() }.collectAsStateWithLifecycle(emptyList())
+    val loaded by app.callList.collectAsStateWithLifecycle()
+    val items = loaded.orEmpty()
     val service by ServiceStatus.state.collectAsStateWithLifecycle()
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val models by app.models.state.collectAsStateWithLifecycle()
@@ -58,6 +60,7 @@ fun CallsScreen(
 
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         LazyColumn(
+            state = listState,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -109,7 +112,8 @@ fun CallsScreen(
                 }
             }
 
-            if (items.isEmpty()) item {
+            // null = still loading: show nothing rather than flashing the empty state.
+            if (loaded != null && items.isEmpty()) item {
                 EmptyState(
                     icon = Icons.Filled.Call,
                     title = "אין עדיין שיחות",

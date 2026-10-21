@@ -84,7 +84,11 @@ fun CallDetailScreen(
     val app = context.applicationContext as CallNotesApp
     val dao = app.database.calls()
     val scope = rememberCoroutineScope()
-    val call by remember(callId) { dao.observe(callId) }.collectAsStateWithLifecycle(null)
+    // Start from the row we already have, so the screen never opens blank.
+    val initial = remember(callId) { app.callList.value?.firstOrNull { it.call.id == callId }?.call }
+    val call by remember(callId) { dao.observe(callId) }.collectAsStateWithLifecycle(initial)
+    val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
+    val lastRun = remember(noteVersion) { com.callnotes.util.Prefs(context).lastProcessing }
     val segments by remember(callId) { dao.observeSegments(callId) }.collectAsStateWithLifecycle(emptyList())
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
@@ -141,7 +145,7 @@ fun CallDetailScreen(
             item { SectionHeader("תמלול") }
 
             item {
-                TranscriptState(c, processing, onRetry = {
+                TranscriptState(c, processing, lastRun, onRetry = {
                     scope.launch(Dispatchers.IO) {
                         dao.setStatus(c.id, CallStatus.RECORDED, null, null)
                         withContext(Dispatchers.Main) { onTranscribe() }
@@ -256,7 +260,7 @@ private fun PlayerPanel(id: Long, path: String, player: AudioPlayer) {
 }
 
 @Composable
-private fun TranscriptState(c: CallEntity, processing: ProcessingStatus.State, onRetry: () -> Unit) {
+private fun TranscriptState(c: CallEntity, processing: ProcessingStatus.State, lastRun: String?, onRetry: () -> Unit) {
     when (c.status) {
         CallStatus.TRANSCRIBED -> Unit
         CallStatus.TRANSCRIBING -> Panel {
@@ -276,6 +280,10 @@ private fun TranscriptState(c: CallEntity, processing: ProcessingStatus.State, o
             Text("התמלול רץ ברקע כשמותקן מודל. אפשר להתחיל אותו עכשיו:",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             FilledTonalButton(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) { Text("תמלל עכשיו") }
+            if (!processing.running) lastRun?.let {
+                Text("הרצה אחרונה: $it", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            }
         }
         CallStatus.TRANSCRIBE_FAILED -> Panel {
             Text("התמלול נכשל", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
