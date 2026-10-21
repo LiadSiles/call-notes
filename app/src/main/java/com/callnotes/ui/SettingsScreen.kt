@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.callnotes.CallNotesApp
 import com.callnotes.capture.CallRecorderService
+import com.callnotes.inference.ModelRole
 import com.callnotes.util.Prefs
 
 /** Settings tab: arranges the sections in the new layout. */
@@ -67,8 +68,18 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
             }
         }
         item { SectionHeader("תמלול") }
-        item { key(resetKey) { ModelSection(app.models, prefs, onModelReady) } }
+        item { key(resetKey) { ModelSection(app.models, prefs, ModelRole.TRANSCRIBE, onModelReady) } }
         item { key(resetKey) { TranscriptionSwitches(prefs) } }
+        item { SectionHeader("סיכומים ומשימות") }
+        item {
+            Text(
+                "מודל שפה שיקרא את השיחה ויכין סיכום ומשימות (בשלב הבא). לא נדרש לתמלול.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+            )
+        }
+        item { key(resetKey) { ModelSection(app.models, prefs, ModelRole.ANALYZE) } }
         item { SectionHeader("כללי") }
         item { key(resetKey) { SettingsSection(prefs) } }
         run {

@@ -318,9 +318,9 @@ private fun TranscriptState(
             null,
         )
         c.status == CallStatus.TRANSCRIBING && onThis -> Progress(
-            if (processing.chunksTotal > 0) "מתמלל… מקטע ${processing.chunksDone + 1} מתוך ${processing.chunksTotal}"
+            if (processing.chunksTotal > 0) "מתמלל… ${processing.chunksDone * 100 / processing.chunksTotal}%"
             else "מכין את האודיו…",
-            if (processing.chunksTotal > 0) "כל מקטע הוא כחצי דקה של שיחה." else null,
+            "התמלול רץ על הטלפון ויכול לקחת כמה דקות לשיחה ארוכה.",
             if (processing.chunksTotal > 0) processing.chunksDone.toFloat() / processing.chunksTotal else null,
         )
         c.status == CallStatus.TRANSCRIBING -> Panel {

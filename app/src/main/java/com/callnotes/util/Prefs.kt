@@ -64,6 +64,19 @@ class Prefs(context: Context) {
             .apply()
     }
 
+    /**
+     * Active model per role (see ModelCatalog). Only ever set to an installed model.
+     * The analysis role keeps the pre-0.4 key, which held the user's Gemma choice.
+     */
+    fun modelFor(role: com.callnotes.inference.ModelRole): String? =
+        if (role == com.callnotes.inference.ModelRole.ANALYZE) modelId
+        else sp.getString("model_${role.name.lowercase()}", null)
+
+    fun setModelFor(role: com.callnotes.inference.ModelRole, id: String) {
+        if (role == com.callnotes.inference.ModelRole.ANALYZE) modelId = id
+        else sp.edit().putString("model_${role.name.lowercase()}", id).apply()
+    }
+
     /** Active model id (see ModelCatalog). Only ever set to an installed model. */
     var modelId: String?
         get() = sp.getString("model_id", null)

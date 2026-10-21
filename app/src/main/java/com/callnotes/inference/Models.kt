@@ -5,7 +5,8 @@ import java.io.File
 /*
  * The two swappable "sockets" from the plan. Any model the user picks plugs into one
  * (or both) of these, so the rest of the app never knows which model ran.
- * 0.3 implements Transcriber with Gemma 4 (GemmaTranscriber); Analyzer comes in 0.4.
+ * Transcriber: ivrit.ai Hebrew Whisper via whisper.cpp (0.4; Gemma 4 audio until 0.3.8).
+ * Analyzer: Gemma 4 (next).
  */
 
 /** Audio -> timestamped text. */
@@ -32,8 +33,13 @@ interface Analyzer {
     suspend fun analyze(transcript: Transcript, call: CallContext): CallAnalysis
 }
 
-data class Transcript(val segments: List<Segment>) {
+data class Transcript(
+    val segments: List<Segment>,
+    /** Word timing when the engine provides it (Whisper); used to split speakers by word. */
+    val words: List<Word> = emptyList(),
+) {
     data class Segment(val startMs: Long, val endMs: Long, val text: String)
+    data class Word(val startMs: Long, val endMs: Long, val text: String, val probability: Float = 1f)
 
     val text: String get() = segments.joinToString(" ") { it.text }
 }
@@ -89,11 +95,29 @@ data class ModelSpec(
 object ModelCatalog {
     private const val HF = "https://huggingface.co/litert-community"
 
+    /**
+     * ivrit.ai's Hebrew fine-tune of Whisper large-v3-turbo, ggml (f16) for whisper.cpp.
+     * Pinned to commit 2130c78 (2025-05-22), Apache-2.0, not gated; checked 2026-10-21.
+     */
+    val WHISPER_HE_TURBO = ModelSpec(
+        id = "whisper-he-turbo",
+        displayName = "Whisper עברית (ivrit.ai)",
+        roles = setOf(ModelRole.TRANSCRIBE),
+        engine = InferenceEngine.WHISPER_CPP,
+        fileName = "ivrit-whisper-large-v3-turbo-f16.bin",
+        downloadUrl = "https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml/resolve/" +
+            "2130c78e4a9cb4914cc4df91a1c3031407789705/ggml-model.bin",
+        sizeBytes = 1_624_555_275,
+        sha256 = "c8090411113357097bfafc2b8e228ec1639fa7f5fe4ecb5d054ac0ccef8641b1",
+        minRamGb = 3.5,
+    )
+
     // Pinned 2026-10-20 from the Hugging Face API (repos are not gated, Apache-2.0).
+    // Gemma's own transcription was poor in Hebrew (0.3.x); it now does summaries/tasks.
     val GEMMA_4_E4B = ModelSpec(
         id = "gemma-4-e4b",
         displayName = "Gemma 4 E4B",
-        roles = setOf(ModelRole.TRANSCRIBE, ModelRole.ANALYZE),
+        roles = setOf(ModelRole.ANALYZE),
         engine = InferenceEngine.LITERT_LM,
         fileName = "gemma-4-E4B-it.litertlm",
         downloadUrl = "$HF/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
@@ -105,7 +129,7 @@ object ModelCatalog {
     val GEMMA_4_E2B = ModelSpec(
         id = "gemma-4-e2b",
         displayName = "Gemma 4 E2B",
-        roles = setOf(ModelRole.TRANSCRIBE, ModelRole.ANALYZE),
+        roles = setOf(ModelRole.ANALYZE),
         engine = InferenceEngine.LITERT_LM,
         fileName = "gemma-4-E2B-it.litertlm",
         downloadUrl = "$HF/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm",
@@ -114,8 +138,10 @@ object ModelCatalog {
         minRamGb = 5.0,
     )
 
-    /** Best first. */
-    val all = listOf(GEMMA_4_E4B, GEMMA_4_E2B)
+    /** Best first within each role. */
+    val all = listOf(WHISPER_HE_TURBO, GEMMA_4_E4B, GEMMA_4_E2B)
 
     fun byId(id: String?): ModelSpec? = all.firstOrNull { it.id == id }
+
+    fun forRole(role: ModelRole): List<ModelSpec> = all.filter { role in it.roles }
 }

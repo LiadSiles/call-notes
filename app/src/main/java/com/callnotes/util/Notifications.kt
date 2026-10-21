@@ -47,7 +47,7 @@ object Notifications {
     /** Ongoing notification of [com.callnotes.processing.TranscriptionService]. */
     fun processing(context: Context, progress: String?): Notification =
         builder(context, CHANNEL_RECORDING, "מתמלל שיחות",
-            if (progress == null) "טוען את המודל…" else "מקטע $progress")
+            if (progress == null) "טוען את המודל…" else "התקדמות $progress")
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)

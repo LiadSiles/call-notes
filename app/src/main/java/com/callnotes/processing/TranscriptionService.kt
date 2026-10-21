@@ -16,7 +16,9 @@ import com.callnotes.data.CallDao
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SegmentEntity
-import com.callnotes.inference.GemmaTranscriber
+import com.callnotes.inference.Transcribers
+import com.callnotes.inference.whisper.WhisperNative
+import com.callnotes.inference.whisper.WhisperTranscriber
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
 import com.callnotes.util.Notifications
@@ -260,10 +262,11 @@ class TranscriptionService : Service() {
         ProcessingStatus.set(ProcessingStatus.State(running = true, callId = call.id, phase = "loading"))
         ProcessingLog.step(this, "loading model ${spec.id} (${"%.2f".format(file.length() / 1e9)} GB) · ${ProcessingLog.freeRam(this)}")
         val started = System.currentTimeMillis()
-        val t = GemmaTranscriber(this, spec, file)
+        val t = Transcribers.create(this, spec, file)
         return try {
             t.load()
-            ProcessingLog.write(this, "model loaded in ${secs(started)} · ${ProcessingLog.freeRam(this)}")
+            val detail = (t as? WhisperTranscriber)?.let { " · ${it.threads} threads · ${WhisperNative.systemInfo().trim()}" } ?: ""
+            ProcessingLog.write(this, "model loaded in ${secs(started)} · ${ProcessingLog.freeRam(this)}$detail")
             t
         } catch (e: Throwable) {
             runCatching { t.close() }
@@ -289,17 +292,18 @@ class TranscriptionService : Service() {
             ProcessingLog.step(this, "call ${call.id}: preparing audio (${source.extension}, " +
                 "${"%.1f".format(source.length() / 1e6)} MB, sha256 $before)")
             val audio = AudioDecoder.ensureWorkingFormat(source, converted)
-            var chunkStart = System.currentTimeMillis()
+            val audioSec = (com.callnotes.audio.Wav.readInfo(audio)?.durationMs ?: 0L) / 1000
+            ProcessingLog.write(this, "call ${call.id}: ${audioSec} s of audio")
+            var lastLogged = -1
             val transcript = transcriber.transcribe(audio) { done, total ->
-                if (done == 0) {
-                    ProcessingLog.write(this, "call ${call.id}: ${total} chunks")
-                } else {
-                    ProcessingLog.write(this, "call ${call.id}: chunk $done/$total in ${secs(chunkStart)}")
+                val pct = if (total > 0) done * 100 / total else 0
+                // At most one log line per 10 %, so long calls don't flood the log.
+                if (pct / 10 != lastLogged / 10 || done == total) {
+                    lastLogged = pct
+                    ProcessingLog.step(this, "call ${call.id}: $pct% after ${secs(started)}")
                 }
-                chunkStart = System.currentTimeMillis()
-                if (done < total) ProcessingLog.step(this, "call ${call.id}: chunk ${done + 1}/$total")
                 ProcessingStatus.set(ProcessingStatus.State(true, call.id, done, total, "transcribing"))
-                Notifications.updateProcessing(this, "$done/$total")
+                Notifications.updateProcessing(this, "$pct%")
             }
             val rows = transcript.segments.mapIndexed { i, s ->
                 SegmentEntity(callId = call.id, idx = i, startMs = s.startMs, endMs = s.endMs, text = s.text)
@@ -307,7 +311,8 @@ class TranscriptionService : Service() {
             dao.replaceTranscript(call.id, rows, transcriber.modelId)
             // Proof that transcription only reads the recording (owner reported worse playback after it).
             val after = fingerprint(source)
-            ProcessingLog.write(this, "call ${call.id}: done in ${secs(started)}, ${rows.size} segments, " +
+            ProcessingLog.write(this, "call ${call.id}: done in ${secs(started)} (${audioSec} s audio), " +
+                "${rows.size} segments, ${transcript.words.size} words, " +
                 "${rows.sumOf { it.text.length }} chars · recording " +
                 if (after == before) "unchanged (sha256 $after)" else "CHANGED! $before → $after")
             return true

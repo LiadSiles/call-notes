@@ -15,11 +15,27 @@ android {
         applicationId = "com.callnotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 14
-        versionName = "0.3.8"
+        versionCode = 15
+        versionName = "0.4.0"
 
         // LiteRT-LM ships native libraries; phones are arm64. Keeps the APK small.
         ndk { abiFilters += "arm64-v8a" }
+
+        externalNativeBuild {
+            cmake {
+                // whisper.cpp unoptimised is many times slower: always build it as Release,
+                // also inside the debug APK we distribute.
+                arguments += listOf("-DCMAKE_BUILD_TYPE=Release")
+            }
+        }
+    }
+
+    // whisper.cpp (third_party/whisper.cpp, git submodule) + our JNI bridge.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     // One fixed debug key (committed on purpose) so every build — from Android Studio

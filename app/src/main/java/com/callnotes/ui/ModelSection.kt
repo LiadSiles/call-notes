@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.inference.ModelManager
+import com.callnotes.inference.ModelRole
 import com.callnotes.inference.ModelSpec
 import com.callnotes.util.Prefs
 import kotlinx.coroutines.delay
@@ -35,7 +36,7 @@ import kotlinx.coroutines.delay
  * one has finished downloading and been verified.
  */
 @Composable
-fun ModelSection(models: ModelManager, prefs: Prefs, onReady: () -> Unit) {
+fun ModelSection(models: ModelManager, prefs: Prefs, role: ModelRole, onReady: () -> Unit = {}) {
     val snap by models.state.collectAsStateWithLifecycle()
     var askDownload by remember { mutableStateOf<ModelSpec?>(null) }
     var askDelete by remember { mutableStateOf<ModelSpec?>(null) }
@@ -48,19 +49,24 @@ fun ModelSection(models: ModelManager, prefs: Prefs, onReady: () -> Unit) {
             delay(if (models.state.value.download is ModelManager.Download.Running) 1_000 else 5_000)
         }
     }
-    LaunchedEffect(snap.active?.id) { if (snap.active != null) onReady() }
+    val activeSpec = snap.active(role)
+    LaunchedEffect(activeSpec?.id) { if (activeSpec != null) onReady() }
 
-    val offered = models.offered()
+    val offered = models.offered(role)
     Panel {
         if (offered.isEmpty()) {
-            Text("למכשיר יש פחות מ-5GB זיכרון, ולכן תמלול לא נתמך.", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                if (role == ModelRole.TRANSCRIBE) "למכשיר אין מספיק זיכרון לתמלול."
+                else "למכשיר יש פחות מ-5GB זיכרון, ולכן סיכומים לא נתמכים.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
             return@Panel
         }
-        val recommended = models.recommended()
+        val recommended = models.recommended(role)
         offered.forEachIndexed { i, spec ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp))
             val installed = spec.id in snap.installed
-            val active = snap.active?.id == spec.id
+            val active = activeSpec?.id == spec.id
             val dl = snap.download
             Row(
                 Modifier.fillMaxWidth().clickable {
@@ -119,7 +125,7 @@ fun ModelSection(models: ModelManager, prefs: Prefs, onReady: () -> Unit) {
     }
 
     askDownload?.let { spec ->
-        val switching = snap.active != null
+        val switching = activeSpec != null
         AlertDialog(
             onDismissRequest = { askDownload = null },
             title = { Text("להוריד את ${spec.displayName}?") },

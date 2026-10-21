@@ -115,7 +115,8 @@ fun CallsScreen(
                     "stopping" -> "עוצר את התמלול…"
                     "loading" -> "טוען את מודל התמלול…"
                     "waiting_thermal" -> "הטלפון חם — התמלול ממתין שיתקרר"
-                    else -> "מתמלל שיחה · מקטע ${processing.chunksDone} מתוך ${processing.chunksTotal}"
+                    else -> if (processing.chunksTotal > 0)
+                        "מתמלל שיחה · ${processing.chunksDone * 100 / processing.chunksTotal}%" else "מתמלל שיחה…"
                 }
                 Panel {
                     Row(verticalAlignment = Alignment.CenterVertically) {

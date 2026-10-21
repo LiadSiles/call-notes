@@ -37,18 +37,20 @@ class ModelManager(private val context: Context) {
     }
 
     data class Snapshot(
-        val active: ModelSpec?,
+        val active: Map<ModelRole, ModelSpec>,
         val installed: Set<String>,
         val download: Download,
     ) {
-        val ready get() = active != null
+        fun active(role: ModelRole): ModelSpec? = active[role]
+        /** Transcription can run. */
+        val ready get() = active[ModelRole.TRANSCRIBE] != null
     }
 
     private val prefs = Prefs(context)
     private val downloads = context.getSystemService(DownloadManager::class.java)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val _state = MutableStateFlow(Snapshot(null, emptySet(), Download.Idle))
+    private val _state = MutableStateFlow(Snapshot(emptyMap(), emptySet(), Download.Idle))
     val state: StateFlow<Snapshot> = _state.asStateFlow()
 
     @Volatile private var verifying: ModelSpec? = null
@@ -72,12 +74,13 @@ class ModelManager(private val context: Context) {
             return info.totalMem / 1_000_000_000.0
         }
 
-    /** Largest model the device can run, or null if none. */
-    fun recommended(): ModelSpec? = ModelCatalog.all.firstOrNull { totalRamGb >= it.minRamGb }
+    /** Best model for [role] the device can run, or null if none. */
+    fun recommended(role: ModelRole): ModelSpec? =
+        ModelCatalog.forRole(role).firstOrNull { totalRamGb >= it.minRamGb }
 
-    /** Models worth offering on this device (supported, or already installed). */
-    fun offered(): List<ModelSpec> =
-        ModelCatalog.all.filter { totalRamGb >= it.minRamGb || isInstalled(it) }
+    /** Models for [role] worth offering on this device (supported, or already installed). */
+    fun offered(role: ModelRole): List<ModelSpec> =
+        ModelCatalog.forRole(role).filter { totalRamGb >= it.minRamGb || isInstalled(it) }
 
     fun fileFor(spec: ModelSpec) = File(modelsDir, spec.fileName)
     private fun partFor(spec: ModelSpec) = File(modelsDir, spec.fileName + ".part")
@@ -87,18 +90,19 @@ class ModelManager(private val context: Context) {
         return f.exists() && f.length() == spec.sizeBytes
     }
 
-    /** The model transcription uses: the user's choice if installed, else any installed one. */
-    fun active(): ModelSpec? =
-        ModelCatalog.byId(prefs.modelId)?.takeIf { isInstalled(it) }
-            ?: ModelCatalog.all.firstOrNull { isInstalled(it) }
+    /** The model used for [role]: the user's choice if installed, else any installed one. */
+    fun active(role: ModelRole): ModelSpec? =
+        ModelCatalog.byId(prefs.modelFor(role))?.takeIf { role in it.roles && isInstalled(it) }
+            ?: ModelCatalog.forRole(role).firstOrNull { isInstalled(it) }
 
-    /** The active model and its file, or null if no model is installed. */
-    fun readyModel(): Pair<ModelSpec, File>? = active()?.let { it to fileFor(it) }
+    /** The active model for [role] and its file, or null if none is installed. */
+    fun readyModel(role: ModelRole = ModelRole.TRANSCRIBE): Pair<ModelSpec, File>? =
+        active(role)?.let { it to fileFor(it) }
 
     /** Switches to an installed model. Does nothing for a model that isn't installed. */
     fun select(spec: ModelSpec) {
         if (!isInstalled(spec)) return
-        prefs.modelId = spec.id
+        spec.roles.forEach { prefs.setModelFor(it, spec.id) }
         refresh()
     }
 
@@ -180,7 +184,7 @@ class ModelManager(private val context: Context) {
             prefs.downloadId = -1L
             prefs.downloadModelId = null
             val result = if (ok && part.renameTo(fileFor(spec))) {
-                prefs.modelId = spec.id // the user asked for this model: switch to it
+                spec.roles.forEach { prefs.setModelFor(it, spec.id) } // the user asked for it: switch
                 Download.Idle
             } else {
                 part.delete()
@@ -193,7 +197,7 @@ class ModelManager(private val context: Context) {
 
     private fun publish(download: Download) {
         _state.value = Snapshot(
-            active = active(),
+            active = ModelRole.entries.mapNotNull { r -> active(r)?.let { r to it } }.toMap(),
             installed = ModelCatalog.all.filter { isInstalled(it) }.map { it.id }.toSet(),
             download = download,
         )

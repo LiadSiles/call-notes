@@ -150,7 +150,7 @@ fun statusOf(call: CallEntity, chunksDone: Int? = null, chunksTotal: Int? = null
         CallStatus.RECORD_FAILED -> "ההקלטה נכשלה" to Tone.Bad
         CallStatus.RECORDED -> "ממתין לתמלול" to Tone.Neutral
         CallStatus.TRANSCRIBING ->
-            (if (chunksTotal != null && chunksTotal > 0) "מתמלל $chunksDone/$chunksTotal" else "מתמלל…") to Tone.Busy
+            (if (chunksTotal != null && chunksTotal > 0) "מתמלל ${chunksDone!! * 100 / chunksTotal}%" else "מתמלל…") to Tone.Busy
         CallStatus.TRANSCRIBE_FAILED -> "התמלול נכשל" to Tone.Bad
         CallStatus.TRANSCRIBED -> "תומלל" to Tone.Good
         CallStatus.HELD -> "התמלול בוטל" to Tone.Neutral
