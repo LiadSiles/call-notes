@@ -200,6 +200,14 @@ class TranscriptionService : Service() {
         note("העיבוד נעצר. התמלול האוטומטי כבוי עד שתפעיל אותו שוב.")
     }
 
+    /** Main thread: like stop-all, but automatic processing stays on (resumes later). */
+    private fun pauseNow() {
+        stoppingAll = true
+        ProcessingLog.write(this, "paused: battery saver on")
+        transcribe.stopNow()
+        summary.stopNow()
+    }
+
     private fun note(text: String) = note(this, text)
 
     override fun onDestroy() {
@@ -242,6 +250,14 @@ class TranscriptionService : Service() {
             }
         }
 
+        /** Battery saver turned on (and the user chose to pause): stop now, keep the queue. */
+        fun pauseForBatterySaver(context: Context) {
+            ProcessingStatus.set(ProcessingStatus.State())
+            ProcessingStatus.setSummary(ProcessingStatus.State())
+            note(context, "הושהה — מצב חיסכון בסוללה פעיל. ימשיך כשיכבה.")
+            Handler(Looper.getMainLooper()).post { instance?.pauseNow() }
+        }
+
         /**
          * Stops all processing now and turns automatic processing off, so it doesn't start
          * again on the next app open. Calls in progress go back to the queue.
@@ -263,6 +279,10 @@ class TranscriptionService : Service() {
          */
         fun start(context: Context, afterCall: Boolean = false, callId: Long? = null, analyseId: Long? = null): Boolean {
             val app = context.applicationContext as CallNotesApp
+            if (com.callnotes.util.BatterySaver.paused(context)) {
+                note(context, "מושהה — מצב חיסכון בסוללה פעיל")
+                return false
+            }
             val canTranscribe = app.models.readyModel() != null
             val canAnalyse = app.models.readyModel(ModelRole.ANALYZE) != null
             when {

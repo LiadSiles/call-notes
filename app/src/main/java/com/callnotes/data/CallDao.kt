@@ -81,6 +81,25 @@ abstract class CallDao {
     @Query("UPDATE tasks SET done = :done WHERE id = :id")
     abstract suspend fun setTaskDone(id: Long, done: Boolean)
 
+    @Query("SELECT * FROM tasks WHERE callId = :callId ORDER BY idx")
+    abstract suspend fun tasksOf(callId: Long): List<TaskEntity>
+
+    /** All tasks with their call: open first, then by due date (none last), newest first. */
+    @Query(
+        "SELECT tasks.*, calls.startedAt AS callStartedAt, calls.contactName AS callContactName, " +
+            "calls.number AS callNumber, calls.kind AS callKind, calls.incoming AS callIncoming " +
+            "FROM tasks JOIN calls ON calls.id = tasks.callId " +
+            "ORDER BY tasks.done, CASE WHEN tasks.dueDate IS NULL THEN 1 ELSE 0 END, tasks.dueDate, " +
+            "tasks.createdAt DESC, tasks.idx"
+    )
+    abstract fun observeAllTasks(): Flow<List<TaskListItem>>
+
+    @Query("SELECT COUNT(*) FROM tasks WHERE done = 0")
+    abstract fun observeOpenTaskCount(): Flow<Int>
+
+    @Query("UPDATE segments SET speaker = :speaker WHERE id = :id")
+    abstract suspend fun setSegmentSpeaker(id: Long, speaker: Int)
+
     /** Newest recording still waiting for transcription. */
     @Query("SELECT * FROM calls WHERE status = 'recorded' AND filePath IS NOT NULL ORDER BY startedAt DESC LIMIT 1")
     abstract suspend fun nextPending(): CallEntity?

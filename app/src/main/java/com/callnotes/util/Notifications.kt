@@ -19,6 +19,7 @@ object Notifications {
 
     private const val CHANNEL_RECORDING = "recording"
     private const val CHANNEL_ALERTS = "alerts"
+    private const val CHANNEL_TASKS = "tasks"
 
     const val ID_RECORDING = 1
     /** Transcription in progress. */
@@ -35,6 +36,9 @@ object Notifications {
         )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ALERTS, "התראות הקלטה", NotificationManager.IMPORTANCE_HIGH)
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_TASKS, "משימות חדשות", NotificationManager.IMPORTANCE_DEFAULT)
         )
     }
 
@@ -87,6 +91,35 @@ object Notifications {
         return "$who · $time"
     }
 
+    /**
+     * A new task from a summary. Stays until tapped or dismissed; the tap opens the tasks
+     * screen at this task.
+     */
+    fun newTask(context: Context, task: com.callnotes.data.TaskEntity, callLabel: String) {
+        val due = task.dueDate?.let {
+            runCatching { java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM")) }.getOrNull()
+        }
+        val text = listOfNotNull(callLabel, due?.let { "עד $it" }, if (!task.certain) "לא בטוח" else null).joinToString(" · ")
+        val open = PendingIntent.getActivity(
+            context, (20_000 + task.id).toInt(),
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(EXTRA_OPEN_TASK, task.id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        post(context, (20_000 + task.id).toInt(),
+            NotificationCompat.Builder(context, CHANNEL_TASKS)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("משימה חדשה: ${task.title}")
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(task.title + "\n" + text))
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .setGroup("tasks")
+                .setCategory(NotificationCompat.CATEGORY_REMINDER))
+    }
+
+    const val EXTRA_OPEN_TASK = "open_task_id"
     const val ACTION_CANCEL = "com.callnotes.action.CANCEL_CALL"
     const val EXTRA_CALL_ID = "call_id"
     const val EXTRA_OPEN_CALL = "open_call_id"

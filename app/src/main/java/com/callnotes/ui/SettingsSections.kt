@@ -251,6 +251,7 @@ internal fun SettingsSection(prefs: Prefs) {
     var recording by remember { mutableStateOf(prefs.recordingEnabled) }
     var autoSpeaker by remember { mutableStateOf(prefs.autoSpeaker) }
     var voip by remember { mutableStateOf(prefs.recordVoip) }
+    var batterySaver by remember { mutableStateOf(prefs.pauseInBatterySaver) }
 
     Panel {
         Column {
@@ -272,6 +273,13 @@ internal fun SettingsSection(prefs: Prefs) {
                 "הפעל רק אם בהקלטות הצד השני נשמע חלש. מעביר כל שיחה לרמקול; לא פועל כשמחוברות אוזניות.",
                 autoSpeaker,
             ) { autoSpeaker = it; prefs.autoSpeaker = it }
+            HorizontalDivider()
+            ToggleRow(
+                "השהיה במצב חיסכון בסוללה",
+                "כשחיסכון הסוללה של הטלפון פעיל, האפליקציה לא מקליטה שיחות חדשות ולא מתמללת או מסכמת. " +
+                    "שיחה שכבר מוקלטת ממשיכה עד סופה; העבודה שבתור ממשיכה כשהחיסכון נכבה.",
+                batterySaver,
+            ) { batterySaver = it; prefs.pauseInBatterySaver = it }
         }
     }
 }

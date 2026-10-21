@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
@@ -75,15 +76,19 @@ class MainActivity : ComponentActivity() {
     private fun openFrom(intent: android.content.Intent?) {
         intent?.getLongExtra(com.callnotes.util.Notifications.EXTRA_OPEN_CALL, -1L)?.takeIf { it > 0 }
             ?.let { openRequest.value = it }
+        intent?.getLongExtra(com.callnotes.util.Notifications.EXTRA_OPEN_TASK, -1L)?.takeIf { it > 0 }
+            ?.let { openTaskRequest.value = it }
     }
 
     companion object {
         /** Call to open, set from a notification tap; consumed by [AppRoot]. */
         val openRequest = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
+        /** Task to show in the tasks screen, from a "new task" notification. */
+        val openTaskRequest = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
     }
 }
 
-private enum class Tab { Calls, Settings }
+private enum class Tab { Calls, Tasks, Settings }
 
 @Composable
 private fun AppRoot() {
@@ -94,10 +99,19 @@ private fun AppRoot() {
 
     var tab by rememberSaveable { mutableStateOf(Tab.Calls) }
     var openCallId by rememberSaveable { mutableStateOf<Long?>(null) }
+    /** Transcript line to scroll to when the call opens (from a task / key point). */
+    var openFocus by remember { mutableStateOf<Int?>(null) }
+    /** Task to scroll to and highlight in the tasks screen (from a notification). */
+    var focusTask by remember { mutableStateOf<Long?>(null) }
     val openRequest by MainActivity.openRequest.collectAsState()
     LaunchedEffect(openRequest) {
         openRequest?.let { openCallId = it; tab = Tab.Calls; MainActivity.openRequest.value = null }
     }
+    val openTaskRequest by MainActivity.openTaskRequest.collectAsState()
+    LaunchedEffect(openTaskRequest) {
+        openTaskRequest?.let { openCallId = null; tab = Tab.Tasks; focusTask = it; MainActivity.openTaskRequest.value = null }
+    }
+    val openTasks by remember { app.database.calls().observeOpenTaskCount() }.collectAsState(0)
 
     // System settings may change while we're away (permissions, accessibility, battery).
     var resumeTick by remember { mutableIntStateOf(0) }
@@ -161,6 +175,8 @@ private fun AppRoot() {
                 player = player,
                 onBack = { openCallId = null },
                 onTranscribe = { transcribeNow(detail) },
+                focusSegment = openFocus,
+                onFocusConsumed = { openFocus = null },
             )
         } else {
             Scaffold(
@@ -172,6 +188,16 @@ private fun AppRoot() {
                             onClick = { tab = Tab.Calls },
                             icon = { Icon(Icons.Filled.Call, null) },
                             label = { Text("שיחות") },
+                        )
+                        NavigationBarItem(
+                            selected = tab == Tab.Tasks,
+                            onClick = { tab = Tab.Tasks },
+                            icon = {
+                                androidx.compose.material3.BadgedBox(badge = {
+                                    if (openTasks > 0) androidx.compose.material3.Badge { Text("$openTasks") }
+                                }) { Icon(Icons.Filled.CheckCircle, null) }
+                            },
+                            label = { Text("משימות") },
                         )
                         NavigationBarItem(
                             selected = tab == Tab.Settings,
@@ -191,6 +217,12 @@ private fun AppRoot() {
                             onOpen = { openCallId = it },
                             onOpenSettings = { tab = Tab.Settings },
                             onImport = { importLauncher.launch(arrayOf("audio/*")) },
+                        )
+                        Tab.Tasks -> TasksScreen(
+                            contentPadding = padding,
+                            focusTaskId = focusTask,
+                            onFocusConsumed = { focusTask = null },
+                            onOpenCall = { callId, segment -> openFocus = segment; openCallId = callId },
                         )
                         Tab.Settings -> SettingsScreen(
                             contentPadding = padding,

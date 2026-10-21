@@ -75,6 +75,10 @@ object TranscriptMerger {
         return false
     }
 
+    /** [normalize] applied word by word, single spaces (for quote matching). */
+    fun normalizeText(text: String): String =
+        text.split(WS).map(::normalize).filter { it.isNotEmpty() }.joinToString(" ")
+
     /** For comparison only: no niqqud/punctuation, final letters folded, lower case. */
     fun normalize(word: String): String = word
         .replace(NIQQUD, "")

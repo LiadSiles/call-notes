@@ -24,6 +24,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("auto_speaker_v2", false)
         set(value) = sp.edit().putBoolean("auto_speaker_v2", value).apply()
 
+    /** Do nothing (record, transcribe, summarise) while the phone's battery saver is on. */
+    var pauseInBatterySaver: Boolean
+        get() = sp.getBoolean("pause_battery_saver", false)
+        set(value) = sp.edit().putBoolean("pause_battery_saver", value).apply()
+
     /** Transcribe each recording automatically once the model is ready. */
     var autoTranscribe: Boolean
         get() = sp.getBoolean("auto_transcribe", true)
@@ -60,7 +65,7 @@ class Prefs(context: Context) {
     fun resetSwitches() {
         sp.edit()
             .remove("recording_enabled").remove("record_voip").remove("auto_speaker_v2")
-            .remove("auto_transcribe").remove("wifi_only")
+            .remove("auto_transcribe").remove("wifi_only").remove("pause_battery_saver")
             .apply()
     }
 

@@ -97,6 +97,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
     }
 
     private suspend fun nextCall(): Pair<CallEntity, Boolean>? {
+        if (com.callnotes.util.BatterySaver.paused(host)) return null
         while (true) {
             val id = ProcessingStatus.firstRequested() ?: break
             ProcessingStatus.unrequest(id)
@@ -215,10 +216,13 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                         d.embed(LevelSpeakers.samplesOf(samples, transcript.words, level.labels, s))?.let { s to it }
                     }.toMap()
                     val who = Voice.whichIsMe(owner, voices)
-                    if (who == 1) me = 1 // e.g. speakerphone louder than the owner
-                    check = "voice sample says ${who ?: "?"}" + voices.entries.joinToString("") {
-                        " (${it.key}: %.2f)".format(Voice.cosine(owner, it.value))
-                    }
+                    // A wide level gap means the phone was at the owner's ear: louder IS the owner,
+                    // and the earpiece leak's fingerprint is too distorted to overrule that. Only a
+                    // narrow gap (speakerphone louder than the owner) lets the voice sample decide.
+                    val trustVoice = level.separationDb < HANDSET_GAP_DB
+                    if (who == 1 && trustVoice) me = 1
+                    check = "voice sample says ${who ?: "?"}${if (trustVoice) "" else " (ignored: handset gap)"}" +
+                        voices.entries.joinToString("") { " (${it.key}: %.2f)".format(Voice.cosine(owner, it.value)) }
                 }
                 val lines = SpeakerAligner.align(transcript, LevelSpeakers.turns(transcript.words, level.labels))
                 log("call ${call.id}: speakers by loudness in ${secs(started)} · louder " +
@@ -263,6 +267,11 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             log("call ${call.id}: speaker separation FAILED, keeping plain transcript: ${describe(e)}")
             null
         }
+    }
+
+    private companion object {
+        /** Level gap above which a call was certainly held to the ear (louder = owner). */
+        const val HANDSET_GAP_DB = 15.0
     }
 
     private fun embedder(): VoiceEmbedder? {

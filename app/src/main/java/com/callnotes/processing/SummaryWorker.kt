@@ -84,6 +84,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
     }
 
     private suspend fun next(): CallEntity? {
+        if (com.callnotes.util.BatterySaver.paused(host)) return null
         while (true) {
             val id = ProcessingStatus.firstAnalysisRequested() ?: break
             ProcessingStatus.unrequestAnalysis(id)
@@ -168,19 +169,29 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             if (call.id in cancelled) throw CancellationException("cancelled")
             val callDate = Instant.ofEpochMilli(call.startedAt).atZone(ZoneId.systemDefault()).toLocalDate()
             val result = try {
-                AnalysisPrompt.parse(answer, callDate)
+                AnalysisPrompt.parse(answer, callDate, segments.map { it.text })
             } catch (e: Exception) {
                 // The answer is call content: log only its size, never the text.
                 log("call ${call.id}: summary answer not valid JSON (${answer.length} chars): ${e.javaClass.simpleName}")
                 throw e
             }
+            val now = System.currentTimeMillis()
             val tasks = result.tasks.mapIndexed { i, t ->
                 TaskEntity(callId = call.id, idx = i, title = t.title, owner = t.owner, dueDate = t.dueDate,
-                    duePhrase = t.duePhrase, quote = t.sourceQuote)
+                    duePhrase = t.duePhrase, quote = t.sourceQuote, lines = t.lines.joinToString(",").ifEmpty { null },
+                    certain = t.certain, createdAt = now)
             }
-            dao.replaceAnalysis(call.id, AnalysisPrompt.toJson(result), result.title.ifBlank { null }, analyzer.modelId, tasks)
+            // Re-summarising shouldn't announce tasks the user has already seen (or ticked off).
+            val before = dao.tasksOf(call.id)
+            val known = before.map { TranscriptMergerKey.of(it.title) }.toSet()
+            val doneBefore = before.filter { it.done }.map { TranscriptMergerKey.of(it.title) }.toSet()
+            val kept = tasks.map { if (TranscriptMergerKey.of(it.title) in doneBefore) it.copy(done = true) else it }
+            dao.replaceAnalysis(call.id, AnalysisPrompt.toJson(result), result.title.ifBlank { null }, analyzer.modelId, kept)
+            val fresh = dao.tasksOf(call.id).filter { TranscriptMergerKey.of(it.title) !in known && !it.done }
+            fresh.forEach { Notifications.newTask(host, it, label(call)) }
             log("call ${call.id}: summary done in ${secs(started)} · ${answer.length} chars out · " +
-                "${result.keyPoints.size} points, ${tasks.size} tasks")
+                "${result.keyPoints.size} points (${result.keyPoints.count { !it.certain }} unsure), " +
+                "${tasks.size} tasks (${tasks.count { !it.certain }} unsure, ${fresh.size} new)")
             true
         } catch (e: Throwable) {
             if (e is CancellationException || call.id in cancelled) throw (e as? CancellationException ?: CancellationException("cancelled"))
@@ -194,4 +205,9 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         /** Free memory wanted before loading Gemma next to Whisper. */
         const val MIN_FREE_BYTES = 1_500_000_000L
     }
+}
+
+/** Compares task titles loosely (re-summaries reword slightly). */
+internal object TranscriptMergerKey {
+    fun of(title: String) = com.callnotes.inference.TranscriptMerger.normalizeText(title)
 }

@@ -141,6 +141,10 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
     }
 
     private fun startSession(incoming: Boolean, kind: String) {
+        if (com.callnotes.util.BatterySaver.paused(this)) {
+            com.callnotes.processing.ProcessingLog.write(this, "call not recorded: battery saver is on (paused by setting)")
+            return
+        }
         val startedAt = System.currentTimeMillis()
         val trace = CallTrace(startedAt)
         val audio = getSystemService(AudioManager::class.java)

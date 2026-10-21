@@ -63,6 +63,7 @@ fun CallsScreen(
     val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
     var autoOn by remember(noteVersion, resumeTick) { mutableStateOf(prefs.autoTranscribe) }
     val waiting = items.count { it.call.status == com.callnotes.data.CallStatus.RECORDED }
+    val saverPaused = remember(resumeTick, noteVersion) { com.callnotes.util.BatterySaver.paused(context) }
     val ready = setup.requiredOk && service.connected && service.monitoring
 
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
@@ -82,6 +83,15 @@ fun CallsScreen(
                 }
             }
 
+            if (saverPaused) item {
+                Banner(
+                    title = "מושהה — מצב חיסכון בסוללה",
+                    body = "לפי ההגדרה שלך, האפליקציה לא מקליטה ולא מעבדת כל עוד חיסכון הסוללה פעיל.",
+                    action = "להגדרות",
+                    onAction = onOpenSettings,
+                    warn = true,
+                )
+            }
             if (!ready) item {
                 Banner(
                     title = "ההקלטה עדיין לא פעילה",

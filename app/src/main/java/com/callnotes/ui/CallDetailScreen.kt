@@ -3,6 +3,7 @@ package com.callnotes.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
@@ -85,6 +87,9 @@ fun CallDetailScreen(
     player: AudioPlayer,
     onBack: () -> Unit,
     onTranscribe: () -> Unit,
+    /** Transcript line (segment index) to show on open, e.g. from the tasks screen. */
+    focusSegment: Int? = null,
+    onFocusConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as CallNotesApp
@@ -106,8 +111,33 @@ fun CallDetailScreen(
     var showTrace by remember { mutableStateOf(false) }
     var showTech by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    /** Segment shown highlighted after a jump from a summary item or task. */
+    var highlight by remember { mutableStateOf<Int?>(null) }
+    /** Segment whose speaker the user is correcting (long press). */
+    var fixing by remember { mutableStateOf<SegmentEntity?>(null) }
+    var speakersEdited by remember(callId) { mutableStateOf(false) }
 
     val c = call ?: return
+    val transcribed = c.status == CallStatus.TRANSCRIBED && c.id !in requested
+    // Items before the first transcript line: header, player, summary, "תמלול", transcript state.
+    val segmentStart = 1 + (if (c.filePath != null) 1 else 0) + (if (transcribed) 1 else 0) + 2
+    val showLine: (Int) -> Unit = { idx ->
+        if (idx in segments.indices) {
+            highlight = idx
+            scope.launch {
+                listState.animateScrollToItem(segmentStart + idx, scrollOffset = -160)
+                kotlinx.coroutines.delay(3_000)
+                if (highlight == idx) highlight = null
+            }
+        }
+    }
+    LaunchedEffect(focusSegment, segments.size) {
+        if (focusSegment != null && segments.isNotEmpty()) {
+            onFocusConsumed()
+            showLine(focusSegment.coerceIn(0, segments.size - 1))
+        }
+    }
     // Shown as "starting" at once (the request is visible before any database write), then
     // the service takes it ahead of the queue.
     val startTranscription: () -> Unit = {
@@ -139,6 +169,7 @@ fun CallDetailScreen(
         },
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
         ) {
@@ -164,7 +195,7 @@ fun CallDetailScreen(
                 PlayerPanel(c.id, path, player)
             }
 
-            if (c.status == CallStatus.TRANSCRIBED && c.id !in requested) item {
+            if (transcribed) item {
                 SummarySection(
                     c, tasks, summaryState,
                     queued = c.id in analysisRequested,
@@ -178,6 +209,8 @@ fun CallDetailScreen(
                     },
                     onCancel = cancelTranscription,
                     onTaskDone = { t, done -> scope.launch(Dispatchers.IO) { dao.setTaskDone(t.id, done) } },
+                    onShowLine = showLine,
+                    speakersEdited = speakersEdited,
                 )
             }
 
@@ -188,14 +221,14 @@ fun CallDetailScreen(
                     onStart = startTranscription, onCancel = cancelTranscription, onShowLog = { showLog = true })
             }
 
-            if (c.status == CallStatus.TRANSCRIBED && c.id !in requested) {
+            if (transcribed) {
                 if (segments.isEmpty()) item {
                     Text("לא זוהה דיבור בהקלטה.", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(4.dp))
                 }
                 val conversation = segments.any { it.speaker != null }
                 itemsIndexed(segments, key = { _, it -> it.id }) { i, seg ->
-                    val active = player.loadedId == c.id && player.positionMs in seg.startMs..seg.endMs
+                    val active = highlight == i || player.loadedId == c.id && player.positionMs in seg.startMs..seg.endMs
                     val seek = { path?.let { player.playFrom(c.id, it, seg.startMs.toInt()) }; Unit }
                     if (conversation) {
                         // Name above the first line of each turn.
@@ -204,14 +237,14 @@ fun CallDetailScreen(
                         // Mine on the start side (right, in Hebrew); otherwise speaker 1 / the other side on the end.
                         val alignEnd = if (c.meSpeaker != null) !isMe else seg.speaker == 1
                         ChatLine(seg, speakerLabel(c, seg.speaker), isMe = isMe, alignEnd = alignEnd,
-                            showName = newTurn, active = active, onClick = seek)
+                            showName = newTurn, active = active, onClick = seek, onLongClick = { fixing = seg })
                     } else {
                         SegmentRow(seg, active, onClick = seek)
                     }
                 }
-                if (conversation && c.meSpeaker == null) item {
+                if (conversation) item {
                     Text(
-                        "כדי שיופיע \"אני\" ושם הצד השני, הקלט דגימת קול בהגדרות ← מי אמר מה.",
+                        "לחיצה ארוכה על הודעה מאפשרת לתקן מי אמר אותה, או להחליף בין הדוברים בכל השיחה.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp, start = 4.dp),
@@ -244,6 +277,23 @@ fun CallDetailScreen(
                 }
             }
         }
+    }
+
+    fixing?.let { seg ->
+        SpeakerFixDialog(
+            c, seg,
+            onDismiss = { fixing = null },
+            onSetLine = { speaker ->
+                fixing = null
+                speakersEdited = true
+                scope.launch(Dispatchers.IO) { dao.setSegmentSpeaker(seg.id, speaker) }
+            },
+            onSetMe = { me ->
+                fixing = null
+                speakersEdited = true
+                scope.launch(Dispatchers.IO) { dao.setMeSpeaker(c.id, me) }
+            },
+        )
     }
 
     if (showTrace && traceFile != null) TraceDialog(traceFile, onDismiss = { showTrace = false })
@@ -454,6 +504,44 @@ private fun SegmentRow(seg: SegmentEntity, active: Boolean, onClick: () -> Unit)
     }
 }
 
+/**
+ * Corrects who said a line, or who is who in the whole call. Speaker indexes stay 0/1; the
+ * owner is whichever index `meSpeaker` points at.
+ */
+@Composable
+private fun SpeakerFixDialog(
+    c: CallEntity,
+    seg: SegmentEntity,
+    onDismiss: () -> Unit,
+    onSetLine: (Int) -> Unit,
+    onSetMe: (Int?) -> Unit,
+) {
+    val speaker = seg.speaker ?: 0
+    val other = c.contactName ?: c.number ?: "הצד השני"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("מי אמר את זה?") },
+        text = {
+            Column {
+                Text("\"${seg.text.take(120)}\"", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.size(12.dp))
+                val me = c.meSpeaker
+                if (me != null) {
+                    TextButton(onClick = { onSetLine(me) }, enabled = speaker != me) { Text("השורה הזו: אני") }
+                    TextButton(onClick = { onSetLine(1 - me) }, enabled = speaker == me) { Text("השורה הזו: $other") }
+                    TextButton(onClick = { onSetMe(1 - me) }) { Text("להחליף בין אני ל$other בכל השיחה") }
+                } else {
+                    // Who is who isn't known yet: this line decides it for the whole call.
+                    TextButton(onClick = { onSetMe(speaker) }) { Text("זה אני (דובר ${speaker + 1} הוא אני)") }
+                    TextButton(onClick = { onSetMe(1 - speaker) }) { Text("זה $other (דובר ${2 - speaker} הוא אני)") }
+                    TextButton(onClick = { onSetLine(1 - speaker) }) { Text("השורה הזו שייכת לדובר ${2 - speaker}") }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("סגירה") } },
+    )
+}
+
 /** "אני", the other side's name, or "דובר 1/2" when it isn't known who is who. */
 private fun speakerLabel(c: CallEntity, speaker: Int?): String = when {
     speaker == null -> ""
@@ -472,6 +560,7 @@ private fun ChatLine(
     showName: Boolean,
     active: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     val base = if (isMe || (!alignEnd)) cs.primaryContainer else cs.surfaceContainerHigh
@@ -490,7 +579,7 @@ private fun ChatLine(
                 .wrapContentWidth(if (alignEnd) Alignment.End else Alignment.Start)
                 .clip(MaterialTheme.shapes.medium)
                 .background(bg)
-                .clickable(onClick = onClick)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text(seg.text, style = MaterialTheme.typography.bodyLarge)

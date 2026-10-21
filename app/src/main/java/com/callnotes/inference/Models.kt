@@ -55,25 +55,35 @@ data class CallContext(
     val contactName: String?,
 )
 
-/** Mirrors the JSON schema in the plan. */
+/** What the summariser extracted from a call (JSON from the model, checked in code). */
 data class CallAnalysis(
     val title: String,
     val summary: String,
-    val keyPoints: List<String>,
-    val decisions: List<String>,
+    val keyPoints: List<Point>,
+    val decisions: List<Point>,
     val tasks: List<Task>,
-    val followUps: List<String>,
+    val followUps: List<Point>,
     val language: String,
+    /** False if the model said the transcript was too unclear to summarise reliably. */
+    val summaryCertain: Boolean = true,
 ) {
+    /**
+     * One extracted item. [lines]: 1-based transcript lines it comes from (= segment idx + 1).
+     * [certain] is false if the model wasn't sure or the app couldn't verify it.
+     */
+    data class Point(val text: String, val lines: List<Int> = emptyList(), val certain: Boolean = true)
+
     data class Task(
         val title: String,
-        /** "me" or "other". */
+        /** "me", "other" or "unknown". */
         val owner: String,
         val duePhrase: String?,
         /** ISO date, recomputed in code relative to the call time. */
         val dueDate: String?,
         val confidence: Float,
         val sourceQuote: String?,
+        val lines: List<Int> = emptyList(),
+        val certain: Boolean = true,
     )
 }
 

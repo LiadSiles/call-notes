@@ -109,6 +109,24 @@ data class TaskEntity(
     val duePhrase: String?,
     val quote: String?,
     val done: Boolean = false,
+    /** 1-based transcript lines it came from, comma-separated (DB v7). */
+    val lines: String? = null,
+    /** False = the summariser wasn't sure, or the app couldn't verify it (DB v7). */
+    val certain: Boolean = true,
+    val createdAt: Long = 0,
+) {
+    /** First source line as a segment index (0-based), or null. */
+    val firstSegment: Int? get() = lines?.split(',')?.firstNotNullOfOrNull { it.trim().toIntOrNull() }?.minus(1)
+}
+
+/** A task with the call it came from, for the tasks screen. */
+data class TaskListItem(
+    @androidx.room.Embedded val task: TaskEntity,
+    val callStartedAt: Long,
+    val callContactName: String?,
+    val callNumber: String?,
+    val callKind: String,
+    val callIncoming: Boolean,
 )
 
 /** One stretch of transcript with its position in the recording (DB v4). */
