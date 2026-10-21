@@ -21,7 +21,10 @@ object Notifications {
     private const val CHANNEL_ALERTS = "alerts"
 
     const val ID_RECORDING = 1
-    const val ID_PROCESSING = 4
+    /** Transcription in progress. */
+    const val ID_TRANSCRIBE = 4
+    /** Summary in progress. */
+    const val ID_SUMMARY = 5
     private const val ID_SPEAKER = 2
     private const val ID_PROBLEM = 3
 
@@ -36,39 +39,66 @@ object Notifications {
     }
 
     /** The ongoing notification shown by [com.callnotes.capture.RecordingService]. */
-    fun recording(context: Context): Notification =
-        builder(context, CHANNEL_RECORDING, "מקליט את השיחה", "ההקלטה תופיע באפליקציה בסיום השיחה")
+    fun recording(context: Context, label: String?): Notification =
+        builder(context, CHANNEL_RECORDING, "מקליט: ${label ?: "שיחה"}", "ההקלטה תופיע באפליקציה בסיום השיחה")
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
 
-    /** Ongoing notification of [com.callnotes.processing.TranscriptionService]. */
-    fun processing(context: Context, progress: String?): Notification =
-        builder(context, CHANNEL_RECORDING, "מתמלל שיחות",
-            if (progress == null) "טוען את המודל…" else "התקדמות $progress")
+    /**
+     * One background operation (transcribing or summarising one call). Shown while it runs
+     * and removed when it ends. [callId] adds a cancel button for that call and opens it on tap.
+     */
+    fun work(
+        context: Context,
+        id: Int,
+        title: String,
+        text: String,
+        done: Int = 0,
+        total: Int = 0,
+        callId: Long? = null,
+    ): Notification {
+        val b = NotificationCompat.Builder(context, CHANNEL_RECORDING)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setContentIntent(openApp(context, callId, id))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .addAction(0, "עצירה", stopTranscription(context))
-            .build()
-
-    private fun stopTranscription(context: Context): PendingIntent = PendingIntent.getService(
-        context, 1,
-        Intent(context, com.callnotes.processing.TranscriptionService::class.java)
-            .setAction(com.callnotes.processing.TranscriptionService.ACTION_STOP),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-    )
-
-    fun updateProcessing(context: Context, progress: String) {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) return
-        NotificationManagerCompat.from(context).notify(ID_PROCESSING, processing(context, progress))
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setProgress(if (total > 0) total else 0, if (total > 0) done else 0, total <= 0)
+        if (callId != null) b.addAction(0, "ביטול", serviceAction(context, ACTION_CANCEL, id * 10 + 1, callId))
+        b.addAction(0, "עצירת הכל", serviceAction(context, com.callnotes.processing.TranscriptionService.ACTION_STOP, id * 10 + 2, null))
+        return b.build()
     }
+
+    /** "דני · 21.10 14:05" — who the call was with, or what kind of call, and when. */
+    fun callLabel(call: com.callnotes.data.CallEntity): String {
+        val who = call.contactName ?: call.number ?: when (call.kind) {
+            com.callnotes.data.CallKind.VOIP -> "שיחת אינטרנט"
+            com.callnotes.data.CallKind.IMPORT -> "קובץ מיובא"
+            else -> if (call.incoming) "שיחה נכנסת" else "שיחה יוצאת"
+        }
+        val time = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).format(java.util.Date(call.startedAt))
+        return "$who · $time"
+    }
+
+    const val ACTION_CANCEL = "com.callnotes.action.CANCEL_CALL"
+    const val EXTRA_CALL_ID = "call_id"
+    const val EXTRA_OPEN_CALL = "open_call_id"
+
+    private fun serviceAction(context: Context, action: String, requestCode: Int, callId: Long?): PendingIntent =
+        PendingIntent.getService(
+            context, requestCode,
+            Intent(context, com.callnotes.processing.TranscriptionService::class.java)
+                .setAction(action)
+                .apply { if (callId != null) putExtra(EXTRA_CALL_ID, callId) },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 
     fun cancelSpeakerPrompt(context: Context) {
         NotificationManagerCompat.from(context).cancel(ID_SPEAKER)
@@ -94,11 +124,13 @@ object Notifications {
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(openApp(context))
+            .setContentIntent(openApp(context, null, 0))
 
-    private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
-        context, 0,
-        Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    private fun openApp(context: Context, callId: Long?, requestCode: Int): PendingIntent = PendingIntent.getActivity(
+        context, 100 + requestCode,
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .apply { if (callId != null) putExtra(EXTRA_OPEN_CALL, callId) },
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 

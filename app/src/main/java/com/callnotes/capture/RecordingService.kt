@@ -28,7 +28,8 @@ class RecordingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val type = if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
         started = try {
-            ServiceCompat.startForeground(this, Notifications.ID_RECORDING, Notifications.recording(this), type)
+            ServiceCompat.startForeground(this, Notifications.ID_RECORDING,
+                Notifications.recording(this, intent?.getStringExtra(EXTRA_LABEL)), type)
             true
         } catch (e: Exception) {
             // e.g. ForegroundServiceStartNotAllowedException / SecurityException on some devices.
@@ -60,8 +61,12 @@ class RecordingService : Service() {
         @Volatile var lastError: String? = null
             private set
 
-        fun start(context: Context): Boolean = try {
-            ContextCompat.startForegroundService(context, Intent(context, RecordingService::class.java))
+        private const val EXTRA_LABEL = "label"
+
+        /** [label]: which call, e.g. "שיחה נכנסת · 19:27" — shown in the notification. */
+        fun start(context: Context, label: String? = null): Boolean = try {
+            ContextCompat.startForegroundService(context,
+                Intent(context, RecordingService::class.java).putExtra(EXTRA_LABEL, label))
             true
         } catch (e: Exception) {
             false

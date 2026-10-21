@@ -16,6 +16,9 @@ interface Transcriber : AutoCloseable {
     /** Loads the model up front (slow: seconds to a minute). Optional; transcribe() loads lazily. */
     suspend fun load() {}
 
+    /** Stops the current transcription as soon as the engine allows (any thread). */
+    fun abort() {}
+
     /**
      * [audio] is a 16 kHz mono 16-bit WAV (the recorder's format; imports are converted
      * first). [onProgress] reports (chunks done, chunks total).

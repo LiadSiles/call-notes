@@ -147,7 +147,11 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         val power = getSystemService(PowerManager::class.java)
         trace.event("session start: kind=$kind mode=${modeName(audio.mode)} screen=${if (power.isInteractive) "on" else "off"}")
         // Foreground state first, so capture isn't silenced once the screen locks.
-        trace.event("foreground service start requested: ${RecordingService.start(this)}")
+        val label = when (kind) {
+            CallKind.VOIP -> "שיחת אינטרנט"
+            else -> if (incoming) "שיחה נכנסת" else "שיחה יוצאת"
+        } + " · " + java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date(startedAt))
+        trace.event("foreground service start requested: ${RecordingService.start(this, label)}")
         val dir = File(filesDir, "recordings").apply { mkdirs() }
         val file = File(dir, "call_$startedAt.wav")
 

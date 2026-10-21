@@ -14,16 +14,26 @@ object ProcessingStatus {
         val callId: Long? = null,
         val chunksDone: Int = 0,
         val chunksTotal: Int = 0,
-        /** "loading", "transcribing", "speakers", "loading_analyzer", "analyzing", "waiting_thermal", "stopping". */
+        /**
+         * Transcription: "loading", "transcribing", "speakers". Summary: "loading_analyzer",
+         * "analyzing", "waiting_memory". Both: "waiting_thermal", "stopping".
+         */
         val phase: String = "",
         /** When the current phase started (for "loading the model… 0:24"). */
         val since: Long = System.currentTimeMillis(),
     )
 
     private val _state = MutableStateFlow(State())
+    /** The transcription worker. */
     val state: StateFlow<State> = _state.asStateFlow()
 
     internal fun set(state: State) { _state.value = state }
+
+    private val _summary = MutableStateFlow(State())
+    /** The summary worker; runs at the same time as transcription. */
+    val summary: StateFlow<State> = _summary.asStateFlow()
+
+    internal fun setSummary(state: State) { _summary.value = state }
 
     /**
      * Calls the user asked to transcribe by hand that haven't started yet. They jump the

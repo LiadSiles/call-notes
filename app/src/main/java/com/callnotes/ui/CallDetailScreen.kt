@@ -97,6 +97,7 @@ fun CallDetailScreen(
     val lastRun = remember(noteVersion) { com.callnotes.util.Prefs(context).lastProcessing }
     val segments by remember(callId) { dao.observeSegments(callId) }.collectAsStateWithLifecycle(emptyList())
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
+    val summaryState by ProcessingStatus.summary.collectAsStateWithLifecycle()
     val requested by ProcessingStatus.requested.collectAsStateWithLifecycle()
     val analysisRequested by ProcessingStatus.analysisRequested.collectAsStateWithLifecycle()
     val tasks by remember(callId) { dao.observeTasks(callId) }.collectAsStateWithLifecycle(emptyList())
@@ -165,7 +166,7 @@ fun CallDetailScreen(
 
             if (c.status == CallStatus.TRANSCRIBED && c.id !in requested) item {
                 SummarySection(
-                    c, tasks, processing,
+                    c, tasks, summaryState,
                     queued = c.id in analysisRequested,
                     modelInstalled = modelsSnap.active(com.callnotes.inference.ModelRole.ANALYZE) != null,
                     autoOn = remember(noteVersion) { com.callnotes.util.Prefs(context).autoTranscribe },

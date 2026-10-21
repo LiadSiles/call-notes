@@ -29,7 +29,7 @@ class WhisperTranscriber(
 
     override val modelId: String get() = spec.id
 
-    private var handle = 0L
+    @Volatile private var handle = 0L
 
     /** Threads used, for the log. */
     val threads: Int = CpuInfo.inferenceThreads()
@@ -80,6 +80,12 @@ class WhisperTranscriber(
             t.segments.filterNot { TranscriptMerger.looksLikeLoop(it.text) }
         )
         Transcript(segments, t.words)
+    }
+
+    /** whisper.cpp checks this flag between graph nodes: returns within moments. */
+    override fun abort() {
+        val h = handle
+        if (h != 0L) WhisperNative.abort(h)
     }
 
     override fun close() {

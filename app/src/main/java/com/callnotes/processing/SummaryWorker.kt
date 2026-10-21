@@ -1,0 +1,197 @@
+package com.callnotes.processing
+
+import android.app.ActivityManager
+import com.callnotes.data.AnalysisStatus
+import com.callnotes.data.CallEntity
+import com.callnotes.data.CallStatus
+import com.callnotes.data.TaskEntity
+import com.callnotes.inference.AnalysisPrompt
+import com.callnotes.inference.CallContext
+import com.callnotes.inference.GemmaAnalyzer
+import com.callnotes.inference.ModelRole
+import com.callnotes.processing.TranscriptionService.Companion.describe
+import com.callnotes.util.Notifications
+import com.callnotes.util.Prefs
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.time.Instant
+import java.time.ZoneId
+
+/**
+ * Summary queue, running alongside transcription: requested calls first, then (with
+ * automatic processing on) the newest transcribed call without a summary. While the
+ * transcription worker is still busy it waits for the next finished transcript instead of
+ * exiting, so Gemma stays loaded. Before loading Gemma next to Whisper it checks memory.
+ */
+class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_SUMMARY) {
+
+    override val tag = "summary"
+    @Volatile private var analyzer: GemmaAnalyzer? = null
+    /** Poked when a transcription finishes or a summary is requested. */
+    val wake = Channel<Unit>(Channel.CONFLATED)
+
+    override fun abortNative() { analyzer?.abort() }
+    override fun publish(state: ProcessingStatus.State) = ProcessingStatus.setSummary(state)
+
+    override suspend fun loop() {
+        val (spec, file) = app.models.readyModel(ModelRole.ANALYZE) ?: return
+        var done = 0
+        var failed = 0
+        try {
+            while (true) {
+                val call = next()
+                if (call == null) {
+                    // More transcripts may still come: wait for one rather than unloading Gemma.
+                    if (host.transcribe.running) {
+                        publish(ProcessingStatus.State())
+                        host.hideWork(this)
+                        withTimeoutOrNull(5_000) { wake.receive() }
+                        continue
+                    }
+                    break
+                }
+                waitWhileHot()
+                begin(call)
+                if (analyzer == null) {
+                    waitForMemory(call)
+                    analyzer = load(spec, file, call) ?: break
+                }
+                if (call.id in cancelled) { cancelled -= call.id; end(); continue }
+                val a = analyzer!!
+                when (runItem { analyse(call, a) }) {
+                    true -> done++
+                    false -> failed++
+                    null -> {
+                        if (cancelled.remove(call.id)) {
+                            withContext(NonCancellable) { dao.setAnalysisStatus(call.id, AnalysisStatus.SKIPPED, null) }
+                            log("call ${call.id}: summary cancelled by the user")
+                        }
+                    }
+                }
+                end()
+            }
+            if (done + failed > 0) TranscriptionService.note(host, if (failed == 0) "סוכמו $done" else "סוכמו $done, נכשלו $failed")
+        } finally {
+            analyzer?.close(); analyzer = null
+            modelLoaded = false
+            end()
+            publish(ProcessingStatus.State())
+        }
+    }
+
+    private suspend fun next(): CallEntity? {
+        while (true) {
+            val id = ProcessingStatus.firstAnalysisRequested() ?: break
+            ProcessingStatus.unrequestAnalysis(id)
+            dao.get(id)?.takeIf { it.status == CallStatus.TRANSCRIBED }?.let { return it }
+        }
+        return if (Prefs(host).autoTranscribe) dao.nextUnanalyzed() else null
+    }
+
+    /**
+     * Gemma's weights are memory-mapped (they can be paged out); the risk is the working
+     * memory next to Whisper's ~2 GB. Wait while the phone reports low memory and Whisper
+     * is loaded; give up waiting once transcription finishes.
+     */
+    private suspend fun waitForMemory(call: CallEntity) {
+        val am = host.getSystemService(ActivityManager::class.java)
+        var logged = false
+        while (host.transcribe.modelLoaded) {
+            val mem = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+            if (!mem.lowMemory && mem.availMem > MIN_FREE_BYTES) return
+            if (!logged) {
+                logged = true
+                log("waiting for memory before loading the summary model (${ProcessingLog.freeRam(host)})")
+            }
+            publish(ProcessingStatus.State(running = true, callId = call.id, phase = "waiting_memory"))
+            host.showWork(this, "מסכם: ${label(call)}", "ממתין לזיכרון פנוי (מתמלל במקביל)…", callId = call.id)
+            delay(5_000)
+        }
+    }
+
+    private suspend fun load(spec: com.callnotes.inference.ModelSpec, file: java.io.File, call: CallEntity): GemmaAnalyzer? {
+        publish(ProcessingStatus.State(running = true, callId = call.id, phase = "loading_analyzer"))
+        host.showWork(this, "מסכם: ${label(call)}", "טוען את מודל הסיכום…", callId = call.id)
+        step("loading analysis model ${spec.id} · ${ProcessingLog.freeRam(host)}")
+        val started = System.currentTimeMillis()
+        val g = GemmaAnalyzer(host, spec, file)
+        return try {
+            g.load()
+            modelLoaded = true
+            log("analysis model loaded in ${secs(started)} · ${ProcessingLog.freeRam(host)}")
+            g
+        } catch (e: Throwable) {
+            runCatching { g.close() }
+            if (e is CancellationException) throw e
+            log("analysis model load FAILED: ${describe(e)}")
+            dao.setAnalysisStatus(call.id, AnalysisStatus.FAILED, "טעינת מודל הסיכום נכשלה: ${e.javaClass.simpleName}")
+            null
+        }
+    }
+
+    private suspend fun analyse(call: CallEntity, analyzer: GemmaAnalyzer): Boolean {
+        val started = System.currentTimeMillis()
+        val title = "מסכם: ${label(call)}"
+        publish(ProcessingStatus.State(true, call.id, 0, 0, "analyzing"))
+        host.showWork(this, title, "קורא את השיחה…", callId = call.id)
+        return try {
+            val segments = dao.segments(call.id)
+            val known = call.meSpeaker != null
+            val other = call.contactName ?: call.number ?: "הצד השני"
+            val lines = segments.map { s ->
+                val who = when {
+                    s.speaker == null -> ""
+                    !known -> "דובר ${s.speaker + 1}"
+                    s.speaker == call.meSpeaker -> "אני"
+                    else -> other
+                }
+                AnalysisPrompt.Line(who, s.text)
+            }
+            val prompt = AnalysisPrompt.build(
+                lines, CallContext(call.startedAt, call.incoming, call.contactName),
+                ownerLabel = if (known) "אני" else null, otherLabel = if (known) other else null,
+                zone = ZoneId.systemDefault(),
+            )
+            step("call ${call.id}: summarising (${prompt.length} chars in)")
+            var lastShown = 0L
+            val answer = analyzer.ask(prompt) { chars ->
+                val now = System.currentTimeMillis()
+                if (now - lastShown > 1_000 && call.id !in cancelled) {
+                    lastShown = now
+                    host.showWork(this, title, "כותב סיכום… $chars תווים", callId = call.id)
+                }
+            }
+            if (call.id in cancelled) throw CancellationException("cancelled")
+            val callDate = Instant.ofEpochMilli(call.startedAt).atZone(ZoneId.systemDefault()).toLocalDate()
+            val result = try {
+                AnalysisPrompt.parse(answer, callDate)
+            } catch (e: Exception) {
+                // The answer is call content: log only its size, never the text.
+                log("call ${call.id}: summary answer not valid JSON (${answer.length} chars): ${e.javaClass.simpleName}")
+                throw e
+            }
+            val tasks = result.tasks.mapIndexed { i, t ->
+                TaskEntity(callId = call.id, idx = i, title = t.title, owner = t.owner, dueDate = t.dueDate,
+                    duePhrase = t.duePhrase, quote = t.sourceQuote)
+            }
+            dao.replaceAnalysis(call.id, AnalysisPrompt.toJson(result), result.title.ifBlank { null }, analyzer.modelId, tasks)
+            log("call ${call.id}: summary done in ${secs(started)} · ${answer.length} chars out · " +
+                "${result.keyPoints.size} points, ${tasks.size} tasks")
+            true
+        } catch (e: Throwable) {
+            if (e is CancellationException || call.id in cancelled) throw (e as? CancellationException ?: CancellationException("cancelled"))
+            log("call ${call.id}: summary FAILED after ${secs(started)}: ${describe(e)}")
+            dao.setAnalysisStatus(call.id, AnalysisStatus.FAILED, "${e.javaClass.simpleName}: ${e.message ?: ""}".take(300))
+            false
+        }
+    }
+
+    private companion object {
+        /** Free memory wanted before loading Gemma next to Whisper. */
+        const val MIN_FREE_BYTES = 1_500_000_000L
+    }
+}

@@ -56,6 +56,7 @@ fun CallsScreen(
     val items = loaded.orEmpty()
     val service by ServiceStatus.state.collectAsStateWithLifecycle()
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
+    val summaryState by ProcessingStatus.summary.collectAsStateWithLifecycle()
     val models by app.models.state.collectAsStateWithLifecycle()
     val setup = rememberSetupState(resumeTick)
     val prefs = remember { com.callnotes.util.Prefs(context) }
@@ -98,7 +99,7 @@ fun CallsScreen(
                     onAction = onOpenSettings,
                 )
             }
-            if (!processing.running && !autoOn && waiting > 0 && models.ready) item {
+            if (!processing.running && !summaryState.running && !autoOn && waiting > 0 && models.ready) item {
                 Banner(
                     title = "התמלול האוטומטי כבוי",
                     body = if (waiting == 1) "הקלטה אחת ממתינה לתמלול." else "$waiting הקלטות ממתינות לתמלול.",
@@ -110,35 +111,39 @@ fun CallsScreen(
                     },
                 )
             }
-            if (processing.running) item {
-                val label = when (processing.phase) {
-                    "stopping" -> "עוצר את התמלול…"
-                    "speakers" -> "מזהה מי אמר מה…"
-                    "loading_analyzer" -> "טוען את מודל הסיכום…"
-                    "analyzing" -> "מסכם שיחה…"
-                    "loading" -> "טוען את מודל התמלול…"
-                    "waiting_thermal" -> "הטלפון חם — התמלול ממתין שיתקרר"
-                    else -> if (processing.chunksTotal > 0)
-                        "מתמלל שיחה · ${processing.chunksDone * 100 / processing.chunksTotal}%" else "מתמלל שיחה…"
-                }
+            // Transcription and summaries run side by side: one row each, with the call's name.
+            val workRows = listOf(processing, summaryState).filter { it.running && it.phase != "" || it.callId != null }
+            if (workRows.isNotEmpty()) item {
                 Panel {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        if (processing.phase != "stopping") {
-                            TextButton(onClick = {
-                                com.callnotes.processing.TranscriptionService.stopAll(context)
-                                autoOn = false
-                            }) { Text("עצירה") }
+                    workRows.forEachIndexed { i, st ->
+                        if (i > 0) Spacer(Modifier.padding(6.dp))
+                        val who = st.callId?.let { id -> items.firstOrNull { it.call.id == id }?.call }?.let { displayName(it) }
+                        val label = when (st.phase) {
+                            "stopping" -> "עוצר…"
+                            "speakers" -> "מזהה מי אמר מה"
+                            "loading" -> "טוען את מודל התמלול"
+                            "loading_analyzer" -> "טוען את מודל הסיכום"
+                            "analyzing" -> "מסכם"
+                            "waiting_memory" -> "ממתין לזיכרון כדי לסכם"
+                            "waiting_thermal" -> "הטלפון חם — ממתין שיתקרר"
+                            else -> if (st.chunksTotal > 0) "מתמלל · ${st.chunksDone * 100 / st.chunksTotal}%" else "מתמלל"
+                        } + (who?.let { " · $it" } ?: "")
+                        Text(label, style = MaterialTheme.typography.bodyMedium)
+                        Spacer(Modifier.padding(2.dp))
+                        if (st.chunksTotal > 0 && st.phase == "transcribing") {
+                            LinearProgressIndicator(
+                                progress = { st.chunksDone.toFloat() / st.chunksTotal },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            LinearProgressIndicator(Modifier.fillMaxWidth())
                         }
                     }
-                    Spacer(Modifier.padding(4.dp))
-                    if (processing.chunksTotal > 0) {
-                        LinearProgressIndicator(
-                            progress = { processing.chunksDone.toFloat() / processing.chunksTotal },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    } else {
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (workRows.none { it.phase == "stopping" }) {
+                        TextButton(onClick = {
+                            com.callnotes.processing.TranscriptionService.stopAll(context)
+                            autoOn = false
+                        }) { Text("עצירת הכל") }
                     }
                 }
             }

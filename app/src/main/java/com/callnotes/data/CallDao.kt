@@ -123,6 +123,12 @@ abstract class CallDao {
     @Query("UPDATE calls SET analysisStatus = 'skipped' WHERE id = :id AND status = 'transcribed' AND analysisStatus IS NULL")
     abstract suspend fun cancelAnalysisWaiting(id: Long)
 
+    /** Cancels a call being transcribed right now: held, or back to its old transcript. */
+    @Transaction
+    open suspend fun cancelRunningTranscription(id: Long) {
+        if (get(id)?.status == CallStatus.TRANSCRIBING) revertTranscription(id, CallStatus.HELD)
+    }
+
     /** Cancels a call that is still waiting (not yet being transcribed). */
     @Transaction
     open suspend fun cancelWaiting(id: Long) {

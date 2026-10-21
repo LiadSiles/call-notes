@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +54,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) openFrom(intent)
         enableEdgeToEdge()
         setContent {
             CallNotesTheme {
@@ -62,6 +64,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        openFrom(intent)
+    }
+
+    /** A notification about a call opens that call. */
+    private fun openFrom(intent: android.content.Intent?) {
+        intent?.getLongExtra(com.callnotes.util.Notifications.EXTRA_OPEN_CALL, -1L)?.takeIf { it > 0 }
+            ?.let { openRequest.value = it }
+    }
+
+    companion object {
+        /** Call to open, set from a notification tap; consumed by [AppRoot]. */
+        val openRequest = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
     }
 }
 
@@ -76,6 +94,10 @@ private fun AppRoot() {
 
     var tab by rememberSaveable { mutableStateOf(Tab.Calls) }
     var openCallId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val openRequest by MainActivity.openRequest.collectAsState()
+    LaunchedEffect(openRequest) {
+        openRequest?.let { openCallId = it; tab = Tab.Calls; MainActivity.openRequest.value = null }
+    }
 
     // System settings may change while we're away (permissions, accessibility, battery).
     var resumeTick by remember { mutableIntStateOf(0) }

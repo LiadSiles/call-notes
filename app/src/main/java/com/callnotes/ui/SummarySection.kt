@@ -47,7 +47,7 @@ fun SummarySection(
 ) {
     val cs = MaterialTheme.colorScheme
     val running = processing.running && processing.callId == c.id &&
-        processing.phase in setOf("loading_analyzer", "analyzing")
+        processing.phase in setOf("loading_analyzer", "analyzing", "waiting_memory")
     val analysis = remember(c.analysisJson) { AnalysisPrompt.fromJson(c.analysisJson) }
 
     SectionHeader("סיכום ומשימות")
@@ -57,6 +57,7 @@ fun SummarySection(
                 Text(
                     when {
                         processing.phase == "loading_analyzer" && running -> "טוען את מודל הסיכום…"
+                        processing.phase == "waiting_memory" && running -> "ממתין לזיכרון פנוי — התמלול רץ במקביל…"
                         running -> "מסכם את השיחה…"
                         else -> "ממתין לסיכום…"
                     },
