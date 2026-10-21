@@ -40,6 +40,14 @@ jobs:
             exit 1
           fi
 
+      # The transcription engine is native: fail loudly if it didn't make it into the APK.
+      - name: Check native libraries
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          unzip -l "$APK" | grep -E '\.so$' | while read -r size _ _ name; do echo "::notice::$name $((size/1024)) KB"; done
+          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libcallnotes_whisper.so' || { echo "::error::libcallnotes_whisper.so missing from APK"; exit 1; }
+          echo "::notice::APK $(( $(stat -c%s "$APK") / 1024 / 1024 )) MB"
+
       - name: Name the APK
         run: |
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
