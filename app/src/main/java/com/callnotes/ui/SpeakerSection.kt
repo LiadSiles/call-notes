@@ -102,7 +102,7 @@ fun SpeakerSection(prefs: Prefs) {
             Text("דגימת הקול שלך", style = MaterialTheme.typography.titleSmall)
             Text(
                 if (hasSample) "שמורה בטלפון בלבד. לפיה האפליקציה יודעת מי מהדוברים הוא את/ה."
-                else "הקלטה חד-פעמית של כ-15 שניות מהקול שלך, כדי לסמן \\"אני\\" ואת שם הצד השני.",
+                else "הקלטה חד-פעמית של כ-15 שניות מהקול שלך, כדי לסמן \"אני\" ואת שם הצד השני.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -148,7 +148,7 @@ fun SpeakerSection(prefs: Prefs) {
     if (askDelete) AlertDialog(
         onDismissRequest = { askDelete = false },
         title = { Text("למחוק את דגימת הקול?") },
-        text = { Text("השיחות יוצגו שוב כ\\"דובר 1\\" ו\\"דובר 2\\". אפשר להקליט דגימה חדשה בכל זמן.") },
+        text = { Text("השיחות יוצגו שוב כ\"דובר 1\" ו\"דובר 2\". אפשר להקליט דגימה חדשה בכל זמן.") },
         confirmButton = {
             TextButton(onClick = {
                 askDelete = false

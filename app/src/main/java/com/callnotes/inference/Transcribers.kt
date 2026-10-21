@@ -9,6 +9,6 @@ object Transcribers {
     fun create(context: Context, spec: ModelSpec, file: File): Transcriber = when (spec.engine) {
         InferenceEngine.WHISPER_CPP -> WhisperTranscriber(spec, file)
         InferenceEngine.LITERT_LM -> GemmaTranscriber(context, spec, file)
-        InferenceEngine.LLAMA_CPP -> error("no llama.cpp transcriber")
+        InferenceEngine.LLAMA_CPP, InferenceEngine.SHERPA_ONNX -> error("${spec.id} is not a transcriber")
     }
 }
