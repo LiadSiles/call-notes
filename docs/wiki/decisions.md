@@ -3,6 +3,14 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Navigation and list state (0.3.4)
+The call list is a process-wide `StateFlow` (`CallNotesApp.callList`, `stateIn` Eagerly,
+null = not loaded yet) so returning to the list never renders an empty frame. List ↔
+detail is one `AnimatedContent` (slide + fade); tabs crossfade; the window background
+(`values[-night]/themes.xml`) matches the Compose theme. Manual "transcribe now" calls
+`TranscriptionService.start` directly — previously it went through the auto-transcribe
+gate and did nothing when that switch was off.
+
 ### 2026-10-21 — Active model = installed model only (0.3.2)
 Bug: tapping "switch to E2B" set the active id to a model that wasn't downloaded, so
 `readyModel()` returned null and transcription silently never ran. Now the active

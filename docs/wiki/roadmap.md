@@ -13,6 +13,7 @@ _Last updated: 2026-10-20_
 | 0.3.1 | Per-call diagnostic trace for recording gaps | ✅ built |
 | 0.3.2 | Model-selection fix (active = installed only), per-model rows, last-run status | ✅ built |
 | 0.3.3 | UI redesign: theme, bottom nav (calls / settings), grouped call list with transcript preview, call detail with player and live transcript, settings tab | ✅ built |
+| 0.3.4 | Manual transcription independent of auto switch; animated navigation, no white flash | ✅ built |
 | 0.4 | Summary + tasks in the fixed schema, date normalization, full call screen (summary, transcript with seek, task approval) | |
 | 0.5 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
 | 0.6 | Model swapping: catalog, Whisper + llama.cpp engines, reprocess, comparison screen | |
