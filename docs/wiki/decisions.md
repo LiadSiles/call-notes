@@ -3,6 +3,14 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Gemma ASR on its documented template (0.3.8)
+Owner found 0.3.x Hebrew transcripts mostly unusable. First fix stays within Gemma:
+the trained ASR prompt, instruction before audio, no system instruction, normalized
+input level. Next option if that's not enough: a dedicated Hebrew ASR model —
+ivrit.ai's Hebrew fine-tune of Whisper large-v3-turbo has a ggml build for whisper.cpp
+(Apache-2.0). That fits the existing `Transcriber` interface; Gemma would stay the
+Analyzer. Owner decides (it changes the "Gemma only" choice of 2026-10-18).
+
 ### 2026-10-21 — Every started action can be undone (0.3.7)
 Owner rule: anything the user starts needs a visible way back.
 - Cancel one call → status `held`: skipped by automatic runs (`nextPending` only takes

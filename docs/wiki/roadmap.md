@@ -17,6 +17,7 @@ _Last updated: 2026-10-21_
 | 0.3.5 | Manual request jumps the queue (pauses an auto run), live state (model loading + elapsed, chunks), transcription log, recovery of runs killed mid-way | ⚠️ log showed the service never started (FGS type "none") |
 | 0.3.6 | Fix: transcription service started with explicit mediaProcessing type (dataSync fallback) | ✅ built, awaiting device test |
 | 0.3.7 | Cancel a call's transcription (→ held), stop all (list + notification, turns auto off), undo for every setup step / permission, restore default switches | ✅ built, awaiting device test |
+| 0.3.8 | Gemma's documented ASR prompt (text before audio, no system instruction), per-chunk level normalization, recording SHA-256 before/after in the log | ✅ built, awaiting device test |
 | 0.4 | Summary + tasks in the fixed schema, date normalization, full call screen (summary, transcript with seek, task approval) | |
 | 0.5 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
 | 0.6 | Model swapping: catalog, Whisper + llama.cpp engines, reprocess, comparison screen | |
@@ -28,6 +29,13 @@ _Last updated: 2026-10-21_
 **After 1.0:** VoIP calling mode, names for internet calls, diarization, Bluetooth accessory.
 
 ## Waiting on
+
+- Owner's verdict on 0.3.8 Hebrew quality. If still poor → decide on a Hebrew Whisper
+  transcriber (ivrit.ai `whisper-large-v3-turbo-ggml`, Apache-2.0, whisper.cpp) with
+  Gemma kept for summaries.
+- "Transcribed recordings sound worse": code only reads the file; the 0.3.8 log shows
+  the hash before/after. Suspects if unchanged: playback while the phone is hot
+  (speaker thermal limiting) or while the next call is being transcribed.
 
 - 0.3.7 on the POCO: does "transcribe now" start, how long the model load takes, and
   the transcription log if anything stops (it shows the stage and free RAM).

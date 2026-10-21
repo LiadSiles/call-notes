@@ -37,6 +37,15 @@ chip-specific (Tensor G5/G6, Qualcomm sm8750…) variants — unused for now.
   we use greedy `SamplerConfig(topK=1, topP=1.0, temperature=0.0)` and
   `ThinkingConfig(enableThinking=false)`. A fresh conversation per chunk.
 - `Message.toString()` = concatenated text contents (thinking goes to `channels`).
+- Prompt (0.3.8): Gemma's audio docs give the ASR template "Transcribe the following
+  speech segment in {LANG} into {LANG} text." + formatting rules (no newlines, digits
+  for numbers); text item before the audio item; 30 s max per clip; 16 kHz mono;
+  25 audio tokens per second. 0.3.0–0.3.7 used a free-form prompt after the audio plus
+  a system instruction — Hebrew output was poor (invented words, misspellings).
+- Each chunk is level-normalized (`audio/AudioLevel`, ≈ −20 dBFS speech, pauses
+  excluded, peak-limited) in the model's temp copy only.
+- Gemma 4's model card names no speech languages (just "35+ supported, 140+
+  pre-trained") and reports no per-language ASR numbers; Hebrew quality is unverified.
 - **CPU backend** on purpose: community reports say GPU init crashes on phones with
   < 12 GB RAM. E4B on CPU ≈ 3.3 GB RSS (S26 Ultra figure).
 - APK is limited to `arm64-v8a` to keep the native libraries small.
