@@ -61,6 +61,8 @@ class ModelManager(private val context: Context) {
             downloads.remove(prefs.downloadId)
             prefs.downloadId = -1L
         }
+        // Free the space of models the app no longer uses.
+        ModelCatalog.RETIRED.forEach { fileFor(it).delete(); partFor(it).delete() }
         refresh()
     }
 

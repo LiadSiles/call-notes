@@ -177,11 +177,17 @@ object ModelCatalog {
         minRamGb = 2.0,
     )
 
-    /** Both files speaker separation needs; downloaded together. */
-    val SPEAKER_PACK = listOf(PYANNOTE_SEGMENTATION, WESPEAKER_RESNET34)
+    /**
+     * What speaker separation downloads. Only the voice-fingerprint model since 0.5.3:
+     * pyannote segmentation went with sherpa's diarization pipeline (it could kill the app).
+     */
+    val SPEAKER_PACK = listOf(WESPEAKER_RESNET34)
+
+    /** Files of models no longer used; deleted on start. */
+    val RETIRED = listOf(PYANNOTE_SEGMENTATION)
 
     /** Best first within each role. */
-    val all = listOf(WHISPER_HE_TURBO, GEMMA_4_E4B, GEMMA_4_E2B, PYANNOTE_SEGMENTATION, WESPEAKER_RESNET34)
+    val all = listOf(WHISPER_HE_TURBO, GEMMA_4_E4B, GEMMA_4_E2B, WESPEAKER_RESNET34)
 
     fun byId(id: String?): ModelSpec? = all.firstOrNull { it.id == id }
 

@@ -26,7 +26,8 @@ import com.callnotes.inference.Transcribers
 import com.callnotes.util.CpuInfo
 import com.callnotes.inference.speakers.VoiceProfile
 import com.callnotes.inference.speakers.Voice
-import com.callnotes.inference.speakers.SpeakerDiarizer
+import com.callnotes.inference.speakers.VoiceClusters
+import com.callnotes.inference.speakers.VoiceEmbedder
 import com.callnotes.inference.speakers.LevelSpeakers
 import com.callnotes.inference.speakers.SpeakerAligner
 import com.callnotes.inference.Transcript
@@ -85,7 +86,7 @@ class TranscriptionService : Service() {
     @Volatile private var userCancelled: Long? = null
     @Volatile private var runJob: Job? = null
     /** Speaker separation, loaded on first use in a run (null if its models aren't installed). */
-    private var diarizer: SpeakerDiarizer? = null
+    private var diarizer: VoiceEmbedder? = null
     private var diarizerTried = false
     @Volatile private var stopping = false
 
@@ -489,8 +490,8 @@ class TranscriptionService : Service() {
      * Splits the transcript by speaker. Two methods:
      * 1. Loudness ([LevelSpeakers]) — calls held to the ear: the owner is far louder than the
      *    earpiece leak. Needs no models; louder = me unless the voice sample says otherwise.
-     * 2. Voice embeddings ([SpeakerDiarizer], pyannote + WeSpeaker) — when the levels don't
-     *    separate (speakerphone, VoIP); needs the speaker pack.
+     * 2. Voice fingerprints ([VoiceClusters] over Whisper's words, WeSpeaker) — when the
+     *    levels don't separate (speakerphone, VoIP); needs the voice model.
      * Never fails the transcription: on any error the transcript is kept without speakers.
      */
     private suspend fun separateSpeakers(call: CallEntity, audio: File, transcript: Transcript): Speakers? {
@@ -512,8 +513,7 @@ class TranscriptionService : Service() {
                 val d = if (owner != null && pack) diarizer(models) else null
                 if (owner != null && d != null) {
                     val voices = (0..1).mapNotNull { s ->
-                        LevelSpeakers.samplesOf(samples, transcript.words, level.labels, s)
-                            .takeIf { it.size >= 16_000 }?.let { s to d.embed(it) }
+                        d.embed(LevelSpeakers.samplesOf(samples, transcript.words, level.labels, s))?.let { s to it }
                     }.toMap()
                     val who = Voice.whichIsMe(owner, voices)
                     if (who == 1) me = 1 // e.g. speakerphone louder than the owner
@@ -533,16 +533,32 @@ class TranscriptionService : Service() {
                 return null
             }
             val d = diarizer(models) ?: return null
-            // The quiet side would otherwise be mostly ignored by segmentation.
-            val result = d.diarize(LevelSpeakers.equalise(samples))
-            currentCoroutineContext().ensureActive()
-            val me = if (owner != null && !result.merged) Voice.whichIsMe(owner, result.embeddings) else null
-            val lines = SpeakerAligner.align(transcript, result.turns)
-            val similarity = if (result.embeddings.size == 2) "%.2f".format(Voice.cosine(result.embeddings[0]!!, result.embeddings[1]!!)) else "-"
-            ProcessingLog.write(this, "call ${call.id}: speakers by voice in ${secs(started)} · ${result.turns.size} turns · " +
-                "voices ${result.embeddings.size} (similarity $similarity${if (result.merged) ", merged" else ""}) · " +
-                "me=${me ?: "?"}${if (owner == null) " (no voice sample)" else ""} · ${lines.size} lines")
-            Speakers(lines, result.embeddings, me)
+            // Voice windows from Whisper's words; loudness-equalised so the quieter side counts.
+            val eq = LevelSpeakers.equalise(samples)
+            val windows = VoiceClusters.windows(transcript.words)
+            val embeddings = windows.map { w ->
+                currentCoroutineContext().ensureActive()
+                if (w.durationMs < VoiceClusters.MIN_EMBED_MS) null else {
+                    val from = ((w.startMs - 50) * 16).toInt().coerceIn(0, eq.size)
+                    val to = ((w.endMs + 50) * 16).toInt().coerceIn(from, eq.size)
+                    d.embed(eq.copyOfRange(from, to))
+                }
+            }
+            val result = VoiceClusters.cluster(windows, embeddings)
+            if (result == null) {
+                ProcessingLog.write(this, "call ${call.id}: speakers by voice in ${secs(started)} · ${windows.size} windows, " +
+                    "${embeddings.count { it != null }} fingerprinted · one voice or too little speech → no split")
+                return null
+            }
+            val me = if (owner != null) Voice.whichIsMe(owner, result.centroids) else null
+            val lines = SpeakerAligner.align(transcript, VoiceClusters.turns(windows, result.labels))
+            ProcessingLog.write(this, "call ${call.id}: speakers by voice in ${secs(started)} · ${windows.size} windows, " +
+                "${embeddings.count { it != null }} fingerprinted · voices %.2f alike · speaker 1 share %d%% · ".format(
+                    result.similarity, (result.shareOf1 * 100).toInt()) +
+                "me=${me ?: "?"}${if (owner == null) " (no voice sample)" else owner.let { o ->
+                    result.centroids.entries.joinToString("") { " (${it.key}: %.2f)".format(Voice.cosine(o, it.value)) }
+                }} · ${lines.size} lines")
+            Speakers(lines, result.centroids, me)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e
             ProcessingLog.write(this, "call ${call.id}: speaker separation FAILED, keeping plain transcript: ${describe(e)}")
@@ -550,16 +566,12 @@ class TranscriptionService : Service() {
         }
     }
 
-    /** The voice-embedding diarizer, loaded once per run (null if it can't load). */
-    private fun diarizer(models: com.callnotes.inference.ModelManager): SpeakerDiarizer? {
+    /** The voice-fingerprint model, loaded once per run (null if it can't load). */
+    private fun diarizer(models: com.callnotes.inference.ModelManager): VoiceEmbedder? {
         if (!diarizerTried) {
             diarizerTried = true
             diarizer = runCatching {
-                SpeakerDiarizer(
-                    models.fileFor(ModelCatalog.PYANNOTE_SEGMENTATION),
-                    models.fileFor(ModelCatalog.WESPEAKER_RESNET34),
-                    CpuInfo.inferenceThreads(),
-                )
+                VoiceEmbedder(models.fileFor(ModelCatalog.WESPEAKER_RESNET34), CpuInfo.inferenceThreads())
             }.onFailure { ProcessingLog.write(this, "speaker models failed to load: ${describe(it)}") }.getOrNull()
         }
         return diarizer

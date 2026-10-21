@@ -33,7 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
 import com.callnotes.inference.ModelCatalog
 import com.callnotes.inference.ModelManager
-import com.callnotes.inference.speakers.SpeakerDiarizer
+import com.callnotes.inference.speakers.VoiceEmbedder
 import com.callnotes.inference.speakers.VoiceProfile
 import com.callnotes.util.CpuInfo
 import com.callnotes.util.Prefs
@@ -73,13 +73,13 @@ fun SpeakerSection(prefs: Prefs) {
 
     Panel {
         Column {
-            Text("הפרדת דוברים", style = MaterialTheme.typography.titleSmall)
+            Text("מודל זיהוי קול", style = MaterialTheme.typography.titleSmall)
             Text(
                 when {
                     downloading != null -> "מוריד… ${gb(pack.filter { it.id in snap.installed }.sumOf { it.sizeBytes } + downloading.bytes)} מתוך ${gb(packBytes)}"
                     verifying != null -> "בודק את הקבצים…"
                     installed -> "מותקן · ${gb(packBytes)} · משמש לשיחות ברמקול ובאינטרנט"
-                    else -> "שני מודלים קטנים (${gb(packBytes)}) שמזהים דוברים לפי הקול — נחוצים לשיחות ברמקול ובאינטרנט. בשיחה צמודה לאוזן ההפרדה נעשית לפי עוצמת הקול גם בלעדיהם."
+                    else -> "מודל קטן (${gb(packBytes)}) שמבדיל בין קולות — נחוץ לשיחות ברמקול ובאינטרנט ולדגימת הקול שלך. בשיחה צמודה לאוזן ההפרדה נעשית לפי עוצמת הקול גם בלעדיו."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -117,7 +117,7 @@ fun SpeakerSection(prefs: Prefs) {
                 }
             }
             if (!installed) {
-                Text("זמין אחרי הורדת מודלי הפרדת הדוברים.", style = MaterialTheme.typography.bodySmall,
+                Text("זמין אחרי הורדת מודל זיהוי הקול.", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -130,8 +130,8 @@ fun SpeakerSection(prefs: Prefs) {
                 result = "מעבד את הדגימה…"
                 result = withContext(Dispatchers.IO) {
                     try {
-                        val e = SpeakerDiarizer.embedOnly(models.fileFor(ModelCatalog.WESPEAKER_RESNET34), samples,
-                            CpuInfo.inferenceThreads())
+                        val e = VoiceEmbedder(models.fileFor(ModelCatalog.WESPEAKER_RESNET34), CpuInfo.inferenceThreads())
+                            .use { it.embed(samples) } ?: error("sample too short")
                         VoiceProfile.save(context, e)
                         val n = VoiceProfile.relabelAll(context)
                         "הדגימה נשמרה." + if (n > 0) " סומנו $n שיחות קיימות." else ""
