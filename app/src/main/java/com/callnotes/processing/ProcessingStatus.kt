@@ -14,7 +14,7 @@ object ProcessingStatus {
         val callId: Long? = null,
         val chunksDone: Int = 0,
         val chunksTotal: Int = 0,
-        /** "loading", "transcribing", "waiting_thermal". */
+        /** "loading", "transcribing", "speakers", "loading_analyzer", "analyzing", "waiting_thermal", "stopping". */
         val phase: String = "",
         /** When the current phase started (for "loading the model… 0:24"). */
         val since: Long = System.currentTimeMillis(),
@@ -34,8 +34,15 @@ object ProcessingStatus {
 
     internal fun request(id: Long) = _requested.update { (it - id) + id }
     internal fun unrequest(id: Long) = _requested.update { it - id }
-    internal fun clearRequests() { _requested.value = emptyList() }
+    internal fun clearRequests() { _requested.value = emptyList(); _analysisRequested.value = emptyList() }
     internal fun firstRequested(): Long? = _requested.value.firstOrNull()
+
+    /** Calls the user asked to summarise by hand; they go first in the analysis pass. */
+    private val _analysisRequested = MutableStateFlow<List<Long>>(emptyList())
+    val analysisRequested: StateFlow<List<Long>> = _analysisRequested.asStateFlow()
+    internal fun requestAnalysis(id: Long) = _analysisRequested.update { (it - id) + id }
+    internal fun unrequestAnalysis(id: Long) = _analysisRequested.update { it - id }
+    internal fun firstAnalysisRequested(): Long? = _analysisRequested.value.firstOrNull()
 
     /** Bumped whenever the persisted "last run" note changes, so the UI re-reads it. */
     private val _version = MutableStateFlow(0)

@@ -81,7 +81,10 @@ private fun AppRoot() {
     var resumeTick by remember { mutableIntStateOf(0) }
     val kickQueue: () -> Unit = {
         scope.launch(Dispatchers.IO) {
-            if (prefs.autoTranscribe && app.database.calls().pendingCount() > 0) {
+            val dao = app.database.calls()
+            val analysable = app.models.readyModel(com.callnotes.inference.ModelRole.ANALYZE) != null &&
+                dao.unanalyzedCount() > 0
+            if (prefs.autoTranscribe && (dao.pendingCount() > 0 || analysable)) {
                 TranscriptionService.start(context)
             }
         }

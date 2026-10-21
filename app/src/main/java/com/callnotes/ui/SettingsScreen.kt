@@ -75,7 +75,7 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
         item { SectionHeader("סיכומים ומשימות") }
         item {
             Text(
-                "מודל שפה שיקרא את השיחה ויכין סיכום ומשימות (בשלב הבא). לא נדרש לתמלול.",
+                "מודל שפה שקורא את השיחה הכתובה ומכין סיכום ומשימות, על הטלפון. רץ אחרי התמלול; לא נדרש לתמלול עצמו.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),

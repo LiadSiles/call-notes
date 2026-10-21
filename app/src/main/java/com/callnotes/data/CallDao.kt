@@ -14,8 +14,8 @@ abstract class CallDao {
 
     /** Calls with the first line of their transcript, for the list. */
     @Query(
-        "SELECT calls.*, (SELECT text FROM segments WHERE segments.callId = calls.id " +
-            "ORDER BY idx LIMIT 1) AS preview FROM calls ORDER BY startedAt DESC"
+        "SELECT calls.*, COALESCE(NULLIF(calls.summaryTitle, ''), (SELECT text FROM segments " +
+            "WHERE segments.callId = calls.id ORDER BY idx LIMIT 1)) AS preview FROM calls ORDER BY startedAt DESC"
     )
     abstract fun observeList(): Flow<List<CallListItem>>
 
@@ -34,8 +34,52 @@ abstract class CallDao {
     @Transaction
     open suspend fun delete(id: Long) {
         deleteSegments(id)
+        deleteTasks(id)
         deleteCall(id)
     }
+
+    // --- Analysis (summary + tasks) ---
+
+    /** Newest transcribed call with words that hasn't been analysed yet. */
+    @Query(
+        "SELECT * FROM calls WHERE status = 'transcribed' AND analysisStatus IS NULL " +
+            "AND EXISTS (SELECT 1 FROM segments WHERE segments.callId = calls.id) ORDER BY startedAt DESC LIMIT 1"
+    )
+    abstract suspend fun nextUnanalyzed(): CallEntity?
+
+    @Query(
+        "SELECT COUNT(*) FROM calls WHERE status = 'transcribed' AND analysisStatus IS NULL " +
+            "AND EXISTS (SELECT 1 FROM segments WHERE segments.callId = calls.id)"
+    )
+    abstract suspend fun unanalyzedCount(): Int
+
+    @Query("UPDATE calls SET analysisStatus = :status, analysisError = :error WHERE id = :id")
+    abstract suspend fun setAnalysisStatus(id: Long, status: String?, error: String?)
+
+    @Query(
+        "UPDATE calls SET analysisStatus = 'done', analysisJson = :json, summaryTitle = :title, " +
+            "analysisModel = :model, analysisError = NULL WHERE id = :id"
+    )
+    abstract suspend fun setAnalysis(id: Long, json: String, title: String?, model: String)
+
+    @Insert
+    abstract suspend fun insertTasks(tasks: List<TaskEntity>)
+
+    @Query("DELETE FROM tasks WHERE callId = :callId")
+    abstract suspend fun deleteTasks(callId: Long)
+
+    @Transaction
+    open suspend fun replaceAnalysis(callId: Long, json: String, title: String?, model: String, tasks: List<TaskEntity>) {
+        deleteTasks(callId)
+        insertTasks(tasks)
+        setAnalysis(callId, json, title, model)
+    }
+
+    @Query("SELECT * FROM tasks WHERE callId = :callId ORDER BY idx")
+    abstract fun observeTasks(callId: Long): Flow<List<TaskEntity>>
+
+    @Query("UPDATE tasks SET done = :done WHERE id = :id")
+    abstract suspend fun setTaskDone(id: Long, done: Boolean)
 
     /** Newest recording still waiting for transcription. */
     @Query("SELECT * FROM calls WHERE status = 'recorded' AND filePath IS NOT NULL ORDER BY startedAt DESC LIMIT 1")
@@ -75,6 +119,10 @@ abstract class CallDao {
         setStatusOnly(id, if (segmentCount(id) > 0) CallStatus.TRANSCRIBED else otherwise)
     }
 
+    /** A summary the user cancelled before it started isn't picked up automatically again. */
+    @Query("UPDATE calls SET analysisStatus = 'skipped' WHERE id = :id AND status = 'transcribed' AND analysisStatus IS NULL")
+    abstract suspend fun cancelAnalysisWaiting(id: Long)
+
     /** Cancels a call that is still waiting (not yet being transcribed). */
     @Transaction
     open suspend fun cancelWaiting(id: Long) {
@@ -83,6 +131,9 @@ abstract class CallDao {
 
     @Query("SELECT * FROM segments WHERE callId = :callId ORDER BY idx")
     abstract fun observeSegments(callId: Long): Flow<List<SegmentEntity>>
+
+    @Query("SELECT * FROM segments WHERE callId = :callId ORDER BY idx")
+    abstract suspend fun segments(callId: Long): List<SegmentEntity>
 
     @Insert
     abstract suspend fun insertSegments(segments: List<SegmentEntity>)
@@ -99,10 +150,24 @@ abstract class CallDao {
     @Query("SELECT id, speakerEmbeddings FROM calls WHERE speakerEmbeddings IS NOT NULL")
     abstract suspend fun allSpeakerEmbeddings(): List<CallVoices>
 
+    /** A new transcript also makes the old summary stale: it is analysed again. */
     @Transaction
     open suspend fun replaceTranscript(callId: Long, segments: List<SegmentEntity>, model: String) {
         deleteSegments(callId)
         insertSegments(segments)
         setStatus(callId, CallStatus.TRANSCRIBED, model, null)
+        clearAnalysis(callId)
+    }
+
+    @Query(
+        "UPDATE calls SET analysisStatus = NULL, analysisJson = NULL, summaryTitle = NULL, " +
+            "analysisModel = NULL, analysisError = NULL WHERE id = :id"
+    )
+    abstract suspend fun clearAnalysisFields(id: Long)
+
+    @Transaction
+    open suspend fun clearAnalysis(id: Long) {
+        deleteTasks(id)
+        clearAnalysisFields(id)
     }
 }

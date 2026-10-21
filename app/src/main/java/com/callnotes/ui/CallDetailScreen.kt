@@ -98,6 +98,9 @@ fun CallDetailScreen(
     val segments by remember(callId) { dao.observeSegments(callId) }.collectAsStateWithLifecycle(emptyList())
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val requested by ProcessingStatus.requested.collectAsStateWithLifecycle()
+    val analysisRequested by ProcessingStatus.analysisRequested.collectAsStateWithLifecycle()
+    val tasks by remember(callId) { dao.observeTasks(callId) }.collectAsStateWithLifecycle(emptyList())
+    val modelsSnap by app.models.state.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
     var showTrace by remember { mutableStateOf(false) }
     var showTech by remember { mutableStateOf(false) }
@@ -158,6 +161,23 @@ fun CallDetailScreen(
             if (path != null) item {
                 Spacer(Modifier.size(8.dp))
                 PlayerPanel(c.id, path, player)
+            }
+
+            if (c.status == CallStatus.TRANSCRIBED && c.id !in requested) item {
+                SummarySection(
+                    c, tasks, processing,
+                    queued = c.id in analysisRequested,
+                    modelInstalled = modelsSnap.active(com.callnotes.inference.ModelRole.ANALYZE) != null,
+                    autoOn = remember(noteVersion) { com.callnotes.util.Prefs(context).autoTranscribe },
+                    onSummarise = {
+                        scope.launch(Dispatchers.IO) {
+                            dao.clearAnalysis(c.id)
+                            TranscriptionService.start(context, analyseId = c.id)
+                        }
+                    },
+                    onCancel = cancelTranscription,
+                    onTaskDone = { t, done -> scope.launch(Dispatchers.IO) { dao.setTaskDone(t.id, done) } },
+                )
             }
 
             item { SectionHeader("תמלול") }

@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 // Encryption (SQLCipher) is planned for 0.8; the prototype keeps plain Room.
-@Database(entities = [CallEntity::class, SegmentEntity::class], version = 5, exportSchema = false)
+@Database(entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class], version = 6, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun calls(): CallDao
@@ -29,6 +29,24 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /** 0.3: transcripts. */
+        /** Summary and tasks (Gemma). */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE calls ADD COLUMN analysisStatus TEXT")
+                db.execSQL("ALTER TABLE calls ADD COLUMN analysisJson TEXT")
+                db.execSQL("ALTER TABLE calls ADD COLUMN summaryTitle TEXT")
+                db.execSQL("ALTER TABLE calls ADD COLUMN analysisModel TEXT")
+                db.execSQL("ALTER TABLE calls ADD COLUMN analysisError TEXT")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `tasks` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`callId` INTEGER NOT NULL, `idx` INTEGER NOT NULL, `title` TEXT NOT NULL, " +
+                        "`owner` TEXT NOT NULL, `dueDate` TEXT, `duePhrase` TEXT, `quote` TEXT, " +
+                        "`done` INTEGER NOT NULL)"
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_tasks_callId` ON `tasks` (`callId`)")
+            }
+        }
+
         /** Speakers: who said each segment, and the two voices per call. */
         private val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -53,7 +71,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "callnotes.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .build()
     }
 }

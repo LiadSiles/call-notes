@@ -114,6 +114,8 @@ fun CallsScreen(
                 val label = when (processing.phase) {
                     "stopping" -> "עוצר את התמלול…"
                     "speakers" -> "מזהה מי אמר מה…"
+                    "loading_analyzer" -> "טוען את מודל הסיכום…"
+                    "analyzing" -> "מסכם שיחה…"
                     "loading" -> "טוען את מודל התמלול…"
                     "waiting_thermal" -> "הטלפון חם — התמלול ממתין שיתקרר"
                     else -> if (processing.chunksTotal > 0)

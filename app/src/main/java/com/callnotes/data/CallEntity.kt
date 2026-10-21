@@ -77,6 +77,38 @@ data class CallEntity(
     val speakerEmbeddings: ByteArray? = null,
     /** Which speaker index is the owner, when known (DB v5). */
     val meSpeaker: Int? = null,
+    /** [AnalysisStatus]; null = not analysed yet (DB v6). */
+    val analysisStatus: String? = null,
+    /** Summary, key points, decisions, follow-ups as JSON ([com.callnotes.inference.CallAnalysis]) (DB v6). */
+    val analysisJson: String? = null,
+    /** Short title from the analysis, shown in the call list (DB v6). */
+    val summaryTitle: String? = null,
+    val analysisModel: String? = null,
+    val analysisError: String? = null,
+)
+
+object AnalysisStatus {
+    const val DONE = "done"
+    const val FAILED = "failed"
+    /** Cancelled by the user; not picked up automatically again. */
+    const val SKIPPED = "skipped"
+}
+
+/** A task found in a call (DB v6). */
+@Entity(tableName = "tasks", indices = [Index("callId")])
+data class TaskEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val callId: Long,
+    val idx: Int,
+    val title: String,
+    /** "me", "other" or "unknown". */
+    val owner: String,
+    /** ISO date (yyyy-MM-dd), already checked against the call date, or null. */
+    val dueDate: String?,
+    /** The words used in the call ("עד יום שלישי"), or null. */
+    val duePhrase: String?,
+    val quote: String?,
+    val done: Boolean = false,
 )
 
 /** One stretch of transcript with its position in the recording (DB v4). */
