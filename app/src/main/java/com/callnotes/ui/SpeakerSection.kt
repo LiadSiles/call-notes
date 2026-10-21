@@ -78,8 +78,8 @@ fun SpeakerSection(prefs: Prefs) {
                 when {
                     downloading != null -> "מוריד… ${gb(pack.filter { it.id in snap.installed }.sumOf { it.sizeBytes } + downloading.bytes)} מתוך ${gb(packBytes)}"
                     verifying != null -> "בודק את הקבצים…"
-                    installed -> "מותקן · ${gb(packBytes)} · כל שיחה חדשה תחולק לפי דוברים"
-                    else -> "שני מודלים קטנים (${gb(packBytes)}) שמזהים לפי הקול מי מדבר ומתי. בלי זה התמלול לא מחולק לדוברים."
+                    installed -> "מותקן · ${gb(packBytes)} · משמש לשיחות ברמקול ובאינטרנט"
+                    else -> "שני מודלים קטנים (${gb(packBytes)}) שמזהים דוברים לפי הקול — נחוצים לשיחות ברמקול ובאינטרנט. בשיחה צמודה לאוזן ההפרדה נעשית לפי עוצמת הקול גם בלעדיהם."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -101,7 +101,7 @@ fun SpeakerSection(prefs: Prefs) {
 
             Text("דגימת הקול שלך", style = MaterialTheme.typography.titleSmall)
             Text(
-                if (hasSample) "שמורה בטלפון בלבד. לפיה האפליקציה יודעת מי מהדוברים הוא את/ה."
+                if (hasSample) "שמורה בטלפון בלבד. לפיה האפליקציה יודעת מי מהדוברים הוא את/ה בשיחות ברמקול ובאינטרנט."
                 else "הקלטה חד-פעמית של כ-15 שניות מהקול שלך, כדי לסמן \"אני\" ואת שם הצד השני.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -27,6 +27,7 @@ import com.callnotes.util.CpuInfo
 import com.callnotes.inference.speakers.VoiceProfile
 import com.callnotes.inference.speakers.Voice
 import com.callnotes.inference.speakers.SpeakerDiarizer
+import com.callnotes.inference.speakers.LevelSpeakers
 import com.callnotes.inference.speakers.SpeakerAligner
 import com.callnotes.inference.Transcript
 import com.callnotes.inference.ModelCatalog
@@ -484,32 +485,61 @@ class TranscriptionService : Service() {
      * Splits the transcript by speaker if the speaker models are installed. Never fails the
      * transcription: on any error the transcript is kept without speakers.
      */
+    /**
+     * Splits the transcript by speaker. Two methods:
+     * 1. Loudness ([LevelSpeakers]) — calls held to the ear: the owner is far louder than the
+     *    earpiece leak. Needs no models; louder = me unless the voice sample says otherwise.
+     * 2. Voice embeddings ([SpeakerDiarizer], pyannote + WeSpeaker) — when the levels don't
+     *    separate (speakerphone, VoIP); needs the speaker pack.
+     * Never fails the transcription: on any error the transcript is kept without speakers.
+     */
     private suspend fun separateSpeakers(call: CallEntity, audio: File, transcript: Transcript): Speakers? {
         val models = (application as CallNotesApp).models
-        if (!models.allInstalled(ModelCatalog.SPEAKER_PACK)) return null
+        val pack = models.allInstalled(ModelCatalog.SPEAKER_PACK)
         val started = System.currentTimeMillis()
         return try {
-            if (!diarizerTried) {
-                diarizerTried = true
-                diarizer = SpeakerDiarizer(
-                    models.fileFor(ModelCatalog.PYANNOTE_SEGMENTATION),
-                    models.fileFor(ModelCatalog.WESPEAKER_RESNET34),
-                    CpuInfo.inferenceThreads(),
-                )
-            }
-            val d = diarizer ?: return null
             ProcessingLog.step(this, "call ${call.id}: separating speakers")
             ProcessingStatus.set(ProcessingStatus.State(true, call.id, 0, 0, "speakers"))
             val info = com.callnotes.audio.Wav.readInfo(audio) ?: return null
             val pcm = com.callnotes.audio.Wav.readSamples(audio, info, 0, info.sampleCount.toInt())
             val samples = FloatArray(pcm.size) { pcm[it] / 32768f }
-            val result = d.diarize(samples)
-            currentCoroutineContext().ensureActive()
             val owner = VoiceProfile.load(this)
+
+            val level = LevelSpeakers.analyse(samples, transcript.words)
+            if (level != null) {
+                var me = 0
+                var check = if (owner == null) "no voice sample" else "voice sample not used"
+                val d = if (owner != null && pack) diarizer(models) else null
+                if (owner != null && d != null) {
+                    val voices = (0..1).mapNotNull { s ->
+                        LevelSpeakers.samplesOf(samples, transcript.words, level.labels, s)
+                            .takeIf { it.size >= 16_000 }?.let { s to d.embed(it) }
+                    }.toMap()
+                    val who = Voice.whichIsMe(owner, voices)
+                    if (who == 1) me = 1 // e.g. speakerphone louder than the owner
+                    check = "voice sample says ${who ?: "?"}" + voices.entries.joinToString("") {
+                        " (${it.key}: %.2f)".format(Voice.cosine(owner, it.value))
+                    }
+                }
+                val lines = SpeakerAligner.align(transcript, LevelSpeakers.turns(transcript.words, level.labels))
+                ProcessingLog.write(this, "call ${call.id}: speakers by loudness in ${secs(started)} · louder " +
+                    "%.1f dB, quieter %.1f dB (%.1f dB apart), quieter share %d%% · me=%d · %s · %d lines".format(
+                        level.loudDb, level.quietDb, level.separationDb, (level.quietShare * 100).toInt(), me, check, lines.size))
+                return Speakers(lines, emptyMap(), me)
+            }
+
+            if (!pack) {
+                ProcessingLog.write(this, "call ${call.id}: speakers: loudness doesn't separate them and the speaker models aren't installed")
+                return null
+            }
+            val d = diarizer(models) ?: return null
+            // The quiet side would otherwise be mostly ignored by segmentation.
+            val result = d.diarize(LevelSpeakers.equalise(samples))
+            currentCoroutineContext().ensureActive()
             val me = if (owner != null && !result.merged) Voice.whichIsMe(owner, result.embeddings) else null
             val lines = SpeakerAligner.align(transcript, result.turns)
             val similarity = if (result.embeddings.size == 2) "%.2f".format(Voice.cosine(result.embeddings[0]!!, result.embeddings[1]!!)) else "-"
-            ProcessingLog.write(this, "call ${call.id}: speakers in ${secs(started)} · ${result.turns.size} turns · " +
+            ProcessingLog.write(this, "call ${call.id}: speakers by voice in ${secs(started)} · ${result.turns.size} turns · " +
                 "voices ${result.embeddings.size} (similarity $similarity${if (result.merged) ", merged" else ""}) · " +
                 "me=${me ?: "?"}${if (owner == null) " (no voice sample)" else ""} · ${lines.size} lines")
             Speakers(lines, result.embeddings, me)
@@ -518,6 +548,21 @@ class TranscriptionService : Service() {
             ProcessingLog.write(this, "call ${call.id}: speaker separation FAILED, keeping plain transcript: ${describe(e)}")
             null
         }
+    }
+
+    /** The voice-embedding diarizer, loaded once per run (null if it can't load). */
+    private fun diarizer(models: com.callnotes.inference.ModelManager): SpeakerDiarizer? {
+        if (!diarizerTried) {
+            diarizerTried = true
+            diarizer = runCatching {
+                SpeakerDiarizer(
+                    models.fileFor(ModelCatalog.PYANNOTE_SEGMENTATION),
+                    models.fileFor(ModelCatalog.WESPEAKER_RESNET34),
+                    CpuInfo.inferenceThreads(),
+                )
+            }.onFailure { ProcessingLog.write(this, "speaker models failed to load: ${describe(it)}") }.getOrNull()
+        }
+        return diarizer
     }
 
     private suspend fun waitWhileHot() {
