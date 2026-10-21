@@ -61,11 +61,12 @@ abstract class Worker(protected val host: TranscriptionService, val notification
         host.showWork(this, "מבטל…", "")
     }
 
-    /** Main thread. Stop everything this worker is doing. */
+    /**
+     * Main thread. Stop everything this worker is doing. The current call is not marked
+     * cancelled: it goes back to the queue (the UI was already cleared by the caller).
+     */
     fun stopNow() {
         if (!running) return
-        callId?.let { cancelled += it }
-        publish(ProcessingStatus.State(running = true, phase = "stopping"))
         abortNative()
         item?.cancel()
         job?.cancel()
