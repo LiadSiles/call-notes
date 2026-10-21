@@ -21,4 +21,9 @@ object ProcessingStatus {
     val state: StateFlow<State> = _state.asStateFlow()
 
     internal fun set(state: State) { _state.value = state }
+
+    /** Bumped whenever the persisted "last run" note changes, so the UI re-reads it. */
+    private val _version = MutableStateFlow(0)
+    val version: StateFlow<Int> = _version.asStateFlow()
+    internal fun touch() { _version.value++ }
 }
