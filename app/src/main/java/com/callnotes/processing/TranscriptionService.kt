@@ -503,9 +503,7 @@ class TranscriptionService : Service() {
             val info = com.callnotes.audio.Wav.readInfo(audio) ?: return null
             val pcm = com.callnotes.audio.Wav.readSamples(audio, info, 0, info.sampleCount.toInt())
             val samples = FloatArray(pcm.size) { pcm[it] / 32768f }
-            val result = d.diarize(samples) { done, total ->
-                ProcessingStatus.set(ProcessingStatus.State(true, call.id, done, total, "speakers"))
-            }
+            val result = d.diarize(samples)
             currentCoroutineContext().ensureActive()
             val owner = VoiceProfile.load(this)
             val me = if (owner != null && !result.merged) Voice.whichIsMe(owner, result.embeddings) else null

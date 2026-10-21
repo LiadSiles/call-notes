@@ -95,8 +95,14 @@ Facts and choices:
 - DB v5: `segments.speaker` (0/1/null), `calls.speakerEmbeddings` (2×dim LE floats),
   `calls.meSpeaker`. A new/deleted voice sample re-labels every call from the stored
   fingerprints (`VoiceProfile.relabelAll`) — no re-run.
-- sherpa's progress callback return value is ignored: diarization can't be aborted
-  mid-run (it's seconds, not minutes); cancellation is checked right after.
+- **Never use `processWithCallback`** (0.4.1–0.5.0 crash on the POCO): sherpa's JNI
+  looks up `invoke(IIJ)Ljava/lang/Integer;` on the callback object's class. Kotlin 2
+  compiles lambdas with invokedynamic (D8 `$$ExternalSyntheticLambda`), which only has the
+  erased `invoke(Object,Object,Object)`; the lookup throws NoSuchMethodError and ART's
+  CheckJNI aborts the process ("JNI GetObjectClass called with pending exception").
+  We call `process` (no progress, can't be aborted — it takes seconds).
+- General rule for any third-party JNI that calls back into Kotlin: pass an object of a
+  named class or a `fun interface` declared with the exact signature, never a plain lambda.
 - Thresholds (0.75 same-voice, 0.35/0.10 owner match) are first guesses; the log
   prints the two voices' similarity and the "me" decision per call to tune them.
 - A failure in speaker separation keeps the plain transcript (logged).

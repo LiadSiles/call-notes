@@ -40,11 +40,16 @@ class SpeakerDiarizer(segmentation: File, embedding: File, threads: Int) : AutoC
         config = SpeakerEmbeddingExtractorConfig(model = embedding.absolutePath, numThreads = threads),
     )
 
-    /** [samples]: 16 kHz mono in [-1, 1]. */
-    fun diarize(samples: FloatArray, onProgress: (Int, Int) -> Unit = { _, _ -> }): Result {
-        val segments = diarization.processWithCallback(samples, { done, total, _ ->
-            onProgress(done, total); 0
-        })
+    /**
+     * [samples]: 16 kHz mono in [-1, 1].
+     *
+     * Uses `process`, not `processWithCallback`: sherpa's JNI looks the callback up as a
+     * method `invoke(IIJ)Ljava/lang/Integer;` on the lambda's class, which only old-style
+     * class-compiled Kotlin lambdas have. Kotlin 2 compiles lambdas with invokedynamic, the
+     * lookup fails and ART aborts the whole app (0.4.1–0.5.0 crash on the POCO).
+     */
+    fun diarize(samples: FloatArray): Result {
+        val segments = diarization.process(samples)
         var turns = segments.map {
             SpeakerAligner.Turn((it.start * 1000).toLong(), (it.end * 1000).toLong(), it.speaker)
         }.sortedBy { it.startMs }
