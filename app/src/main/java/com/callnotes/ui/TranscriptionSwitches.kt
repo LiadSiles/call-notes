@@ -27,8 +27,9 @@ import com.callnotes.util.Prefs
 /** Auto-transcribe switch and the outcome of the last transcription run. */
 @Composable
 fun TranscriptionSwitches(prefs: Prefs) {
-    var auto by remember { mutableStateOf(prefs.autoTranscribe) }
     val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
+    // Re-read on every note: "stop" turns the switch off from elsewhere.
+    var auto by remember(noteVersion) { mutableStateOf(prefs.autoTranscribe) }
     val lastRun = remember(noteVersion) { prefs.lastProcessing }
     var showLog by remember { mutableStateOf(false) }
     val context = LocalContext.current

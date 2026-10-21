@@ -20,6 +20,7 @@ import com.callnotes.inference.GemmaTranscriber
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
 import com.callnotes.util.Notifications
+import com.callnotes.util.Prefs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -62,11 +63,28 @@ class TranscriptionService : Service() {
     @Volatile private var current: Job? = null
     @Volatile private var currentCallId: Long? = null
     @Volatile private var currentRequested = false
+    /** Call whose model load is in progress (shown on that call). */
+    @Volatile private var loadingCallId: Long? = null
+    /** Set when the user cancelled [currentCallId]: it is held, not re-queued. */
+    @Volatile private var userCancelled: Long? = null
+    @Volatile private var runJob: Job? = null
+    @Volatile private var stopping = false
+
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStartId = startId
+        if (intent?.action == ACTION_STOP) {
+            // From the notification's "stop" button.
+            stopAll(this)
+            if (!running) stopSelf(startId)
+            return START_NOT_STICKY
+        }
         try {
             goForeground()
         } catch (e: Exception) {
@@ -84,10 +102,32 @@ class TranscriptionService : Service() {
         }
         if (!running) {
             running = true
+            stopping = false
             val delayFirst = intent?.getBooleanExtra(EXTRA_AFTER_CALL, false) == true
-            scope.launch { runQueue(delayFirst) }
+            runJob = scope.launch { runQueue(delayFirst) }
         }
         return START_NOT_STICKY
+    }
+
+    /** The user cancelled [id]: stop it if it is being transcribed (or its model is loading for it). */
+    private fun cancelCallNow(id: Long) {
+        if (currentCallId == id) {
+            userCancelled = id
+            current?.cancel()
+        } else if (loadingCallId == id && ProcessingStatus.firstRequested() == null && !Prefs(this).autoTranscribe) {
+            // Nothing else would use the model: don't keep loading it.
+            stopRunNow()
+        }
+    }
+
+    /** Stops the whole run; the current call returns to the queue (or to its old transcript). */
+    private fun stopRunNow() {
+        if (!running || stopping) return
+        stopping = true
+        ProcessingLog.write(this, "stop requested by the user")
+        ProcessingStatus.set(ProcessingStatus.state.value.copy(phase = "stopping"))
+        current?.cancel()
+        runJob?.cancel()
     }
 
     /**
@@ -118,6 +158,7 @@ class TranscriptionService : Service() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "callnotes:transcribe")
             .apply { acquire(3 * 60 * 60 * 1000L) }
         var transcriber: Transcriber? = null
+        var lastWork: Job? = null
         try {
             ProcessingLog.step(this, "run start · ${ProcessingLog.deviceLine(this)}")
             // A call that just ended is still being saved; give it a moment to land.
@@ -136,19 +177,23 @@ class TranscriptionService : Service() {
                 val (call, requested) = nextCall(dao) ?: break
                 waitWhileHot()
                 if (transcriber == null) {
-                    transcriber = loadModel(spec, file, call, dao)
+                    loadingCallId = call.id
+                    transcriber = try { loadModel(spec, file, call, dao) } finally { loadingCallId = null }
                     if (transcriber == null) { loadFailed = true; break }
                 }
+                // Cancelled while waiting for the model? Then skip it.
+                if (dao.get(call.id)?.status != CallStatus.RECORDED) continue
                 currentCallId = call.id
                 currentRequested = requested
                 val t = checkNotNull(transcriber)
                 val work = scope.async { process(call, t) }
                 current = work
+                lastWork = work
                 val ok = try {
                     work.await()
                 } catch (e: CancellationException) {
-                    currentCoroutineContext().ensureActive() // the service itself is stopping
-                    null // paused for a manual request
+                    currentCoroutineContext().ensureActive() // the whole run is stopping
+                    null // cancelled by the user, or paused for a manual request
                 } finally {
                     current = null
                     currentCallId = null
@@ -156,7 +201,12 @@ class TranscriptionService : Service() {
                 when (ok) {
                     true -> done++
                     false -> failed++
-                    null -> ProcessingLog.write(this, "call ${call.id}: paused, a manual request goes first")
+                    null -> if (userCancelled == call.id) {
+                        userCancelled = null
+                        ProcessingLog.write(this, "call ${call.id}: cancelled by the user")
+                    } else {
+                        ProcessingLog.write(this, "call ${call.id}: paused, a manual request goes first")
+                    }
                 }
             }
             if (!loadFailed) note(when {
@@ -165,7 +215,15 @@ class TranscriptionService : Service() {
                 else -> "תומללו $done, נכשלו $failed (${spec.displayName})"
             })
             ProcessingLog.end(this, "run end · transcribed $done, failed $failed")
+        } catch (e: CancellationException) {
+            if (stopping) {
+                note("התמלול נעצר. התמלול האוטומטי כבוי עד שתפעיל אותו שוב.")
+                ProcessingLog.end(this, "run end · stopped by the user")
+            }
+            throw e
         } finally {
+            // A cancelled chunk finishes its native call first; never close the engine under it.
+            withContext(NonCancellable) { lastWork?.join() }
             transcriber?.close()
             ProcessingStatus.set(ProcessingStatus.State())
             wakeLock?.takeIf { it.isHeld }?.release()
@@ -176,9 +234,11 @@ class TranscriptionService : Service() {
     /** Main thread: start another run if a request slipped in at the very end, else stop. */
     private fun finishRun() {
         running = false
-        if (ProcessingStatus.firstRequested() != null) {
+        val wasStopping = stopping
+        stopping = false
+        if (!wasStopping && ProcessingStatus.firstRequested() != null) {
             running = true
-            scope.launch { runQueue(false) }
+            runJob = scope.launch { runQueue(false) }
         } else {
             stopSelf(lastStartId)
         }
@@ -219,7 +279,7 @@ class TranscriptionService : Service() {
     /** Returns true if the call was transcribed. */
     private suspend fun process(call: CallEntity, transcriber: Transcriber): Boolean {
         val dao = (application as CallNotesApp).database.calls()
-        dao.setStatus(call.id, CallStatus.TRANSCRIBING, null, null)
+        dao.setStatusOnly(call.id, CallStatus.TRANSCRIBING)
         ProcessingStatus.set(ProcessingStatus.State(true, call.id, 0, 0, "transcribing"))
         val converted = File(cacheDir, "convert_${call.id}.wav")
         val started = System.currentTimeMillis()
@@ -248,7 +308,10 @@ class TranscriptionService : Service() {
             return true
         } catch (e: Throwable) {
             if (e is CancellationException) {
-                withContext(NonCancellable) { dao.setStatus(call.id, CallStatus.RECORDED, null, null) }
+                // Cancelled by the user → held; paused or run stopped → back to the queue.
+                // Either way an existing transcript (re-transcription) comes back.
+                val otherwise = if (userCancelled == call.id) CallStatus.HELD else CallStatus.RECORDED
+                withContext(NonCancellable) { dao.revertTranscription(call.id, otherwise) }
                 throw e
             }
             ProcessingLog.write(this, "call ${call.id}: FAILED after ${secs(started)}: ${describe(e)}")
@@ -273,6 +336,7 @@ class TranscriptionService : Service() {
     private fun note(text: String) = note(this, text)
 
     override fun onDestroy() {
+        if (instance === this) instance = null
         scope.cancel()
         ProcessingStatus.set(ProcessingStatus.State())
         wakeLock?.takeIf { it.isHeld }?.release()
@@ -282,6 +346,31 @@ class TranscriptionService : Service() {
     companion object {
         private const val EXTRA_AFTER_CALL = "after_call"
         private const val EXTRA_CALL_ID = "call_id"
+        const val ACTION_STOP = "com.callnotes.action.STOP_TRANSCRIPTION"
+
+        @Volatile private var instance: TranscriptionService? = null
+
+        /**
+         * Cancels one call: removed from the queue, stopped if it's being transcribed, and
+         * marked held so automatic runs skip it (or back to its old transcript, if any).
+         */
+        fun cancelCall(context: Context, id: Long) {
+            ProcessingStatus.unrequest(id)
+            val app = context.applicationContext as CallNotesApp
+            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch { app.database.calls().cancelWaiting(id) }
+            Handler(Looper.getMainLooper()).post { instance?.cancelCallNow(id) }
+        }
+
+        /**
+         * Stops all transcription now and turns automatic transcription off, so it doesn't
+         * start again on the next app open. The current call goes back to the queue.
+         */
+        fun stopAll(context: Context) {
+            Prefs(context).autoTranscribe = false
+            ProcessingStatus.clearRequests()
+            ProcessingStatus.touch()
+            Handler(Looper.getMainLooper()).post { instance?.stopRunNow() }
+        }
 
         /**
          * Starts processing if a model is ready. Safe to call often. With [callId] that

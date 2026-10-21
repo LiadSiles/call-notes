@@ -12,6 +12,8 @@ object CallStatus {
     const val TRANSCRIBING = "transcribing"
     const val TRANSCRIBED = "transcribed"
     const val TRANSCRIBE_FAILED = "transcribe_failed"
+    /** The user cancelled its transcription: not picked up automatically; manual start only. */
+    const val HELD = "held"
 }
 
 /** What happened when the app tried to put the call on speakerphone. */

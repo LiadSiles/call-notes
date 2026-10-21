@@ -64,6 +64,17 @@ object SetupChecks {
         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
+    /** The system list where battery optimisation can be turned back on; falls back to app details. */
+    fun openBatterySettings(context: Context) {
+        try {
+            context.startActivity(
+                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: Exception) {
+            context.startActivity(appDetails(context))
+        }
+    }
+
     /** HyperOS / MIUI "Autostart" screen; falls back to the app's settings page. */
     fun startXiaomiAutostart(context: Context) {
         val autostart = Intent().setComponent(

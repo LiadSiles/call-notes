@@ -58,6 +58,29 @@ abstract class CallDao {
     @Query("UPDATE calls SET status = 'transcribe_failed', error = :error WHERE status = 'transcribing'")
     abstract suspend fun failInterrupted(error: String)
 
+    /** Changes the status and clears the error, keeping the model of an existing transcript. */
+    @Query("UPDATE calls SET status = :status, error = NULL WHERE id = :id")
+    abstract suspend fun setStatusOnly(id: Long, status: String)
+
+    @Query("SELECT COUNT(*) FROM segments WHERE callId = :callId")
+    abstract suspend fun segmentCount(callId: Long): Int
+
+    /**
+     * Where a call goes when its transcription is cancelled or interrupted: back to its
+     * existing transcript if it has one (a re-transcription leaves the old one in place
+     * until the new one is complete), else [otherwise].
+     */
+    @Transaction
+    open suspend fun revertTranscription(id: Long, otherwise: String) {
+        setStatusOnly(id, if (segmentCount(id) > 0) CallStatus.TRANSCRIBED else otherwise)
+    }
+
+    /** Cancels a call that is still waiting (not yet being transcribed). */
+    @Transaction
+    open suspend fun cancelWaiting(id: Long) {
+        if (get(id)?.status == CallStatus.RECORDED) revertTranscription(id, CallStatus.HELD)
+    }
+
     @Query("SELECT * FROM segments WHERE callId = :callId ORDER BY idx")
     abstract fun observeSegments(callId: Long): Flow<List<SegmentEntity>>
 

@@ -53,6 +53,17 @@ class Prefs(context: Context) {
         get() = sp.getString("processing_stage", null)
         set(value) { sp.edit().putString("processing_stage", value).commit() }
 
+    /**
+     * Puts the switches back to their defaults (recording on, internet calls on, speaker off,
+     * auto-transcribe on, Wi-Fi-only downloads). Leaves the model, permissions and data alone.
+     */
+    fun resetSwitches() {
+        sp.edit()
+            .remove("recording_enabled").remove("record_voip").remove("auto_speaker_v2")
+            .remove("auto_transcribe").remove("wifi_only")
+            .apply()
+    }
+
     /** Active model id (see ModelCatalog). Only ever set to an installed model. */
     var modelId: String?
         get() = sp.getString("model_id", null)

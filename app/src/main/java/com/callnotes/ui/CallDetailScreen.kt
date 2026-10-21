@@ -67,6 +67,7 @@ import com.callnotes.data.SegmentEntity
 import com.callnotes.data.SpeakerResult
 import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.TranscriptionService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -107,10 +108,11 @@ fun CallDetailScreen(
     val startTranscription: () -> Unit = {
         ProcessingStatus.request(c.id)
         scope.launch(Dispatchers.IO) {
-            dao.setStatus(c.id, CallStatus.RECORDED, null, null)
+            dao.setStatusOnly(c.id, CallStatus.RECORDED)
             withContext(Dispatchers.Main) { onTranscribe() }
         }
     }
+    val cancelTranscription: () -> Unit = { TranscriptionService.cancelCall(context, c.id) }
     val path = c.filePath
     val traceFile = path?.let { CallTrace.fileFor(File(it)) }?.takeIf { it.exists() }
 
@@ -161,7 +163,7 @@ fun CallDetailScreen(
 
             item {
                 TranscriptState(c, processing, queued = c.id in requested, lastRun = lastRun,
-                    onStart = startTranscription, onShowLog = { showLog = true })
+                    onStart = startTranscription, onCancel = cancelTranscription, onShowLog = { showLog = true })
             }
 
             if (c.status == CallStatus.TRANSCRIBED && c.id !in requested) {
@@ -273,6 +275,7 @@ private fun TranscriptState(
     queued: Boolean,
     lastRun: String?,
     onStart: () -> Unit,
+    onCancel: () -> Unit,
     onShowLog: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
@@ -291,8 +294,13 @@ private fun TranscriptState(
 
     @Composable
     fun Progress(title: String, detail: String?, fraction: Float?) {
+      val stopping = processing.phase == "stopping"
       Panel {
-        Text(title, style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(if (stopping) "עוצר…" else title, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f))
+            if (!stopping) OutlinedButton(onClick = onCancel) { Text("ביטול") }
+        }
         detail?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
         }
@@ -304,7 +312,7 @@ private fun TranscriptState(
 
     when {
         // The model is loading for this call (before its status changes).
-        onThis && processing.phase == "loading" -> Progress(
+        onThis && c.status != CallStatus.TRANSCRIBING && processing.phase in setOf("loading", "stopping") -> Progress(
             "טוען את מודל התמלול… ${elapsed(processing.since)}",
             "בטעינה הראשונה זה יכול לקחת עד דקה או שתיים.",
             null,
@@ -348,6 +356,12 @@ private fun TranscriptState(
             }
             FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) { Text("נסה שוב") }
             LastRun()
+        }
+        c.status == CallStatus.HELD -> Panel {
+            Text("התמלול בוטל.", style = MaterialTheme.typography.bodyMedium)
+            Text("ההקלטה לא תתומלל אוטומטית. אפשר לתמלל אותה בכל זמן:",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+            FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) { Text("תמלל עכשיו") }
         }
         c.status == CallStatus.RECORD_FAILED -> Panel {
             Text("לא נשמרה הקלטה לשיחה הזו.", style = MaterialTheme.typography.bodyMedium)

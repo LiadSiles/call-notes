@@ -96,6 +96,7 @@ internal fun SetupSection(
     onAccessibility: () -> Unit,
     onAppDetails: () -> Unit,
     onBattery: () -> Unit,
+    onBatteryUndo: () -> Unit,
     onAutostart: () -> Unit,
 ) {
     val a11yOn = setup.a11yOn
@@ -109,6 +110,7 @@ internal fun SetupSection(
                 body = "מיקרופון (ההקלטה עצמה) ומצב טלפון (לדעת מתי שיחה מתחילה ומסתיימת).",
                 action = "אישור הרשאות",
                 onAction = onPermissions,
+                undo = "ניהול הרשאות" to onAppDetails,
             )
             if (!setup.permissionsOk) {
                 TextButton(onClick = onAppDetails) { Text("לא נפתח חלון? אשר מפרטי האפליקציה ← הרשאות") }
@@ -120,6 +122,7 @@ internal fun SetupSection(
                     "אנדרואיד מתיר הקלטה בזמן שיחה רק לשירות כזה.",
                 action = "פתיחת הגדרות נגישות",
                 onAction = onAccessibility,
+                undo = "כיבוי בהגדרות הנגישות" to onAccessibility,
             )
             if (!a11yOn && Build.VERSION.SDK_INT >= 33) {
                 Text(
@@ -136,6 +139,7 @@ internal fun SetupSection(
                 body = "כדי שהמערכת לא תעצור את השירות ברקע.",
                 action = "ביטול הגבלה",
                 onAction = onBattery,
+                undo = "החזרת הגבלת הסוללה" to onBatteryUndo,
             )
             if (SetupChecks.isXiaomiFamily) {
                 SetupRow(
@@ -158,7 +162,6 @@ internal fun OptionalSection(
     onNotifications: () -> Unit,
     onAppDetails: () -> Unit,
 ) {
-    if (setup.callLogOk && setup.notificationsOk) return
     Panel {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             
@@ -167,42 +170,58 @@ internal fun OptionalSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!setup.callLogOk) {
-                OptionalRow(
-                    title = "יומן שיחות",
-                    body = "מוסיף לכל שיחה מספר, שם וכיוון, ומוחק הקלטות של שיחות יוצאות שלא נענו.",
-                    action = "אישור",
-                    onAction = onCallLog,
-                )
+            OptionalRow(
+                title = "יומן שיחות",
+                body = "מוסיף לכל שיחה מספר, שם וכיוון, ומוחק הקלטות של שיחות יוצאות שלא נענו.",
+                granted = setup.callLogOk,
+                onGrant = onCallLog,
+                onRevoke = onAppDetails,
+            )
+            OptionalRow(
+                title = "התראות",
+                body = "התראה בזמן הקלטה ועל תקלות.",
+                granted = setup.notificationsOk,
+                onGrant = onNotifications,
+                onRevoke = onAppDetails,
+            )
+            if (!setup.callLogOk || !setup.notificationsOk) {
+                TextButton(onClick = onAppDetails) { Text("לא נפתח חלון? פרטי האפליקציה ← הרשאות") }
             }
-            if (!setup.notificationsOk) {
-                OptionalRow(
-                    title = "התראות",
-                    body = "התראה בזמן הקלטה ועל תקלות.",
-                    action = "אישור",
-                    onAction = onNotifications,
-                )
-            }
-            TextButton(onClick = onAppDetails) { Text("לא נפתח חלון? פרטי האפליקציה ← הרשאות") }
         }
     }
 }
 
 @Composable
-private fun OptionalRow(title: String, body: String, action: String, onAction: () -> Unit) {
+private fun OptionalRow(title: String, body: String, granted: Boolean, onGrant: () -> Unit, onRevoke: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                if (granted) Pill("מאושר", Tone.Good, Modifier.padding(start = 8.dp))
+            }
             Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(12.dp))
-        TextButton(onClick = onAction) { Text(action) }
+        // Android lets an app ask for a permission but not give it back: revoking opens the app's settings.
+        if (granted) TextButton(onClick = onRevoke) { Text("ביטול") }
+        else TextButton(onClick = onGrant) { Text("אישור") }
     }
 }
 
-/** [done] null = can't be verified automatically. */
+/**
+ * [done] null = can't be verified automatically. [undo] = label + action shown once the
+ * step is done, so every setup step can be reversed (Android only allows that in its own
+ * settings screens, so these open the right one).
+ */
 @Composable
-private fun SetupRow(done: Boolean?, title: String, body: String, action: String, onAction: () -> Unit) {
+private fun SetupRow(
+    done: Boolean?,
+    title: String,
+    body: String,
+    action: String,
+    onAction: () -> Unit,
+    undo: Pair<String, () -> Unit>? = null,
+) {
     Row(verticalAlignment = Alignment.Top) {
         Icon(
             imageVector = if (done == true) Icons.Filled.CheckCircle else Icons.Filled.Warning,
@@ -220,6 +239,8 @@ private fun SetupRow(done: Boolean?, title: String, body: String, action: String
             Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (done != true) {
                 FilledTonalButton(onClick = onAction, modifier = Modifier.padding(top = 6.dp)) { Text(action) }
+            } else if (undo != null) {
+                TextButton(onClick = undo.second, contentPadding = PaddingValues(0.dp)) { Text(undo.first) }
             }
         }
     }

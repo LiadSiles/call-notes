@@ -26,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +58,10 @@ fun CallsScreen(
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val models by app.models.state.collectAsStateWithLifecycle()
     val setup = rememberSetupState(resumeTick)
+    val prefs = remember { com.callnotes.util.Prefs(context) }
+    val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
+    var autoOn by remember(noteVersion, resumeTick) { mutableStateOf(prefs.autoTranscribe) }
+    val waiting = items.count { it.call.status == com.callnotes.data.CallStatus.RECORDED }
     val ready = setup.requiredOk && service.connected && service.monitoring
 
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
@@ -92,14 +98,35 @@ fun CallsScreen(
                     onAction = onOpenSettings,
                 )
             }
+            if (!processing.running && !autoOn && waiting > 0 && models.ready) item {
+                Banner(
+                    title = "התמלול האוטומטי כבוי",
+                    body = if (waiting == 1) "הקלטה אחת ממתינה לתמלול." else "$waiting הקלטות ממתינות לתמלול.",
+                    action = "הפעלה מחדש",
+                    onAction = {
+                        prefs.autoTranscribe = true
+                        autoOn = true
+                        com.callnotes.processing.TranscriptionService.start(context)
+                    },
+                )
+            }
             if (processing.running) item {
                 val label = when (processing.phase) {
+                    "stopping" -> "עוצר את התמלול…"
                     "loading" -> "טוען את מודל התמלול…"
                     "waiting_thermal" -> "הטלפון חם — התמלול ממתין שיתקרר"
                     else -> "מתמלל שיחה · מקטע ${processing.chunksDone} מתוך ${processing.chunksTotal}"
                 }
                 Panel {
-                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        if (processing.phase != "stopping") {
+                            TextButton(onClick = {
+                                com.callnotes.processing.TranscriptionService.stopAll(context)
+                                autoOn = false
+                            }) { Text("עצירה") }
+                        }
+                    }
                     Spacer(Modifier.padding(4.dp))
                     if (processing.chunksTotal > 0) {
                         LinearProgressIndicator(

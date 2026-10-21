@@ -52,7 +52,15 @@ object Notifications {
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .addAction(0, "עצירה", stopTranscription(context))
             .build()
+
+    private fun stopTranscription(context: Context): PendingIntent = PendingIntent.getService(
+        context, 1,
+        Intent(context, com.callnotes.processing.TranscriptionService::class.java)
+            .setAction(com.callnotes.processing.TranscriptionService.ACTION_STOP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     fun updateProcessing(context: Context, progress: String) {
         if (Build.VERSION.SDK_INT >= 33 &&

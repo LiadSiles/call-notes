@@ -6,10 +6,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -27,6 +32,9 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
     val app = context.applicationContext as CallNotesApp
     val prefs = remember { Prefs(context) }
     var tick by remember { mutableIntStateOf(0) }
+    // Bumped by "restore defaults" so every switch re-reads its saved value.
+    var resetKey by remember { mutableIntStateOf(0) }
+    var confirmReset by remember { mutableStateOf(false) }
     val setup = rememberSetupState(resumeTick + tick)
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         tick++
@@ -53,17 +61,18 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
                     onAccessibility = { context.startActivity(SetupChecks.accessibilitySettings()) },
                     onAppDetails = { context.startActivity(SetupChecks.appDetails(context)) },
                     onBattery = { context.startActivity(SetupChecks.batteryRequest(context)) },
+                    onBatteryUndo = { SetupChecks.openBatterySettings(context) },
                     onAutostart = { SetupChecks.startXiaomiAutostart(context) },
                 )
             }
         }
         item { SectionHeader("תמלול") }
-        item { ModelSection(app.models, prefs, onModelReady) }
-        item { TranscriptionSwitches(prefs) }
+        item { key(resetKey) { ModelSection(app.models, prefs, onModelReady) } }
+        item { key(resetKey) { TranscriptionSwitches(prefs) } }
         item { SectionHeader("כללי") }
-        item { SettingsSection(prefs) }
-        if (!setup.callLogOk || !setup.notificationsOk) {
-            item { SectionHeader("תוספות") }
+        item { key(resetKey) { SettingsSection(prefs) } }
+        run {
+            item { SectionHeader("הרשאות נוספות") }
             item {
                 OptionalSection(
                     setup = setup,
@@ -82,8 +91,14 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
                     onAccessibility = { context.startActivity(SetupChecks.accessibilitySettings()) },
                     onAppDetails = { context.startActivity(SetupChecks.appDetails(context)) },
                     onBattery = { context.startActivity(SetupChecks.batteryRequest(context)) },
+                    onBatteryUndo = { SetupChecks.openBatterySettings(context) },
                     onAutostart = { SetupChecks.startXiaomiAutostart(context) },
                 )
+            }
+        }
+        item {
+            OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.padding(top = 24.dp)) {
+                Text("שחזור הגדרות ברירת מחדל")
             }
         }
         item {
@@ -95,4 +110,25 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
             )
         }
     }
+
+    if (confirmReset) AlertDialog(
+        onDismissRequest = { confirmReset = false },
+        title = { Text("לשחזר את ברירות המחדל?") },
+        text = {
+            Text(
+                "המתגים יחזרו למצב ההתחלתי: הקלטת שיחות פעילה, שיחות אינטרנט פעילות, רמקול אוטומטי כבוי, " +
+                    "תמלול אוטומטי פעיל והורדת מודל ב-Wi-Fi בלבד.\n\n" +
+                    "ההקלטות, התמלולים, המודל וההרשאות לא משתנים."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                prefs.resetSwitches()
+                com.callnotes.processing.ProcessingStatus.touch()
+                resetKey++
+                confirmReset = false
+            }) { Text("שחזור") }
+        },
+        dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("ביטול") } },
+    )
 }
