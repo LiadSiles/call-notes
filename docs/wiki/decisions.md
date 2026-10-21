@@ -10,13 +10,14 @@ model only changes to an installed one, or after a user-started download verifie
 an uninstalled saved choice falls back to any installed model. Each transcription run
 writes a one-line outcome (`Prefs.lastProcessing`) shown in the transcription card.
 
-### 2026-10-21 — UI redesign parked on `dev/0.3.2`
-Theme, bottom navigation, grouped call list with transcript preview and a call detail
-screen are on `dev/0.3.2`. The new settings screen (setup checklist + toggles) could not
-be written in the session that started it; that branch doesn't build until
-`ui/SettingsScreen.kt` exists (signature: `SettingsScreen(contentPadding, resumeTick,
-onModelReady)`, using `rememberSetupState`, `ModelSection`, `SetupChecks`). Main keeps
-the 0.3.x single-screen UI.
+### 2026-10-21 — UI redesign (0.3.3)
+Fixed "ink on paper" palette (green brand, warm neutrals, amber for in-progress) instead
+of dynamic colour; bottom navigation with two tabs; call list grouped by day with the
+first transcript line; a call detail screen (player, transcript that highlights the
+playing segment and seeks on tap, technical details folded away). The settings tab
+reuses the 0.3.x setup/permission/switch sections unchanged (`ui/SettingsSections.kt`,
+only the containers restyled) — writing a new settings screen was stopped by a safety
+filter in the session, so the existing, already-shipped code was moved instead.
 
 ### 2026-10-20 — 0.3 transcription design choices
 - **Model download via DownloadManager** into the app-specific external dir (resumes,

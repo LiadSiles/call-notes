@@ -18,3 +18,10 @@ change that made it stale.
 
 The owner's Hebrew planning document (claude.ai artifact "אפליקציית סיכום שיחות –
 תכנון מקצה לקצה") is the product-level source; this wiki is the engineering one.
+
+## UI map (0.3.3)
+
+`ui/MainActivity.kt` (tabs + navigation) → `CallsScreen` (list) → `CallDetailScreen`;
+`SettingsScreen` (arranges `SetupSection`, `ModelSection`, `TranscriptionSwitches`,
+`SettingsSection`, `OptionalSection`). Theme in `ui/theme/Theme.kt`; shared pieces
+(`Panel`, `Pill`, `Avatar`, `SectionHeader`, formatters) in `ui/Components.kt`.
