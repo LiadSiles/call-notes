@@ -38,6 +38,12 @@ v<versionName>-build.<run_number>` as a **prerelease** with
 `--recurse-submodules` (CI checks out with `submodules: true`). CMake 3.22.1 via AGP;
 the NDK is AGP's default. Debug and release APKs both compile it with Release flags.
 
+sherpa-onnx is not compiled: `scripts/fetch-sherpa-onnx.sh` downloads its release
+tarball (pinned version + SHA-256), and copies `libsherpa-onnx-jni.so` plus the libraries
+it links against (found with `readelf`) into the git-ignored `app/src/main/jniLibs/`.
+Run it once locally before building. CI fails if any of the three native libraries is
+missing from the APK and prints their sizes as notices.
+
 ## Signing
 
 `keystore/debug.keystore` (password `android`, alias `androiddebugkey`) is committed on

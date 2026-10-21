@@ -40,10 +40,14 @@ decisions already taken and why).
 app/src/main/java/com/callnotes/
   capture/    call detection, recording, speakerphone, call-log lookup
   data/       Room (CallEntity, CallDao, AppDatabase)
-  inference/  Transcriber / Analyzer interfaces, model catalog, Whisper (whisper/) and Gemma
-app/src/main/cpp/   JNI bridge to whisper.cpp (third_party/whisper.cpp submodule)
-  ui/         Compose UI (single screen for now), setup checks, audio player
+  inference/  Transcriber / Analyzer interfaces, model catalog, Whisper (whisper/),
+              speakers (speakers/), Gemma
+  processing/ background transcription service, log
+  ui/         Compose UI, setup checks, audio player
   util/       prefs, notifications
+app/src/main/java/com/k2fsa/sherpa/onnx/  sherpa-onnx Kotlin API (verbatim copy)
+app/src/main/cpp/   JNI bridge to whisper.cpp (third_party/whisper.cpp submodule)
+scripts/fetch-sherpa-onnx.sh  prebuilt diarization runtime (run before building)
 ```
 
 ## Working agreements

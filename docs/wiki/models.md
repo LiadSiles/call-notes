@@ -81,6 +81,26 @@ Facts and choices:
 - Model files per role: `Prefs.modelFor(role)`; the analysis role keeps the old
   `model_id` key (the user's Gemma choice).
 
+## Who said what: sherpa-onnx diarization (0.4.1)
+
+| Piece | Where |
+|---|---|
+| Runtime: sherpa-onnx v1.13.8 prebuilt `libsherpa-onnx-jni.so` + `libonnxruntime.so` (arm64) | fetched by `scripts/fetch-sherpa-onnx.sh` (pinned SHA-256) into `app/src/main/jniLibs/` (git-ignored); CI runs it before the build |
+| Kotlin API (verbatim copy, Apache-2.0; JNI looks fields up by name — never rename) | `app/src/main/java/com/k2fsa/sherpa/onnx/` |
+| Models: pyannote segmentation-3.0 ONNX (MIT, 6 MB) + WeSpeaker ResNet34-LM VoxCeleb (CC-BY-4.0, 26.5 MB) — HF mirrors by the sherpa-onnx author, pinned commits + SHA-256 | `ModelCatalog.SPEAKER_PACK`, downloaded as one pack (`ModelManager.startDownloads`) |
+| Diarize (2 clusters), per-speaker fingerprint from its longest turns (≤ 20 s), merge if cosine ≥ 0.75 | `inference/speakers/SpeakerDiarizer.kt` |
+| Words → speaker by max overlap (nearest turn ≤ 1 s, else previous); line per speaker run, new line after 2.5 s pause | `inference/speakers/SpeakerAligner.kt` (+ tests) |
+| Owner voice sample (MIC, 8–20 s) → fingerprint in `files/voice_profile.bin`; `whichIsMe` = cosine ≥ 0.35 and ≥ 0.10 margin | `inference/speakers/Voice.kt`, `VoiceProfile.kt`, `ui/SpeakerSection.kt` |
+
+- DB v5: `segments.speaker` (0/1/null), `calls.speakerEmbeddings` (2×dim LE floats),
+  `calls.meSpeaker`. A new/deleted voice sample re-labels every call from the stored
+  fingerprints (`VoiceProfile.relabelAll`) — no re-run.
+- sherpa's progress callback return value is ignored: diarization can't be aborted
+  mid-run (it's seconds, not minutes); cancellation is checked right after.
+- Thresholds (0.75 same-voice, 0.35/0.10 owner match) are first guesses; the log
+  prints the two voices' similarity and the "me" decision per call to tune them.
+- A failure in speaker separation keeps the plain transcript (logged).
+
 ## Default: Gemma 4, one model for both roles (0.3 — superseded for transcription)
 
 - Family: E2B, E4B, 26B A4B, 31B. **Only E2B and E4B** run on phones and have
