@@ -27,6 +27,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      # Speaker diarization runtime (sherpa-onnx + onnxruntime), pinned version + checksum.
+      - name: Fetch sherpa-onnx libraries
+        run: |
+          OUT=$(bash scripts/fetch-sherpa-onnx.sh)
+          echo "$OUT"
+          echo "::notice::$(echo "$OUT" | grep 'sha256')"
+          echo "$OUT" | grep '\.so' | while read -r line; do echo "::notice::$line"; done
+
       # Compiler and resource errors are re-emitted as annotations so they can be read
       # through the checks API (raw job logs aren't reachable from every environment).
       - name: Build debug APK
@@ -45,7 +53,9 @@ jobs:
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           unzip -l "$APK" | grep -E '\.so$' | while read -r size _ _ name; do echo "::notice::$name $((size/1024)) KB"; done
-          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libcallnotes_whisper.so' || { echo "::error::libcallnotes_whisper.so missing from APK"; exit 1; }
+          for lib in libcallnotes_whisper.so libsherpa-onnx-jni.so libonnxruntime.so; do
+            unzip -l "$APK" | grep -q "lib/arm64-v8a/$lib" || { echo "::error::$lib missing from APK"; exit 1; }
+          done
           echo "::notice::APK $(( $(stat -c%s "$APK") / 1024 / 1024 )) MB"
 
       - name: Name the APK
