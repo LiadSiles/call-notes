@@ -16,7 +16,7 @@ nothing is written to shared storage.
 | Imported audio | `files/recordings/import_<millis>.<ext>` | `Importer` | as imported |
 | Transcripts (with speaker per line) | `databases/callnotes.db`, table `segments` | `TranscriptionService` | small |
 | Summaries | `databases/callnotes.db`, `calls.analysisJson`, `calls.summaryTitle` | `TranscriptionService` | small |
-| Tasks | `databases/callnotes.db`, table `tasks` | `TranscriptionService`, UI (done) | small |
+| Tasks (+ source lines, certain, createdAt — DB v7) | `databases/callnotes.db`, table `tasks` | `SummaryWorker`, UI (done) | small |
 | Temp audio while transcribing | `cache/convert_<id>.wav`, `cache/chunk.wav` | pipeline | deleted after use |
 | LiteRT-LM cache | `cache/` | LiteRT-LM | engine-managed |
 | Model | `Android/data/com.callnotes/files/models/gemma-4-E*-it.litertlm` (+ `.part` while downloading) | `ModelManager` | 2.6–3.7 GB |

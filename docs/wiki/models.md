@@ -146,6 +146,11 @@ The log line says which method ran and why (levels, gap, shares, voice-sample sc
   (`נתב"ג`), which ends the JSON string early ("Unterminated object"). The prompt asks for
   ״ / ׳, and `AnalysisPrompt.repairQuotes` fixes answers that still do it: letter-`"`-letter
   → ״, then any `"` inside a string not followed by `,` `:` `}` `]` is escaped.
+- 0.6: transcript lines numbered `[n]` (n = segment idx + 1); schema items are
+  `{"text"|"title", "lines": [n], "certain": bool}` (+ task `quote`, `due`), plus
+  `summary_certain`. Verification in `AnalysisPrompt.parse` (see decisions). New tasks
+  (title not among the call's previous tasks, normalised) get a notification; done ticks
+  survive a re-summary by title.
 - A new transcript clears the old analysis (`CallDao.replaceTranscript` → `clearAnalysis`).
 - The model's answer is call content: the log records only sizes, counts and timings.
 - Speaker labels in the prompt: "אני" / contact name when the owner is known, else

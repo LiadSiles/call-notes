@@ -3,6 +3,21 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Summaries must show their evidence (0.6.0)
+Owner: summaries, key points and tasks must be very accurate, and anything uncertain must
+be marked. Rather than trust the model's self-assessment alone, every item cites
+transcript line numbers and a `certain` flag, and `AnalysisPrompt.parse` downgrades to
+uncertain anything it can't verify: cited lines out of range or missing, a task quote not
+found in its lines (normalised, ≥ 75 % of words), a due date it had to drop. The cited
+line doubles as the link from the item to the transcript. Pre-0.6 summaries (plain
+strings) still load, as uncited points.
+
+### 2026-10-21 — Speaker labels: physics first, user has the last word (0.6.0)
+At a ≥ 15 dB level gap the phone was at the owner's ear; louder = owner, and the voice
+sample (compared against a distorted earpiece leak) may not overrule it. Users fix the
+rest: long-press a line (this line is me / them), or swap the whole call
+(`calls.meSpeaker`). The summary then offers to re-run.
+
 ### 2026-10-21 — Two parallel workers, instant cancel (0.5.5)
 Owner wants transcription and summaries at the same time, a temporary notification per
 operation naming the call, and cancel that acts at once. `TranscriptionService` now hosts
