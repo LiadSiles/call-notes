@@ -3,6 +3,14 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Loudness first, voice embeddings second, for who-said-what (0.5.2)
+With one microphone at the owner's mouth, the strongest cue in a handset call is the
+level gap between the owner and the earpiece leak; general-purpose diarization
+(pyannote) is built for comparable voices and failed on the POCO (one speaker). So the
+level method runs first and the voice method only when levels are close. Rejected:
+lowering the merge threshold (would still split the owner's voice in two), requiring
+speakerphone (the owner holds the phone to the ear).
+
 ### 2026-10-21 — Hebrew Whisper + local diarization; Gemma for understanding (0.4)
 Owner: transcripts must say who said what, everything strictly on-device ("the whole
 point of the app is to guarantee privacy" — no cloud, no internet services; network

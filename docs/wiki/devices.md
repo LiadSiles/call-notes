@@ -47,3 +47,11 @@ _Observed <date>, app version <x.y>._
 - Background survival:
 - Notes:
 ```
+
+## POCO X6 Pro — speaker separation (2026-10-21)
+
+Handset call (phone at the ear), 0.5.1: pyannote + WeSpeaker put the whole call under
+one speaker. The other side only leaks from the earpiece into the mic, far quieter than
+the owner's voice; segmentation mostly hears the owner, the forced 2-way clustering
+splits that one voice and the merge rule (cosine ≥ 0.75) joins it back. → 0.5.2 uses
+loudness for such calls.

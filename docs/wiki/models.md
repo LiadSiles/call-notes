@@ -107,6 +107,21 @@ Facts and choices:
   prints the two voices' similarity and the "me" decision per call to tune them.
 - A failure in speaker separation keeps the plain transcript (logged).
 
+### Two methods, chosen per call (0.5.2)
+
+1. **Loudness** (`inference/speakers/LevelSpeakers.kt`, + tests) — first choice. Word
+   level = RMS over the word ±40 ms in dBFS; weighted 2-means; accepted if the clusters
+   are ≥ 7 dB apart and each side has ≥ 6 % of the speech time. Two-state Viterbi with a
+   Gaussian emission (pooled sd, floor 3 dB) and a switch probability that grows with the
+   pause before the word (0.03 < 250 ms … 0.45 ≥ 1.5 s). Louder = me; with a voice sample
+   and the speaker pack, the two sides' fingerprints may swap it. No models needed; no
+   fingerprints stored (`relabelAll` leaves these calls alone).
+2. **Voice embeddings** (pyannote + WeSpeaker) — when loudness doesn't separate
+   (speakerphone, VoIP). Input is loudness-equalised first (0.5 s windows, gain 0.5–20×,
+   pauses untouched) so the quieter side isn't dropped by segmentation.
+
+The log line says which method ran and why (levels, gap, shares, voice-sample scores).
+
 ## Summary and tasks: Gemma 4 text (0.5.0)
 
 | Piece | Where |
