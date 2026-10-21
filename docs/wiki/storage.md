@@ -18,6 +18,7 @@ nothing is written to shared storage.
 | Temp audio while transcribing | `cache/convert_<id>.wav`, `cache/chunk.wav` | pipeline | deleted after use |
 | LiteRT-LM cache | `cache/` | LiteRT-LM | engine-managed |
 | Model | `Android/data/com.callnotes/files/models/gemma-4-E*-it.litertlm` (+ `.part` while downloading) | `ModelManager` | 2.6–3.7 GB |
+| Transcription log | `files/transcription.log` (timings, memory, errors — no transcript text) | `ProcessingLog` | ≤ 64 KB, trimmed |
 | Settings | `shared_prefs/prefs.xml` | `Prefs` | tiny |
 
 Database rows (`calls`): times, direction, number + cached name (only with call-log

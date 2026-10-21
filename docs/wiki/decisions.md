@@ -3,6 +3,23 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Transcription queue order, feedback and log (0.3.5)
+Bug seen on the POCO: with a model installed, opening the app starts an automatic run
+over every pending recording (newest first). "Transcribe now" on another call only
+woke the running service, so the tapped call stayed "waiting" with no visible change.
+Now `TranscriptionService.start(callId=…)` puts the call in `ProcessingStatus.requested`
+(the UI shows "starting" at once); the service takes requests first and cancels an
+automatic run on a different call between chunks (that call returns to `recorded` —
+the reset runs under `NonCancellable`, before it was silently skipped). The model load
+is an explicit phase (`Transcriber.load()`) shown with elapsed time.
+`ProcessingLog` writes `files/transcription.log` (timings, free RAM, chunk counts,
+exceptions with top frames; never transcript text) and persists the current stage
+synchronously in prefs. `CallNotesApp.onCreate` treats a leftover stage as a run the
+system killed (OOM / native crash): logs it, notes it, and fails the stuck call with
+that stage so it gets a retry button. Rejected for now: a separate `:transcribe`
+process (would survive a native crash but needs cross-process status + Room
+multi-instance invalidation) — revisit if the log shows engine crashes.
+
 ### 2026-10-21 — Navigation and list state (0.3.4)
 The call list is a process-wide `StateFlow` (`CallNotesApp.callList`, `stateIn` Eagerly,
 null = not loaded yet) so returning to the list never renders an empty frame. List ↔
