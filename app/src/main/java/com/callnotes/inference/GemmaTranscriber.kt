@@ -1,6 +1,7 @@
 package com.callnotes.inference
 
 import android.content.Context
+import com.callnotes.audio.AudioLevel
 import com.callnotes.audio.Chunker
 import com.callnotes.audio.Wav
 import com.google.ai.edge.litertlm.Backend
@@ -68,7 +69,8 @@ class GemmaTranscriber(
             if (!chunk.silent) {
                 val samples = Wav.readSamples(audio, info, chunk.startSample,
                     (chunk.endSample - chunk.startSample).toInt())
-                Wav.write(tmp, samples)
+                // Level only for the model's copy; the recording itself is never written.
+                Wav.write(tmp, AudioLevel.normalize(samples))
                 val text = runChunk(tmp, languageHint)
                 segments += Transcript.Segment(chunk.startMs, chunk.endMs, text)
             }
@@ -81,14 +83,14 @@ class GemmaTranscriber(
 
     private fun runChunk(wav: File, languageHint: String): String {
         val config = ConversationConfig(
-            systemInstruction = Contents.of(SYSTEM),
             samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
             maxOutputToken = 512,
             thinkingConfig = ThinkingConfig(enableThinking = false),
         )
         engine().createConversation(config).use { conversation ->
             val reply = conversation.sendMessage(
-                Contents.of(Content.AudioFile(wav.absolutePath), Content.Text(prompt(languageHint)))
+                // Google's ASR template, instruction before the audio (Gemma audio docs).
+                Contents.of(Content.Text(prompt(languageHint)), Content.AudioFile(wav.absolutePath))
             )
             return reply.toString().trim()
         }
@@ -100,14 +102,23 @@ class GemmaTranscriber(
     }
 
     private companion object {
-        const val SYSTEM =
-            "You are a speech-to-text engine. You output only the exact words spoken in the audio."
-
+        /**
+         * The prompt Gemma's audio documentation gives for speech recognition
+         * (ai.google.dev/gemma/docs/capabilities/audio). Staying on the trained template
+         * matters more than extra instructions; 0.3.x used a free-form prompt plus a
+         * system instruction and got poor Hebrew output.
+         */
         fun prompt(languageHint: String): String {
-            val lang = if (languageHint == "he") "Hebrew (with occasional English words)" else languageHint
-            return "Transcribe this phone-call audio verbatim, in the language it is spoken " +
-                "(usually $lang). Write Hebrew in Hebrew letters. Do not translate, summarize, " +
-                "explain or add anything. If there is no speech, output nothing."
+            val lang = when (languageHint) {
+                "he" -> "Hebrew"
+                "en" -> "English"
+                else -> languageHint
+            }
+            return "Transcribe the following speech segment in $lang into $lang text.\n\n" +
+                "Follow these specific instructions for formatting the answer:\n" +
+                "* Only output the transcription, with no newlines.\n" +
+                "* When transcribing numbers, write the digits, i.e. write 1.7 and not one point seven, " +
+                "and write 3 instead of three."
         }
     }
 }

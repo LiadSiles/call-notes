@@ -285,7 +285,9 @@ class TranscriptionService : Service() {
         val started = System.currentTimeMillis()
         try {
             val source = File(call.filePath!!)
-            ProcessingLog.step(this, "call ${call.id}: preparing audio (${source.extension}, ${"%.1f".format(source.length() / 1e6)} MB)")
+            val before = fingerprint(source)
+            ProcessingLog.step(this, "call ${call.id}: preparing audio (${source.extension}, " +
+                "${"%.1f".format(source.length() / 1e6)} MB, sha256 $before)")
             val audio = AudioDecoder.ensureWorkingFormat(source, converted)
             var chunkStart = System.currentTimeMillis()
             val transcript = transcriber.transcribe(audio) { done, total ->
@@ -303,8 +305,11 @@ class TranscriptionService : Service() {
                 SegmentEntity(callId = call.id, idx = i, startMs = s.startMs, endMs = s.endMs, text = s.text)
             }
             dao.replaceTranscript(call.id, rows, transcriber.modelId)
+            // Proof that transcription only reads the recording (owner reported worse playback after it).
+            val after = fingerprint(source)
             ProcessingLog.write(this, "call ${call.id}: done in ${secs(started)}, ${rows.size} segments, " +
-                "${rows.sumOf { it.text.length }} chars")
+                "${rows.sumOf { it.text.length }} chars · recording " +
+                if (after == before) "unchanged (sha256 $after)" else "CHANGED! $before → $after")
             return true
         } catch (e: Throwable) {
             if (e is CancellationException) {
@@ -406,6 +411,16 @@ class TranscriptionService : Service() {
             com.callnotes.util.Prefs(context).lastProcessing = "$time · $text"
             ProcessingStatus.touch()
         }
+
+        /** Short SHA-256 of a file (first 12 hex chars), for the log. */
+        internal fun fingerprint(file: File): String = runCatching {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            file.inputStream().buffered(1 shl 16).use { input ->
+                val buf = ByteArray(1 shl 16)
+                while (true) { val n = input.read(buf); if (n < 0) break; digest.update(buf, 0, n) }
+            }
+            digest.digest().take(6).joinToString("") { "%02x".format(it) }
+        }.getOrDefault("unreadable")
 
         private fun secs(since: Long) = "%.1f s".format((System.currentTimeMillis() - since) / 1000.0)
 
