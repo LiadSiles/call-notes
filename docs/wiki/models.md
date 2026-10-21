@@ -101,6 +101,20 @@ Facts and choices:
   prints the two voices' similarity and the "me" decision per call to tune them.
 - A failure in speaker separation keeps the plain transcript (logged).
 
+## Summary and tasks: Gemma 4 text (0.5.0)
+
+| Piece | Where |
+|---|---|
+| Prompt (call date + weekday, who is who, transcript ≤ 12k chars keeping start+end, JSON schema, rules) and tolerant JSON parsing, due-date validation (call date −1 day … +2 years) | `inference/AnalysisPrompt.kt` (+ tests, real org.json in tests) |
+| Model call: LiteRT-LM `Engine` text only (no audio backend), CPU, `maxNumTokens` 8192, greedy, thinking off, ≤ 1536 output tokens | `inference/GemmaAnalyzer.kt` |
+| Pass: after all transcriptions, Whisper + diarizer are closed first (memory), then requested calls, then (auto on) newest unanalysed | `TranscriptionService.analysePending` |
+| Storage: `calls.analysisStatus/analysisJson/summaryTitle/analysisModel/analysisError`, `tasks` table (DB v6) | `data/` |
+
+- A new transcript clears the old analysis (`CallDao.replaceTranscript` → `clearAnalysis`).
+- The model's answer is call content: the log records only sizes, counts and timings.
+- Speaker labels in the prompt: "אני" / contact name when the owner is known, else
+  "דובר 1/2" and the prompt says ownership is unknown.
+
 ## Default: Gemma 4, one model for both roles (0.3 — superseded for transcription)
 
 - Family: E2B, E4B, 26B A4B, 31B. **Only E2B and E4B** run on phones and have

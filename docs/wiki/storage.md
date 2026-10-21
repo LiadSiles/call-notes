@@ -14,7 +14,9 @@ nothing is written to shared storage.
 | Call recordings | `files/recordings/call_<startMillis>.wav` | `WavRecorder` | ~1.9 MB/min (16 kHz mono PCM16) |
 | Call metadata | `databases/callnotes.db` (+ `-wal`, `-shm`) | Room | small |
 | Imported audio | `files/recordings/import_<millis>.<ext>` | `Importer` | as imported |
-| Transcripts | `databases/callnotes.db`, table `segments` | `TranscriptionService` | small |
+| Transcripts (with speaker per line) | `databases/callnotes.db`, table `segments` | `TranscriptionService` | small |
+| Summaries | `databases/callnotes.db`, `calls.analysisJson`, `calls.summaryTitle` | `TranscriptionService` | small |
+| Tasks | `databases/callnotes.db`, table `tasks` | `TranscriptionService`, UI (done) | small |
 | Temp audio while transcribing | `cache/convert_<id>.wav`, `cache/chunk.wav` | pipeline | deleted after use |
 | LiteRT-LM cache | `cache/` | LiteRT-LM | engine-managed |
 | Model | `Android/data/com.callnotes/files/models/gemma-4-E*-it.litertlm` (+ `.part` while downloading) | `ModelManager` | 2.6–3.7 GB |
@@ -34,6 +36,5 @@ Network: the only network use is the model download (DownloadManager, Hugging Fa
 
 ## Planned
 
-- Summaries and tasks in the same database, 0.4–0.5.
 - 0.8: SQLCipher encryption, retention policy (default: audio 30 days, text kept),
   compressed audio.

@@ -20,7 +20,7 @@ _Last updated: 2026-10-21_
 | 0.3.8 | Gemma's documented ASR prompt (text before audio, no system instruction), per-chunk level normalization, recording SHA-256 before/after in the log | ✅ built, awaiting device test |
 | 0.4.0 | Transcription → ivrit.ai Hebrew Whisper large-v3-turbo on whisper.cpp (JNI, on-device); models per role (transcribe / analyze) | ✅ built (lib verified in APK), awaiting device test |
 | 0.4.1 | Who said what: sherpa-onnx (pyannote seg-3.0 + WeSpeaker ResNet34-LM), exactly 2 speakers, word-level alignment; owner voice sample → "me" / contact name; chat view; DB v5 | ✅ built, awaiting device test |
-| 0.5 | Summary + tasks with Gemma 4 over the speaker-labelled transcript; full call screen | |
+| 0.5.0 | Summary + tasks with Gemma 4 (LiteRT-LM, text) over the speaker-labelled transcript; tasks table with tick-off; summary title in the list; DB v6 | ✅ built, awaiting device test |
 | 0.6 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
 | 0.6+ | Model swapping UI: reprocess, comparison screen, quantized Whisper | |
 | 0.7 | Path B adapters: Samsung, OnePlus/Oppo/Realme, Vivo | |
@@ -32,7 +32,8 @@ _Last updated: 2026-10-21_
 
 ## Waiting on
 
-- Owner's verdict on 0.3.8 Hebrew quality. If still poor → decide on a Hebrew Whisper
+- Owner's verdict on Hebrew Whisper (0.4.0), speaker separation (0.4.1), summaries (0.5.0).
+- Owner's verdict on 0.3.8 Hebrew quality (superseded by Whisper). If still poor → decide on a Hebrew Whisper
   transcriber (ivrit.ai `whisper-large-v3-turbo-ggml`, Apache-2.0, whisper.cpp) with
   Gemma kept for summaries.
 - "Transcribed recordings sound worse": code only reads the file; the 0.3.8 log shows
@@ -49,4 +50,6 @@ _Last updated: 2026-10-21_
 
 ## Next
 
-0.4 — summary and tasks (Analyzer), full call screen.
+Device test of the 4-stage pipeline (0.4.0–0.5.0): Hebrew quality, speed per minute of
+audio, speaker accuracy, summary quality, memory. Then: tasks list across calls,
+reminders, calendar export (0.6); quantized Whisper if speed demands it.
