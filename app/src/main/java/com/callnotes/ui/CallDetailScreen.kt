@@ -128,7 +128,8 @@ fun CallDetailScreen(
         if (idx in segments.indices) {
             highlight = idx
             scope.launch {
-                listState.animateScrollToItem(segmentStart + idx, scrollOffset = -160)
+                // One line of context above the target.
+                listState.animateScrollToItem((segmentStart + idx - 1).coerceAtLeast(0))
                 kotlinx.coroutines.delay(3_000)
                 if (highlight == idx) highlight = null
             }

@@ -27,6 +27,7 @@ _Last updated: 2026-10-21_
 | 0.5.4 | Summary JSON: Hebrew acronyms with ASCII quotes (נתב"ג) broke parsing → prompt asks for ״, parser repairs | ✅ built, awaiting device test |
 | 0.5.5 | Transcription and summaries in parallel (two workers); a notification per operation naming the call (recording, transcribing, summarising) with Cancel / Stop all, tap opens the call; instant cancel (Whisper abort, Gemma streaming + cancelProcess) | ✅ built, awaiting device test |
 | 0.6.0 | Tasks tab (all calls, open first, checkbox, jump to source line); notification per new task → tasks tab; summaries cite numbered transcript lines + "certain", verified in code ("לא בטוח" pill); every item jumps to its line; speaker fixes (long-press, swap); handset calls: loudness overrides voice sample; pause in battery saver; DB v7 | ✅ built, awaiting device test |
+| 0.6.1 | Items/tasks without cited lines are located by text (`SourceFinder`); visible "הצג בשיחה ›" cue; tasks screen opens the call at that line | ✅ built, awaiting device test |
 | 0.6.x | Tasks: reminders at due date, calendar export, duplicate detection across calls | |
 | 0.6+ | Model swapping UI: reprocess, comparison screen, quantized Whisper | |
 | 0.7 | Path B adapters: Samsung, OnePlus/Oppo/Realme, Vivo | |
