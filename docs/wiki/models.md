@@ -116,9 +116,20 @@ Facts and choices:
    pause before the word (0.03 < 250 ms … 0.45 ≥ 1.5 s). Louder = me; with a voice sample
    and the speaker pack, the two sides' fingerprints may swap it. No models needed; no
    fingerprints stored (`relabelAll` leaves these calls alone).
-2. **Voice embeddings** (pyannote + WeSpeaker) — when loudness doesn't separate
-   (speakerphone, VoIP). Input is loudness-equalised first (0.5 s windows, gain 0.5–20×,
-   pauses untouched) so the quieter side isn't dropped by segmentation.
+2. **Voice fingerprints** (`VoiceClusters` + `VoiceEmbedder`, 0.5.3) — when loudness
+   doesn't separate (speakerphone, VoIP). Whisper words → windows (split at > 400 ms
+   pauses, ≤ 3 s); windows ≥ 1 s of loudness-equalised audio get a WeSpeaker
+   fingerprint; weighted 2-means on cosine (seeds: longest window + the one least like
+   it); one voice if centroids ≥ 0.75 alike or a side has < 5 %; two-state Viterbi
+   (emission 8 × cosine margin; switch p 0.3 after a pause, 0.08 otherwise); windows
+   without a fingerprint follow their neighbours. Centroids are stored per call.
+
+**sherpa-onnx's `OfflineSpeakerDiarization` is not used any more** (0.5.3): its native
+code calls `exit(-1)` on edge cases (`offline-speaker-diarization-pyannote-impl.h`:
+"This segment is too short…"), which killed the app 2–5 s into speaker separation on
+the POCO. Only `SpeakerEmbeddingExtractor` is used, with length and `isReady` checked
+in Kotlin before `compute`. pyannote segmentation is no longer downloaded
+(`ModelCatalog.RETIRED`, file deleted on start).
 
 The log line says which method ran and why (levels, gap, shares, voice-sample scores).
 

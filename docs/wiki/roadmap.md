@@ -23,6 +23,7 @@ _Last updated: 2026-10-21_
 | 0.5.0 | Summary + tasks with Gemma 4 (LiteRT-LM, text) over the speaker-labelled transcript; tasks table with tick-off; summary title in the list; DB v6 | ⚠️ POCO: Whisper transcription ran, then the app crashed in speaker separation |
 | 0.5.1 | Fix: diarization without sherpa's JNI progress callback (invokedynamic lambda → NoSuchMethodError → ART abort) | ✅ no crash; but handset call → everything one speaker |
 | 0.5.2 | Speakers by loudness for handset calls (per-word dBFS, 2-means, Viterbi); voice diarizer as fallback on equalised audio | ✅ built, awaiting device test |
+| 0.5.3 | Drop sherpa's diarization pipeline (exit(-1) killed the app); voice fallback = own clustering of fingerprinted Whisper word windows; pyannote no longer downloaded | ✅ built, awaiting device test |
 | 0.6 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
 | 0.6+ | Model swapping UI: reprocess, comparison screen, quantized Whisper | |
 | 0.7 | Path B adapters: Samsung, OnePlus/Oppo/Realme, Vivo | |

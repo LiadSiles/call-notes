@@ -55,3 +55,8 @@ one speaker. The other side only leaks from the earpiece into the mic, far quiet
 the owner's voice; segmentation mostly hears the owner, the forced 2-way clustering
 splits that one voice and the merge rule (cosine ≥ 0.75) joins it back. → 0.5.2 uses
 loudness for such calls.
+
+Whisper speed on the POCO (0.5.1 log, 5 performance threads, beam 5, f16): 145 s of
+audio in 166–192 s; 62 s in 102–114 s; an 828 s call reached 61 % after 800 s — roughly
+1.1–1.3× the call's length. Candidates if that's too slow: greedy decoding, a quantized
+(q8/q5) build of the ivrit.ai model.

@@ -3,6 +3,14 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — No third-party native pipeline that can exit the process (0.5.3)
+sherpa-onnx's diarization pipeline aborts with `exit(-1)` on inputs it dislikes; in an
+app that's indistinguishable from a crash and can't be caught. We keep only its
+smallest, well-defined piece (fingerprint extraction), validate its inputs in Kotlin,
+and do segmentation/clustering ourselves on top of Whisper's word timing (pure Kotlin,
+unit-tested). Rule for future native dependencies: grep their sources for
+`exit(`/`abort(` on reachable paths before adopting them.
+
 ### 2026-10-21 — Loudness first, voice embeddings second, for who-said-what (0.5.2)
 With one microphone at the owner's mouth, the strongest cue in a handset call is the
 level gap between the owner and the earpiece leak; general-purpose diarization
