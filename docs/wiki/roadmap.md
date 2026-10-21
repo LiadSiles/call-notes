@@ -18,9 +18,12 @@ _Last updated: 2026-10-21_
 | 0.3.6 | Fix: transcription service started with explicit mediaProcessing type (dataSync fallback) | ✅ built, awaiting device test |
 | 0.3.7 | Cancel a call's transcription (→ held), stop all (list + notification, turns auto off), undo for every setup step / permission, restore default switches | ✅ built, awaiting device test |
 | 0.3.8 | Gemma's documented ASR prompt (text before audio, no system instruction), per-chunk level normalization, recording SHA-256 before/after in the log | ✅ built, awaiting device test |
-| 0.4 | Summary + tasks in the fixed schema, date normalization, full call screen (summary, transcript with seek, task approval) | |
-| 0.5 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
-| 0.6 | Model swapping: catalog, Whisper + llama.cpp engines, reprocess, comparison screen | |
+| 0.4.0 | Transcription → ivrit.ai Hebrew Whisper large-v3-turbo on whisper.cpp (JNI, on-device); models per role (transcribe / analyze) | ✅ built (lib verified in APK), awaiting device test |
+| 0.4.x | Who said what: pyannote segmentation + speaker embeddings, exactly 2 speakers | in progress |
+| 0.4.x | Owner voice profile ("me" vs other side) + conversation view | |
+| 0.5 | Summary + tasks with Gemma 4 over the speaker-labelled transcript; full call screen | |
+| 0.6 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
+| 0.6+ | Model swapping UI: reprocess, comparison screen, quantized Whisper | |
 | 0.7 | Path B adapters: Samsung, OnePlus/Oppo/Realme, Vivo | |
 | 0.8 | Privacy + reliability: SQLCipher, biometric lock, retention, audio compression, FTS search | |
 | 0.9 | Closed beta (5–10 users), in-app updates, end-to-end test call in setup | |

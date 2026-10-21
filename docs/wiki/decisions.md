@@ -3,6 +3,22 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Hebrew Whisper + local diarization; Gemma for understanding (0.4)
+Owner: transcripts must say who said what, everything strictly on-device ("the whole
+point of the app is to guarantee privacy" — no cloud, no internet services; network
+only to download models). Chosen pipeline:
+1. **Transcription:** ivrit.ai Hebrew fine-tune of Whisper large-v3-turbo, ggml for
+   whisper.cpp. Their Interspeech 2025 paper (large-v2 fine-tune) reports 6.2 % WER on
+   two-person conversation vs 8–9.6 % for OpenAI Whisper and 21 % for Google Speech.
+2. **Speakers:** pyannote segmentation-3.0 + a speaker-embedding model, clustered into
+   exactly 2 (a phone call). Voice-based, language-independent.
+3. **Who is "me":** a one-time voice sample of the owner; nearest cluster = me.
+4. **Understanding:** Gemma 4 reads the labelled transcript → summary, tasks.
+Rejected: Gemma audio for ASR (poor Hebrew, no published Hebrew numbers); cloud ASR
+(AWS/ElevenLabs/Soniox — excellent Hebrew but violates the privacy rule); wav2vec2 /
+small Hebrew models (faster, less accurate — maybe a "light mode" later).
+Supersedes "Gemma 4 for both transcription and analysis" (2026-10-18).
+
 ### 2026-10-21 — Gemma ASR on its documented template (0.3.8)
 Owner found 0.3.x Hebrew transcripts mostly unusable. First fix stays within Gemma:
 the trained ASR prompt, instruction before audio, no system instruction, normalized

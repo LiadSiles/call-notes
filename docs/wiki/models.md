@@ -52,7 +52,36 @@ chip-specific (Tensor G5/G6, Qualcomm sm8750…) variants — unused for now.
 
 Facts about Gemma 4 below come from Google's model cards and the LiteRT-LM docs.
 
-## Default: Gemma 4, one model for both roles
+## Transcription: ivrit.ai Hebrew Whisper on whisper.cpp (0.4)
+
+| Piece | Where |
+|---|---|
+| Catalog entry (pinned commit 2130c78, SHA-256, 1,624,555,275 bytes, Apache-2.0) | `ModelCatalog.WHISPER_HE_TURBO` |
+| Native build (whisper.cpp v1.9.5 submodule, static, JNI) | `app/src/main/cpp/`, `third_party/whisper.cpp` |
+| Kotlin JNI surface, CPU feature gate | `inference/whisper/WhisperNative.kt` |
+| Parse result (UTF-8 bytes → words with times) | `inference/whisper/WhisperOutput.kt` (+ tests) |
+| Transcriber | `inference/whisper/WhisperTranscriber.kt` |
+
+Facts and choices:
+- File is f16 ggml (1.6 GB). No quantized Hebrew build is published; quantizing
+  ourselves is a later option (q5/q8 ≈ 0.6–0.9 GB, faster).
+- Build: `GGML_CPU_ARM_ARCH=armv8.2-a+fp16+dotprod`; the app refuses to load the lib
+  unless `/proc/cpuinfo` lists `asimddp`, `fphp`, `asimdhp` (illegal-instruction guard).
+  Release flags are forced even in the debug APK (`-DCMAKE_BUILD_TYPE=Release`).
+  `GGML_OPENMP=OFF` (no libomp to ship). CI fails if `libcallnotes_whisper.so` is
+  missing from the APK.
+- Params: language `he`, beam search 5, `no_context` (one bad window can't derail the
+  rest), `suppress_nst`, token timestamps + DTW (`WHISPER_AHEADS_LARGE_V3_TURBO`,
+  enum value 14 — DTW needs flash attention off). Threads = performance cores
+  (`CpuInfo.inferenceThreads`, cores faster than the slowest; 2–8).
+- JNI returns text as raw UTF-8 bytes: BPE tokens can split a 2-byte Hebrew letter and
+  `NewStringUTF` aborts on invalid input. Words = tokens joined until a token starting
+  with a space; word start = DTW time when available.
+- Cancellation: a watcher coroutine calls `abort()` → whisper's abort callback.
+- Model files per role: `Prefs.modelFor(role)`; the analysis role keeps the old
+  `model_id` key (the user's Gemma choice).
+
+## Default: Gemma 4, one model for both roles (0.3 — superseded for transcription)
 
 - Family: E2B, E4B, 26B A4B, 31B. **Only E2B and E4B** run on phones and have
   **native audio input** (speech recognition / translation). 128K context.

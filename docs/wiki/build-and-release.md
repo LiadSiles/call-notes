@@ -32,6 +32,12 @@ v<versionName>-build.<run_number>` as a **prerelease** with
 - The repo is private; downloading a release on the phone requires being signed in to
   GitHub in the browser.
 
+## Native code
+
+`third_party/whisper.cpp` is a git submodule pinned to tag v1.9.5; clone with
+`--recurse-submodules` (CI checks out with `submodules: true`). CMake 3.22.1 via AGP;
+the NDK is AGP's default. Debug and release APKs both compile it with Release flags.
+
 ## Signing
 
 `keystore/debug.keystore` (password `android`, alias `androiddebugkey`) is committed on

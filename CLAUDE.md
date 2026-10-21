@@ -9,8 +9,9 @@ decisions already taken and why).
 
 ## Hard constraints — do not "fix" these away
 
-- **No cloud.** Audio, transcripts and summaries never leave the device. Network is
-  used only to download models (and, later, optional Google Tasks sync).
+- **No cloud, ever.** The owner's core promise is privacy: audio, transcripts and
+  summaries never leave the device, and the app uses no internet services. Network is
+  used only to download model files.
 - **Call audio rules.** An ordinary app gets silence from the mic during a call; only an
   accessibility service may capture. `CAPTURE_AUDIO_OUTPUT` is system-only. See
   `docs/wiki/android-call-audio.md` before proposing any new capture approach — most
@@ -39,7 +40,8 @@ decisions already taken and why).
 app/src/main/java/com/callnotes/
   capture/    call detection, recording, speakerphone, call-log lookup
   data/       Room (CallEntity, CallDao, AppDatabase)
-  inference/  Transcriber / Analyzer interfaces, model catalog (next: Gemma via LiteRT-LM)
+  inference/  Transcriber / Analyzer interfaces, model catalog, Whisper (whisper/) and Gemma
+app/src/main/cpp/   JNI bridge to whisper.cpp (third_party/whisper.cpp submodule)
   ui/         Compose UI (single screen for now), setup checks, audio player
   util/       prefs, notifications
 ```
