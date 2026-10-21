@@ -37,26 +37,25 @@ _Last updated: 2026-10-21_
 
 **After 1.0:** VoIP calling mode, names for internet calls, diarization, Bluetooth accessory.
 
-## Waiting on
+## Waiting on (owner's device tests of 0.6.1)
 
-- Owner's verdict on Hebrew Whisper (0.4.0), speaker separation (0.4.1), summaries (0.5.0).
-- Owner's verdict on 0.3.8 Hebrew quality (superseded by Whisper). If still poor → decide on a Hebrew Whisper
-  transcriber (ivrit.ai `whisper-large-v3-turbo-ggml`, Apache-2.0, whisper.cpp) with
-  Gemma kept for summaries.
-- "Transcribed recordings sound worse": code only reads the file; the 0.3.8 log shows
-  the hash before/after. Suspects if unchanged: playback while the phone is hot
-  (speaker thermal limiting) or while the next call is being transcribed.
+- Real calls: at the ear, speakerphone, WhatsApp, one long call (10+ min). Check Hebrew
+  quality, speed (last log: ~1.1–1.3× call length), speaker labels, summary accuracy,
+  parallel transcription + summary (memory/heat), notifications, cancel.
+- Still untested on the POCO: reboot survival, Bluetooth headset, recording gaps on
+  screen lock (0.2.3/0.3.1 trace), battery-saver pause.
 
-- 0.3.7 on the POCO: does "transcribe now" start, how long the model load takes, and
-  the transcription log if anything stops (it shows the stage and free RAM).
+## Next (proposed order, 2026-10-21)
 
-- Owner can't make calls right now. Test 0.3 with imported audio: model download,
-  transcription quality in Hebrew, speed, memory/heat.
-- A trace from a call with silent stretches (0.3.1) → decides the gap fix.
-- Still untested on the POCO: reboot survival, Bluetooth headset.
-
-## Next
-
-Device test of the 4-stage pipeline (0.4.0–0.5.0): Hebrew quality, speed per minute of
-audio, speaker accuracy, summary quality, memory. Then: tasks list across calls,
-reminders, calendar export (0.6); quantized Whisper if speed demands it.
+1. Field-test fixes from the logs above.
+2. 0.6.x tasks: reminder at the due date, "add to calendar" (opens the phone's calendar
+   app — owner decides, since that app may sync), duplicates across calls.
+3. Speed: quantize the ivrit.ai model on the device after download (q8/q5), optional
+   greedy decoding; measure quality vs speed.
+4. 0.8 privacy before 0.7: encrypted database + recordings, app lock (biometric),
+   retention (auto-delete audio after N days), compressed audio, search.
+5. 0.7 other phones: Path B (OEM dialer recordings) for devices where the accessibility
+   mic capture is silent.
+6. 0.9 beta on other phones; 1.0 release signing, privacy policy, legal review.
+   Open decision: in-app update checks contact GitHub — conflicts with "no internet
+   services"; manual updates may be the rule.
