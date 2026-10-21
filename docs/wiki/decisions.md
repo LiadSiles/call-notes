@@ -3,6 +3,21 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Active model = installed model only (0.3.2)
+Bug: tapping "switch to E2B" set the active id to a model that wasn't downloaded, so
+`readyModel()` returned null and transcription silently never ran. Now the active
+model only changes to an installed one, or after a user-started download verifies;
+an uninstalled saved choice falls back to any installed model. Each transcription run
+writes a one-line outcome (`Prefs.lastProcessing`) shown in the transcription card.
+
+### 2026-10-21 — UI redesign parked on `dev/0.3.2`
+Theme, bottom navigation, grouped call list with transcript preview and a call detail
+screen are on `dev/0.3.2`. The new settings screen (setup checklist + toggles) could not
+be written in the session that started it; that branch doesn't build until
+`ui/SettingsScreen.kt` exists (signature: `SettingsScreen(contentPadding, resumeTick,
+onModelReady)`, using `rememberSetupState`, `ModelSection`, `SetupChecks`). Main keeps
+the 0.3.x single-screen UI.
+
 ### 2026-10-20 — 0.3 transcription design choices
 - **Model download via DownloadManager** into the app-specific external dir (resumes,
   system progress notification, Wi-Fi-only by default), then SHA-256 check before use.
