@@ -42,7 +42,7 @@ app/src/main/java/com/callnotes/
   data/       Room (CallEntity, CallDao, AppDatabase)
   inference/  Transcriber / Analyzer interfaces, model catalog, Whisper (whisper/),
               speakers (speakers/), Gemma
-  processing/ background transcription service, log
+  processing/ foreground service with two parallel workers (transcribe, summary), log
   ui/         Compose UI, setup checks, audio player
   util/       prefs, notifications
 app/src/main/java/com/k2fsa/sherpa/onnx/  sherpa-onnx Kotlin API (verbatim copy)

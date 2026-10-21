@@ -3,6 +3,19 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Two parallel workers, instant cancel (0.5.5)
+Owner wants transcription and summaries at the same time, a temporary notification per
+operation naming the call, and cancel that acts at once. `TranscriptionService` now hosts
+`TranscribeWorker` and `SummaryWorker` (`processing/Worker.kt` base): own model, queue,
+`ProcessingStatus.state` / `.summary`, notification (`ID_TRANSCRIBE` / `ID_SUMMARY`).
+The service is in the foreground with whichever notification is live (re-anchored when one
+finishes) and stops when both are idle. Memory: Gemma's weights are mmapped; before
+loading it next to Whisper the summary worker waits while the phone reports low memory
+(`availMem` < 1.5 GB). Cancel updates UI state + DB + notification synchronously and then
+aborts the engine (whisper.cpp abort callback; LiteRT-LM `sendMessageAsync` +
+`Conversation.cancelProcess()`); results arriving for a cancelled call are dropped.
+"Stop all" returns the running calls to the queue and turns automatic processing off.
+
 ### 2026-10-21 — No third-party native pipeline that can exit the process (0.5.3)
 sherpa-onnx's diarization pipeline aborts with `exit(-1)` on inputs it dislikes; in an
 app that's indistinguishable from a crash and can't be caught. We keep only its

@@ -60,7 +60,7 @@ Facts about Gemma 4 below come from Google's model cards and the LiteRT-LM docs.
 | Native build (whisper.cpp v1.9.5 submodule, static, JNI) | `app/src/main/cpp/`, `third_party/whisper.cpp` |
 | Kotlin JNI surface, CPU feature gate | `inference/whisper/WhisperNative.kt` |
 | Parse result (UTF-8 bytes → words with times) | `inference/whisper/WhisperOutput.kt` (+ tests) |
-| Transcriber | `inference/whisper/WhisperTranscriber.kt` |
+| Transcriber (`abort()` sets whisper's abort flag, checked between graph nodes) | `inference/whisper/WhisperTranscriber.kt` |
 
 Facts and choices:
 - File is f16 ggml (1.6 GB). No quantized Hebrew build is published; quantizing
@@ -138,8 +138,8 @@ The log line says which method ran and why (levels, gap, shares, voice-sample sc
 | Piece | Where |
 |---|---|
 | Prompt (call date + weekday, who is who, transcript ≤ 12k chars keeping start+end, JSON schema, rules) and tolerant JSON parsing, due-date validation (call date −1 day … +2 years) | `inference/AnalysisPrompt.kt` (+ tests, real org.json in tests) |
-| Model call: LiteRT-LM `Engine` text only (no audio backend), CPU, `maxNumTokens` 8192, greedy, thinking off, ≤ 1536 output tokens | `inference/GemmaAnalyzer.kt` |
-| Pass: after all transcriptions, Whisper + diarizer are closed first (memory), then requested calls, then (auto on) newest unanalysed | `TranscriptionService.analysePending` |
+| Model call: LiteRT-LM `Engine` text only (no audio backend), CPU, `maxNumTokens` 8192, greedy, thinking off, ≤ 1536 output tokens; streamed with `sendMessageAsync` (chunks are deltas; cancel → `onError(CancellationException)`), `abort()` = `cancelProcess()`; a conversation is closed only after the native side reported done | `inference/GemmaAnalyzer.kt` |
+| Worker running in parallel with transcription: requested calls, then (auto on) newest unanalysed; waits for the next transcript while transcription runs | `processing/SummaryWorker.kt` |
 | Storage: `calls.analysisStatus/analysisJson/summaryTitle/analysisModel/analysisError`, `tasks` table (DB v6) | `data/` |
 
 - **Hebrew gotcha (0.5.4):** Gemma writes acronyms with an ASCII `"` as gershayim
