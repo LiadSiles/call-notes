@@ -9,7 +9,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.callnotes.CallNotesApp
 import com.callnotes.audio.AudioDecoder
@@ -68,14 +67,8 @@ class TranscriptionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStartId = startId
-        val type = when {
-            Build.VERSION.SDK_INT >= 35 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING
-            Build.VERSION.SDK_INT >= 29 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            else -> 0
-        }
         try {
-            ServiceCompat.startForeground(this, Notifications.ID_PROCESSING,
-                Notifications.processing(this, null), type)
+            goForeground()
         } catch (e: Exception) {
             ProcessingLog.write(this, "startForeground refused: ${describe(e)}")
             note("לא ניתן היה להפעיל את שירות התמלול: ${e.javaClass.simpleName}")
@@ -95,6 +88,27 @@ class TranscriptionService : Service() {
             scope.launch { runQueue(delayFirst) }
         }
         return START_NOT_STICKY
+    }
+
+    /**
+     * Enters the foreground with an explicit type (required from API 34). Calls the
+     * platform method directly: `ServiceCompat.startForeground` masks the type with the
+     * set it knows (API 34), which drops `mediaProcessing` (API 35) to "none" — Android
+     * then refuses with InvalidForegroundServiceTypeException (0.3.5 bug). Falls back to
+     * dataSync if the media-processing type is refused.
+     */
+    private fun goForeground() {
+        val notification = Notifications.processing(this, null)
+        if (Build.VERSION.SDK_INT >= 35) {
+            try {
+                startForeground(Notifications.ID_PROCESSING, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING)
+                return
+            } catch (e: Exception) {
+                ProcessingLog.write(this, "mediaProcessing refused, trying dataSync: ${describe(e)}")
+            }
+        }
+        startForeground(Notifications.ID_PROCESSING, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
     private suspend fun runQueue(delayFirst: Boolean) {

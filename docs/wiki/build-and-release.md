@@ -25,6 +25,10 @@ v<versionName>-build.<run_number>` as a **prerelease** with
   `gh api repos/LiadSiles/call-notes/check-runs/<id>/annotations`.
 - Gotcha hit in 0.2: `android:accessibilityEventTypes="0"` fails resource linking
   (it's a flags attribute); omit it to subscribe to no events.
+- Gotcha hit in 0.3.5: `ServiceCompat.startForeground` (androidx.core 1.16) masks the
+  type with the API 34 set, so `FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING` (API 35)
+  becomes 0 and Android 15+ throws `InvalidForegroundServiceTypeException: Starting FGS
+  with type none`. Call `Service.startForeground(id, n, type)` directly for API 35+ types.
 - The repo is private; downloading a release on the phone requires being signed in to
   GitHub in the browser.
 
