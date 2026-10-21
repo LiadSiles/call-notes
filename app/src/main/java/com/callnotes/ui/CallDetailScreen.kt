@@ -42,7 +42,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -63,8 +65,10 @@ import com.callnotes.data.CallEntity
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SegmentEntity
 import com.callnotes.data.SpeakerResult
+import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.ProcessingStatus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -91,11 +95,22 @@ fun CallDetailScreen(
     val lastRun = remember(noteVersion) { com.callnotes.util.Prefs(context).lastProcessing }
     val segments by remember(callId) { dao.observeSegments(callId) }.collectAsStateWithLifecycle(emptyList())
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
+    val requested by ProcessingStatus.requested.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
     var showTrace by remember { mutableStateOf(false) }
     var showTech by remember { mutableStateOf(false) }
+    var showLog by remember { mutableStateOf(false) }
 
     val c = call ?: return
+    // Shown as "starting" at once (the request is visible before any database write), then
+    // the service takes it ahead of the queue.
+    val startTranscription: () -> Unit = {
+        ProcessingStatus.request(c.id)
+        scope.launch(Dispatchers.IO) {
+            dao.setStatus(c.id, CallStatus.RECORDED, null, null)
+            withContext(Dispatchers.Main) { onTranscribe() }
+        }
+    }
     val path = c.filePath
     val traceFile = path?.let { CallTrace.fileFor(File(it)) }?.takeIf { it.exists() }
 
@@ -145,15 +160,11 @@ fun CallDetailScreen(
             item { SectionHeader("תמלול") }
 
             item {
-                TranscriptState(c, processing, lastRun, onRetry = {
-                    scope.launch(Dispatchers.IO) {
-                        dao.setStatus(c.id, CallStatus.RECORDED, null, null)
-                        withContext(Dispatchers.Main) { onTranscribe() }
-                    }
-                })
+                TranscriptState(c, processing, queued = c.id in requested, lastRun = lastRun,
+                    onStart = startTranscription, onShowLog = { showLog = true })
             }
 
-            if (c.status == CallStatus.TRANSCRIBED) {
+            if (c.status == CallStatus.TRANSCRIBED && c.id !in requested) {
                 if (segments.isEmpty()) item {
                     Text("לא זוהה דיבור בהקלטה.", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(4.dp))
@@ -163,12 +174,7 @@ fun CallDetailScreen(
                     SegmentRow(seg, active) { path?.let { player.playFrom(c.id, it, seg.startMs.toInt()) } }
                 }
                 item {
-                    TextButton(onClick = {
-                        scope.launch(Dispatchers.IO) {
-                            dao.setStatus(c.id, CallStatus.RECORDED, null, null)
-                            withContext(Dispatchers.Main) { onTranscribe() }
-                        }
-                    }, modifier = Modifier.padding(top = 4.dp)) { Text("תמלל מחדש") }
+                    TextButton(onClick = startTranscription, modifier = Modifier.padding(top = 4.dp)) { Text("תמלל מחדש") }
                 }
             }
 
@@ -197,6 +203,7 @@ fun CallDetailScreen(
     }
 
     if (showTrace && traceFile != null) TraceDialog(traceFile, onDismiss = { showTrace = false })
+    if (showLog) TraceDialog(ProcessingLog.file(context), onDismiss = { showLog = false }, title = "יומן תמלול")
 
     if (confirmDelete) AlertDialog(
         onDismissRequest = { confirmDelete = false },
@@ -260,42 +267,102 @@ private fun PlayerPanel(id: Long, path: String, player: AudioPlayer) {
 }
 
 @Composable
-private fun TranscriptState(c: CallEntity, processing: ProcessingStatus.State, lastRun: String?, onRetry: () -> Unit) {
-    when (c.status) {
-        CallStatus.TRANSCRIBED -> Unit
-        CallStatus.TRANSCRIBING -> Panel {
-            val live = processing.callId == c.id && processing.chunksTotal > 0
-            Text(
-                if (live) "מתמלל… מקטע ${processing.chunksDone} מתוך ${processing.chunksTotal}" else "מתמלל…",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.size(8.dp))
-            if (live) LinearProgressIndicator(
-                progress = { processing.chunksDone.toFloat() / processing.chunksTotal },
-                modifier = Modifier.fillMaxWidth(),
-            ) else LinearProgressIndicator(Modifier.fillMaxWidth())
+private fun TranscriptState(
+    c: CallEntity,
+    processing: ProcessingStatus.State,
+    queued: Boolean,
+    lastRun: String?,
+    onStart: () -> Unit,
+    onShowLog: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val onThis = processing.running && processing.callId == c.id
+    val busyElsewhere = processing.running && processing.callId != null && processing.callId != c.id
+
+    @Composable
+    fun LastRun() {
+        val text = lastRun ?: return
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            Text("הרצה אחרונה: $text", style = MaterialTheme.typography.bodySmall,
+                color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
+            TextButton(onClick = onShowLog) { Text("יומן") }
         }
-        CallStatus.RECORDED -> Panel {
+    }
+
+    @Composable
+    fun Progress(title: String, detail: String?, fraction: Float?) {
+      Panel {
+        Text(title, style = MaterialTheme.typography.bodyMedium)
+        detail?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+        }
+        Spacer(Modifier.size(10.dp))
+        if (fraction != null) LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+        else LinearProgressIndicator(Modifier.fillMaxWidth())
+      }
+    }
+
+    when {
+        // The model is loading for this call (before its status changes).
+        onThis && processing.phase == "loading" -> Progress(
+            "טוען את מודל התמלול… ${elapsed(processing.since)}",
+            "בטעינה הראשונה זה יכול לקחת עד דקה או שתיים.",
+            null,
+        )
+        c.status == CallStatus.TRANSCRIBING && onThis -> Progress(
+            if (processing.chunksTotal > 0) "מתמלל… מקטע ${processing.chunksDone + 1} מתוך ${processing.chunksTotal}"
+            else "מכין את האודיו…",
+            if (processing.chunksTotal > 0) "כל מקטע הוא כחצי דקה של שיחה." else null,
+            if (processing.chunksTotal > 0) processing.chunksDone.toFloat() / processing.chunksTotal else null,
+        )
+        c.status == CallStatus.TRANSCRIBING -> Panel {
+            // Status says transcribing but nothing runs: the run was cut off.
+            Text("התמלול נעצר לפני שהסתיים.", style = MaterialTheme.typography.bodyMedium)
+            FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) { Text("נסה שוב") }
+            LastRun()
+        }
+        queued && busyElsewhere -> Progress(
+            "מתחיל… עוצר קודם תמלול אוטומטי של שיחה אחרת",
+            "השיחה הזו תתומלל ראשונה; השנייה תחזור לתור.",
+            null,
+        )
+        queued && processing.phase == "waiting_thermal" -> Progress(
+            "הטלפון חם — התמלול יתחיל כשיתקרר", null, null,
+        )
+        queued -> Progress("מתחיל תמלול…", null, null)
+        c.status == CallStatus.TRANSCRIBED -> Unit
+        c.status == CallStatus.RECORDED -> Panel {
             Text("ההקלטה ממתינה לתמלול.", style = MaterialTheme.typography.bodyMedium)
-            Text("התמלול רץ ברקע כשמותקן מודל. אפשר להתחיל אותו עכשיו:",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FilledTonalButton(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) { Text("תמלל עכשיו") }
-            if (!processing.running) lastRun?.let {
-                Text("הרצה אחרונה: $it", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-            }
+            Text(
+                if (busyElsewhere) "כרגע מתומללת שיחה אחרת. אפשר להקדים את זו:"
+                else "התמלול רץ ברקע כשמותקן מודל. אפשר להתחיל אותו עכשיו:",
+                style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
+            )
+            FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) { Text("תמלל עכשיו") }
+            LastRun()
         }
-        CallStatus.TRANSCRIBE_FAILED -> Panel {
-            Text("התמלול נכשל", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
+        c.status == CallStatus.TRANSCRIBE_FAILED -> Panel {
+            Text("התמלול נכשל", style = MaterialTheme.typography.titleSmall, color = cs.error)
             c.error?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             }
-            FilledTonalButton(onClick = onRetry, modifier = Modifier.padding(top = 8.dp)) { Text("נסה שוב") }
+            FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) { Text("נסה שוב") }
+            LastRun()
         }
-        CallStatus.RECORD_FAILED -> Panel {
+        c.status == CallStatus.RECORD_FAILED -> Panel {
             Text("לא נשמרה הקלטה לשיחה הזו.", style = MaterialTheme.typography.bodyMedium)
         }
     }
+}
+
+/** "0:42" since [since], ticking every second. */
+@Composable
+private fun elapsed(since: Long): String {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(since) {
+        while (true) { now = System.currentTimeMillis(); delay(1_000) }
+    }
+    return formatDuration((now - since).coerceAtLeast(0))
 }
 
 @Composable

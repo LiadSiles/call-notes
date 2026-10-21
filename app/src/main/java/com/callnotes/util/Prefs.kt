@@ -44,6 +44,15 @@ class Prefs(context: Context) {
         get() = sp.getString("last_processing", null)
         set(value) = sp.edit().putString("last_processing", value).apply()
 
+    /**
+     * What a transcription run is doing right now ("loading model", "call 12, chunk 3/9"…),
+     * or null when no run is active. Written synchronously: if the process dies (out of
+     * memory, native crash) the next launch reads where it stopped.
+     */
+    var processingStage: String?
+        get() = sp.getString("processing_stage", null)
+        set(value) { sp.edit().putString("processing_stage", value).commit() }
+
     /** Active model id (see ModelCatalog). Only ever set to an installed model. */
     var modelId: String?
         get() = sp.getString("model_id", null)

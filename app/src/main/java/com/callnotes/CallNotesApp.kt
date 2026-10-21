@@ -4,6 +4,8 @@ import android.app.Application
 import com.callnotes.data.AppDatabase
 import com.callnotes.data.CallListItem
 import com.callnotes.inference.ModelManager
+import com.callnotes.processing.ProcessingLog
+import com.callnotes.processing.TranscriptionService
 import com.callnotes.util.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,6 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class CallNotesApp : Application() {
 
@@ -31,5 +34,19 @@ class CallNotesApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        recoverDeadRun()
+    }
+
+    /**
+     * If the last process died in the middle of transcription (out of memory, native
+     * crash), say where it stopped and release the call it was on, so the user gets an
+     * error and a retry button instead of an endless "transcribing…".
+     */
+    private fun recoverDeadRun() {
+        val stage = ProcessingLog.recoverIfDied(this) ?: return
+        TranscriptionService.note(this, "התמלול נעצר באמצע ($stage). ייתכן שחסר זיכרון למודל.")
+        appScope.launch {
+            database.calls().failInterrupted("התמלול נעצר באמצע: $stage. ייתכן שחסר זיכרון — נסה לסגור אפליקציות אחרות או לבחור את המודל הקטן.")
+        }
     }
 }

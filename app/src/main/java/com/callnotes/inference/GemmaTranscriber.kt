@@ -46,6 +46,10 @@ class GemmaTranscriber(
         engine = it
     }
 
+    override suspend fun load() {
+        withContext(Dispatchers.IO) { engine() }
+    }
+
     override suspend fun transcribe(
         audio: File,
         languageHint: String,

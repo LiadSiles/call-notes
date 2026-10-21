@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,8 +17,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.ProcessingStatus
 import com.callnotes.util.Prefs
 
@@ -27,6 +30,8 @@ fun TranscriptionSwitches(prefs: Prefs) {
     var auto by remember { mutableStateOf(prefs.autoTranscribe) }
     val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
     val lastRun = remember(noteVersion) { prefs.lastProcessing }
+    var showLog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     Panel(Modifier.padding(top = 8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -37,9 +42,12 @@ fun TranscriptionSwitches(prefs: Prefs) {
             Spacer(Modifier.width(12.dp))
             Switch(checked = auto, onCheckedChange = { auto = it; prefs.autoTranscribe = it })
         }
-        lastRun?.let {
-            Text("הרצה אחרונה: $it", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            Text(lastRun?.let { "הרצה אחרונה: $it" } ?: "התמלול עוד לא רץ.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            TextButton(onClick = { showLog = true }) { Text("יומן תמלול") }
         }
     }
+    if (showLog) TraceDialog(ProcessingLog.file(context), onDismiss = { showLog = false }, title = "יומן תמלול")
 }

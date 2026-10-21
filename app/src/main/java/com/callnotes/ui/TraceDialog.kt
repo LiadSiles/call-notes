@@ -23,12 +23,12 @@ import java.io.File
 
 /** Shows a call's diagnostic trace (timings and levels only) and lets the user share it as text. */
 @Composable
-fun TraceDialog(file: File, onDismiss: () -> Unit) {
+fun TraceDialog(file: File, onDismiss: () -> Unit, title: String = "יומן אבחון") {
     val context = LocalContext.current
-    val text = remember(file) { runCatching { file.readText() }.getOrDefault("לא ניתן לקרוא את היומן.") }
+    val text = remember(file) { runCatching { file.readText() }.getOrNull()?.ifBlank { null } ?: "היומן ריק." }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("יומן אבחון") },
+        title = { Text(title) },
         text = {
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 SelectionContainer {

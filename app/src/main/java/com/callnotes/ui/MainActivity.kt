@@ -110,9 +110,10 @@ private fun AppRoot() {
         }
     }
 
-    // Manual "transcribe now": doesn't depend on the auto-transcribe switch.
-    val transcribeNow: () -> Unit = {
-        scope.launch(Dispatchers.IO) { TranscriptionService.start(context) }
+    // Manual "transcribe now": doesn't depend on the auto-transcribe switch, and this
+    // call goes ahead of anything already queued.
+    val transcribeNow: (Long) -> Unit = { id ->
+        scope.launch(Dispatchers.IO) { TranscriptionService.start(context, callId = id) }
     }
     val listState = rememberLazyListState()
 
@@ -134,7 +135,7 @@ private fun AppRoot() {
                 callId = detail,
                 player = player,
                 onBack = { openCallId = null },
-                onTranscribe = transcribeNow,
+                onTranscribe = { transcribeNow(detail) },
             )
         } else {
             Scaffold(

@@ -12,6 +12,9 @@ import java.io.File
 interface Transcriber : AutoCloseable {
     val modelId: String
 
+    /** Loads the model up front (slow: seconds to a minute). Optional; transcribe() loads lazily. */
+    suspend fun load() {}
+
     /**
      * [audio] is a 16 kHz mono 16-bit WAV (the recorder's format; imports are converted
      * first). [onProgress] reports (chunks done, chunks total).

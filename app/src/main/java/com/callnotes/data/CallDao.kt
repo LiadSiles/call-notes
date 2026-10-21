@@ -22,6 +22,9 @@ abstract class CallDao {
     @Query("SELECT * FROM calls WHERE id = :id")
     abstract fun observe(id: Long): Flow<CallEntity?>
 
+    @Query("SELECT * FROM calls WHERE id = :id")
+    abstract suspend fun get(id: Long): CallEntity?
+
     @Insert
     abstract suspend fun insert(call: CallEntity): Long
 
@@ -51,6 +54,9 @@ abstract class CallDao {
      */
     @Query("UPDATE calls SET status = 'transcribe_failed', error = 'התהליך נעצר באמצע (ייתכן שחסר זיכרון)' WHERE status = 'transcribing'")
     abstract suspend fun failInterrupted()
+
+    @Query("UPDATE calls SET status = 'transcribe_failed', error = :error WHERE status = 'transcribing'")
+    abstract suspend fun failInterrupted(error: String)
 
     @Query("SELECT * FROM segments WHERE callId = :callId ORDER BY idx")
     abstract fun observeSegments(callId: Long): Flow<List<SegmentEntity>>
