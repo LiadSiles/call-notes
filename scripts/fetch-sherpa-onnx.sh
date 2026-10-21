@@ -20,7 +20,7 @@ if [ "$SHA256" != "PIN_ME" ] && [ "$ACTUAL" != "$SHA256" ]; then
   exit 1
 fi
 
-tar xjf "$TMP/libs.tar.bz2" -C "$TMP" jniLibs/arm64-v8a
+tar xjf "$TMP/libs.tar.bz2" -C "$TMP"   # members are ./jniLibs/<abi>/...
 mkdir -p "$OUT"
 ls -l "$TMP/jniLibs/arm64-v8a"
 cp "$TMP"/jniLibs/arm64-v8a/*.so "$OUT/"
