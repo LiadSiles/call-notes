@@ -113,7 +113,7 @@ Recorded so a single test call answers "does this device work?":
 | `silenced` | Android reported capture-policy silencing (`AudioRecordingConfiguration.isClientSilenced`) |
 | `speakerResult` | `on` / `failed` / `skipped_headset` / `disabled` |
 | `speakerMethod` | `api` / `user` / null (`tap` only in 0.1 data) |
-| `status` | `recorded` (awaiting transcription) / `record_failed` / `transcribing` / `transcribed` / `transcribe_failed` |
+| `status` | `recorded` (awaiting transcription) / `record_failed` / `transcribing` / `transcribed` / `transcribe_failed` / `held` (user cancelled; manual only) |
 | `kind` | `cellular` / `voip` / `import` (DB v2, migration 1→2 adds it with default `cellular`) |
 | `foreground` | mic foreground service ran during the call (DB v3); false → capture may be silenced on screen lock |
 

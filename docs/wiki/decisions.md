@@ -3,6 +3,23 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-21 — Every started action can be undone (0.3.7)
+Owner rule: anything the user starts needs a visible way back.
+- Cancel one call → status `held`: skipped by automatic runs (`nextPending` only takes
+  `recorded`), manual "transcribe now" still works. A cancelled re-transcription goes
+  back to `transcribed`: old segments are only replaced when the new transcript is
+  complete (`CallDao.revertTranscription`). Status changes during transcription use
+  `setStatusOnly` so the old transcript's model name survives.
+- Stop all (list panel, notification action `ACTION_STOP`) → cancels the run and turns
+  `autoTranscribe` off; otherwise the next app open would restart it at once. The list
+  shows "automatic transcription is off · N waiting · turn back on".
+- The engine is closed only after a cancelled chunk's native call returns (`join`), never
+  under it.
+- Setup steps and optional permissions show their reverse once done. Android lets an app
+  request a permission or exemption but not give it back, so "undo" opens the system
+  screen (app details, accessibility, battery-optimisation list). "Restore defaults"
+  resets the switches only — never model, permissions or data.
+
 ### 2026-10-21 — Transcription queue order, feedback and log (0.3.5)
 Bug seen on the POCO: with a model installed, opening the app starts an automatic run
 over every pending recording (newest first). "Transcribe now" on another call only

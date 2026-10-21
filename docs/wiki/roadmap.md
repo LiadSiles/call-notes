@@ -16,6 +16,7 @@ _Last updated: 2026-10-21_
 | 0.3.4 | Manual transcription independent of auto switch; animated navigation, no white flash | ✅ navigation OK; manual transcription still did nothing → 0.3.5 |
 | 0.3.5 | Manual request jumps the queue (pauses an auto run), live state (model loading + elapsed, chunks), transcription log, recovery of runs killed mid-way | ⚠️ log showed the service never started (FGS type "none") |
 | 0.3.6 | Fix: transcription service started with explicit mediaProcessing type (dataSync fallback) | ✅ built, awaiting device test |
+| 0.3.7 | Cancel a call's transcription (→ held), stop all (list + notification, turns auto off), undo for every setup step / permission, restore default switches | ✅ built, awaiting device test |
 | 0.4 | Summary + tasks in the fixed schema, date normalization, full call screen (summary, transcript with seek, task approval) | |
 | 0.5 | Tasks: in-app list, reminders, calendar export, duplicate detection | |
 | 0.6 | Model swapping: catalog, Whisper + llama.cpp engines, reprocess, comparison screen | |
@@ -28,7 +29,7 @@ _Last updated: 2026-10-21_
 
 ## Waiting on
 
-- 0.3.6 on the POCO: does "transcribe now" start, how long the model load takes, and
+- 0.3.7 on the POCO: does "transcribe now" start, how long the model load takes, and
   the transcription log if anything stops (it shows the stage and free RAM).
 
 - Owner can't make calls right now. Test 0.3 with imported audio: model download,
