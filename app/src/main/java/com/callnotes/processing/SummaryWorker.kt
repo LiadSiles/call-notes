@@ -183,11 +183,11 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             }
             // Re-summarising shouldn't announce tasks the user has already seen (or ticked off).
             val before = dao.tasksOf(call.id)
-            val known = before.map { TranscriptMergerKey.of(it.title) }.toSet()
+            val knownTitles = before.map { TranscriptMergerKey.of(it.title) }.toSet()
             val doneBefore = before.filter { it.done }.map { TranscriptMergerKey.of(it.title) }.toSet()
             val kept = tasks.map { if (TranscriptMergerKey.of(it.title) in doneBefore) it.copy(done = true) else it }
             dao.replaceAnalysis(call.id, AnalysisPrompt.toJson(result), result.title.ifBlank { null }, analyzer.modelId, kept)
-            val fresh = dao.tasksOf(call.id).filter { TranscriptMergerKey.of(it.title) !in known && !it.done }
+            val fresh = dao.tasksOf(call.id).filter { TranscriptMergerKey.of(it.title) !in knownTitles && !it.done }
             fresh.forEach { Notifications.newTask(host, it, label(call)) }
             log("call ${call.id}: summary done in ${secs(started)} · ${answer.length} chars out · " +
                 "${result.keyPoints.size} points (${result.keyPoints.count { !it.certain }} unsure), " +
