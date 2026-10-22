@@ -27,6 +27,16 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      # The NDK the native build needs isn't on every runner image, and Gradle's own
+      # on-demand download sometimes fails mid-way: install it up front, with retries.
+      - name: Install NDK
+        run: |
+          NDK=$(grep -oP 'ndkVersion = "\K[^"]+' app/build.gradle.kts || echo 27.0.12077973)
+          for i in 1 2 3; do
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK" > /dev/null && break
+            echo "NDK install attempt $i failed; retrying"; sleep 10
+          done
+
       # Speaker diarization runtime (sherpa-onnx + onnxruntime), pinned version + checksum.
       - name: Fetch sherpa-onnx libraries
         run: |

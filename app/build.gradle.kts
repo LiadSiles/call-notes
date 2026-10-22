@@ -10,6 +10,8 @@ plugins {
 android {
     namespace = "com.callnotes"
     compileSdk = 36
+    // Pinned (AGP 8.11's default) so CI can install exactly this NDK before building.
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.callnotes"
