@@ -107,7 +107,6 @@ Java_com_callnotes_inference_whisper_WhisperNative_systemInfo(JNIEnv *env, jobje
  *  4 byte[]  token text bytes (concatenated)     5 int[] token byte offsets (n+1)
  *  6 long[]  token t0                            7 long[] token t1
  *  8 long[]  token t_dtw (-1 if none)            9 int[] token segment index
- * 10 float[] token probability
  */
 JNIEXPORT jobjectArray JNICALL
 Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
@@ -164,7 +163,6 @@ Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
     std::string segBytes, tokBytes;
     std::vector<jint> segOff{0}, tokOff{0}, tokSeg;
     std::vector<jlong> segT0, segT1, tokT0, tokT1, tokDtw;
-    std::vector<jfloat> tokP;
 
     const int nSeg = whisper_full_n_segments(h->ctx);
     for (int s = 0; s < nSeg; ++s) {
@@ -182,12 +180,11 @@ Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
             tokT1.push_back(d.t1);
             tokDtw.push_back(d.t_dtw);
             tokSeg.push_back(s);
-            tokP.push_back(d.p);
         }
     }
 
     jclass objCls = env->FindClass("java/lang/Object");
-    jobjectArray out = env->NewObjectArray(11, objCls, nullptr);
+    jobjectArray out = env->NewObjectArray(10, objCls, nullptr);
     env->SetObjectArrayElement(out, 0, toBytes(env, segBytes));
     env->SetObjectArrayElement(out, 1, fill(env, segOff, &JNIEnv::NewIntArray, &JNIEnv::SetIntArrayRegion));
     env->SetObjectArrayElement(out, 2, fill(env, segT0, &JNIEnv::NewLongArray, &JNIEnv::SetLongArrayRegion));
@@ -198,7 +195,6 @@ Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
     env->SetObjectArrayElement(out, 7, fill(env, tokT1, &JNIEnv::NewLongArray, &JNIEnv::SetLongArrayRegion));
     env->SetObjectArrayElement(out, 8, fill(env, tokDtw, &JNIEnv::NewLongArray, &JNIEnv::SetLongArrayRegion));
     env->SetObjectArrayElement(out, 9, fill(env, tokSeg, &JNIEnv::NewIntArray, &JNIEnv::SetIntArrayRegion));
-    env->SetObjectArrayElement(out, 10, fill(env, tokP, &JNIEnv::NewFloatArray, &JNIEnv::SetFloatArrayRegion));
     return out;
 }
 

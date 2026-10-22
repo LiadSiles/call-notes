@@ -237,8 +237,9 @@ class TranscriptionService : Service() {
             if (ProcessingStatus.state.value.callId == id) ProcessingStatus.set(ProcessingStatus.State(running = true))
             val summarising = ProcessingStatus.summary.value.callId == id
             if (summarising) ProcessingStatus.setSummary(ProcessingStatus.State(running = true))
-            val dao = (context.applicationContext as CallNotesApp).database.calls()
-            CoroutineScope(Dispatchers.IO).launch {
+            val app = context.applicationContext as CallNotesApp
+            val dao = app.database.calls()
+            app.launchBackground {
                 dao.cancelWaiting(id)
                 dao.cancelRunningTranscription(id)
                 dao.cancelAnalysisWaiting(id)
@@ -331,14 +332,8 @@ class TranscriptionService : Service() {
         }
 
         /** Short SHA-256 of a file (first 12 hex chars), for the log. */
-        internal fun fingerprint(file: File): String = runCatching {
-            val digest = java.security.MessageDigest.getInstance("SHA-256")
-            file.inputStream().buffered(1 shl 16).use { input ->
-                val buf = ByteArray(1 shl 16)
-                while (true) { val n = input.read(buf); if (n < 0) break; digest.update(buf, 0, n) }
-            }
-            digest.digest().take(6).joinToString("") { "%02x".format(it) }
-        }.getOrDefault("unreadable")
+        internal fun fingerprint(file: File): String =
+            runCatching { com.callnotes.util.Hashing.sha256Hex(file).take(12) }.getOrDefault("unreadable")
 
         /** Exception with its first app/library frames, for the log. */
         internal fun describe(e: Throwable): String {

@@ -26,15 +26,26 @@ object AudioDecoder {
 
     fun decode(input: File, out: File) {
         val extractor = MediaExtractor()
-        extractor.setDataSource(input.absolutePath)
-        val track = (0 until extractor.trackCount).firstOrNull {
-            extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-        } ?: run { extractor.release(); throw IllegalArgumentException("No audio track in ${input.name}") }
-        extractor.selectTrack(track)
-        val inFormat = extractor.getTrackFormat(track)
-        val codec = MediaCodec.createDecoderByType(inFormat.getString(MediaFormat.KEY_MIME)!!)
-        codec.configure(inFormat, null, null, 0)
-        codec.start()
+        var codec: MediaCodec? = null
+        try {
+            extractor.setDataSource(input.absolutePath)
+            val track = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: throw IllegalArgumentException("No audio track in ${input.name}")
+            extractor.selectTrack(track)
+            val inFormat = extractor.getTrackFormat(track)
+            codec = MediaCodec.createDecoderByType(inFormat.getString(MediaFormat.KEY_MIME)!!)
+            codec.configure(inFormat, null, null, 0)
+            codec.start()
+            decodeTo(out, extractor, codec, inFormat)
+        } finally {
+            // Decoders are a scarce system resource: release them even when decoding fails.
+            codec?.let { runCatching { it.stop() }; it.release() }
+            extractor.release()
+        }
+    }
+
+    private fun decodeTo(out: File, extractor: MediaExtractor, codec: MediaCodec, inFormat: MediaFormat) {
 
         var rate = inFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         var channels = inFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
@@ -112,7 +123,6 @@ object AudioDecoder {
             file.seek(0)
             file.write(Wav.header(written))
         }
-        codec.stop(); codec.release(); extractor.release()
     }
 
     /** Streaming linear resampler to 16 kHz that carries its phase across buffers. */
@@ -124,18 +134,19 @@ object AudioDecoder {
             if (x.isEmpty()) return FloatArray(0)
             if (inRate == Wav.SAMPLE_RATE) { prev = x.last(); return x }
             val step = inRate.toDouble() / Wav.SAMPLE_RATE
-            val out = ArrayList<Float>((x.size / step).toInt() + 2)
+            val out = FloatArray((x.size / step).toInt() + 2)
+            var n = 0
             while (pos < x.size - 1) {
                 val i = kotlin.math.floor(pos).toInt()
                 val frac = (pos - i).toFloat()
                 val a = if (i < 0) prev else x[i]
                 val b = x[i + 1]
-                out.add(a + (b - a) * frac)
+                out[n++] = a + (b - a) * frac
                 pos += step
             }
             pos -= x.size
             prev = x.last()
-            return out.toFloatArray()
+            return out.copyOf(n)
         }
     }
 }

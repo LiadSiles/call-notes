@@ -103,7 +103,7 @@ class ScreenshotTest {
     )
 
     @Test fun callsList() = shot("calls") {
-        val processing = ProcessingStatus.State(running = true, callId = 2, chunksDone = 40, chunksTotal = 100, phase = "transcribing")
+        val processing = ProcessingStatus.State(running = true, callId = 2, progress = 40, progressMax = 100, phase = "transcribing")
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
             item { CallsHeader("ההקלטה פעילה" to Tone.Good, canSearch = true) {} }
             calls.groupBy { dayLabel(it.call.startedAt) }.forEach { (day, list) ->

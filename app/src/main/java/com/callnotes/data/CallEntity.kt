@@ -40,6 +40,17 @@ object CallKind {
     const val IMPORT = "import"
 }
 
+/** How a call is named in lists and notifications. */
+object Caller {
+    /** The contact's name, else the number, else what kind of call it was. */
+    fun label(contactName: String?, number: String?, kind: String, incoming: Boolean): String =
+        contactName ?: number ?: when (kind) {
+            CallKind.VOIP -> "שיחת אינטרנט"
+            CallKind.IMPORT -> "קובץ מיובא"
+            else -> if (incoming) "שיחה נכנסת" else "שיחה יוצאת"
+        }
+}
+
 @Entity(tableName = "calls")
 data class CallEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

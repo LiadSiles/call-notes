@@ -5,19 +5,33 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-/** Live progress of background transcription, for the UI. */
+/** What a worker is doing, for the UI ([ProcessingStatus.State.phase]). */
+object Phase {
+    // Transcription worker
+    const val LOADING = "loading"
+    /** Making the quantized copy of Whisper for a faster preset (once). */
+    const val PREPARING_MODEL = "preparing_model"
+    const val TRANSCRIBING = "transcribing"
+    const val SPEAKERS = "speakers"
+    // Summary worker
+    const val LOADING_ANALYZER = "loading_analyzer"
+    const val WAITING_MEMORY = "waiting_memory"
+    const val ANALYZING = "analyzing"
+    // Both
+    const val WAITING_THERMAL = "waiting_thermal"
+}
+
+/** Live progress of the two background workers (transcription, summaries), for the UI. */
 object ProcessingStatus {
 
     data class State(
         val running: Boolean = false,
         /** Call being processed now, or null while loading the model / between calls. */
         val callId: Long? = null,
-        val chunksDone: Int = 0,
-        val chunksTotal: Int = 0,
-        /**
-         * Transcription: "loading", "transcribing", "speakers". Summary: "loading_analyzer",
-         * "analyzing", "waiting_memory". Both: "waiting_thermal", "stopping".
-         */
+        /** Progress of the current phase out of [progressMax]; 0/0 when unknown. */
+        val progress: Int = 0,
+        val progressMax: Int = 0,
+        /** A [Phase] constant, or "" between calls. */
         val phase: String = "",
         /** When the current phase started (for "loading the model… 0:24"). */
         val since: Long = System.currentTimeMillis(),

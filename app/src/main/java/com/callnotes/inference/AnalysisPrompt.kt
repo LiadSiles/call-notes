@@ -135,7 +135,6 @@ object AnalysisPrompt {
                     owner = owner,
                     duePhrase = t.optString("due_phrase").clean(),
                     dueDate = due,
-                    confidence = 1f,
                     sourceQuote = quote,
                     // Uncited: still link it to the line its quote/title matches (stays "not sure").
                     lines = ls.ifEmpty { located(quote ?: title, lineTexts) },
@@ -150,7 +149,6 @@ object AnalysisPrompt {
             decisions = points("decisions"),
             tasks = tasks,
             followUps = points("follow_ups"),
-            language = "he",
             summaryCertain = o.optBoolean("summary_certain", true),
         )
     }
@@ -161,8 +159,8 @@ object AnalysisPrompt {
 
     /** Loose containment for Hebrew ASR text: punctuation, niqqud and final letters ignored. */
     fun contains(line: String, quote: String): Boolean {
-        val l = TranscriptMerger.normalizeText(line)
-        val q = TranscriptMerger.normalizeText(quote)
+        val l = TranscriptText.normalizeText(line)
+        val q = TranscriptText.normalizeText(quote)
         if (q.isEmpty()) return true
         if (l.contains(q)) return true
         // Allow small differences: most of the quote's words in the line.
@@ -238,7 +236,7 @@ object AnalysisPrompt {
             }
         }
         CallAnalysis(o.optString("title"), o.optString("summary"), list("key_points"), list("decisions"),
-            emptyList(), list("follow_ups"), "he", o.optBoolean("summary_certain", true))
+            emptyList(), list("follow_ups"), o.optBoolean("summary_certain", true))
     }.getOrNull()
 
     private fun String?.clean(): String? = this?.trim()?.takeIf { it.isNotEmpty() && it != "null" }

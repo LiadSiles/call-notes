@@ -4,7 +4,7 @@ import com.callnotes.audio.Wav
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
 import com.callnotes.inference.Transcript
-import com.callnotes.inference.TranscriptMerger
+import com.callnotes.inference.TranscriptText
 import com.callnotes.util.CpuInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -51,10 +51,7 @@ class WhisperTranscriber(
         onProgress: (Int, Int) -> Unit,
     ): Transcript = withContext(Dispatchers.IO) {
         load()
-        val info = Wav.readInfo(audio) ?: error("Not a WAV file: ${audio.name}")
-        require(info.isWorkingFormat) { "Expected 16 kHz mono PCM16, got $info" }
-        val pcm = Wav.readSamples(audio, info, 0, info.sampleCount.toInt())
-        val samples = FloatArray(pcm.size) { pcm[it] / 32768f }
+        val samples = Wav.readFloats(audio)
         onProgress(0, 100)
 
         val finished = AtomicBoolean(false)
@@ -78,8 +75,8 @@ class WhisperTranscriber(
 
         val t = WhisperOutput.parse(raw)
         // Same clean-up as before: drop the dialer's "call is being recorded" notice and loops.
-        val segments = TranscriptMerger.stripAnnouncements(
-            t.segments.filterNot { TranscriptMerger.looksLikeLoop(it.text) }
+        val segments = TranscriptText.stripAnnouncements(
+            t.segments.filterNot { TranscriptText.looksLikeLoop(it.text) }
         )
         Transcript(segments, t.words)
     }

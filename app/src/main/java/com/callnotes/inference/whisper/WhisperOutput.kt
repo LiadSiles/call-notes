@@ -21,7 +21,6 @@ object WhisperOutput {
         val tokT1 = raw[7] as LongArray
         val tokDtw = raw[8] as LongArray
         val tokSeg = raw[9] as IntArray
-        val tokP = raw[10] as FloatArray
 
         val segments = segT0.indices.mapNotNull { i ->
             val text = String(segBytes, segOff[i], segOff[i + 1] - segOff[i], Charsets.UTF_8).trim()
@@ -29,12 +28,12 @@ object WhisperOutput {
         }
 
         val words = ArrayList<Transcript.Word>()
-        var wordBytes = java.io.ByteArrayOutputStream()
-        var start = 0L; var end = 0L; var pSum = 0f; var pN = 0; var seg = -1
+        val wordBytes = java.io.ByteArrayOutputStream()
+        var start = 0L; var end = 0L; var seg = -1
         fun flush() {
             val text = String(wordBytes.toByteArray(), Charsets.UTF_8).trim()
-            if (text.isNotEmpty()) words += Transcript.Word(start, maxOf(end, start), text, if (pN > 0) pSum / pN else 0f)
-            wordBytes = java.io.ByteArrayOutputStream(); pSum = 0f; pN = 0
+            if (text.isNotEmpty()) words += Transcript.Word(start, maxOf(end, start), text)
+            wordBytes.reset()
         }
         for (t in tokT0.indices) {
             val from = tokOff[t]; val len = tokOff[t + 1] - from
@@ -47,7 +46,6 @@ object WhisperOutput {
             }
             wordBytes.write(tokBytes, from, len)
             end = tokT1[t] * 10
-            pSum += tokP[t]; pN++
         }
         if (wordBytes.size() > 0) flush()
         return Transcript(segments, words)

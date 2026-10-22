@@ -31,7 +31,6 @@ import com.callnotes.R
 
 private val Pine10 = Color(0xFF0A2A22)
 private val Pine30 = Color(0xFF1C4F43)
-private val Pine40 = Color(0xFF2A6A59)
 private val Pine80 = Color(0xFF94D2BC)
 private val Pine95 = Color(0xFFE3F1EB)
 private val Brass40 = Color(0xFF9C6A1C)

@@ -83,11 +83,7 @@ object Notifications {
 
     /** "דני · 21.10 14:05" — who the call was with, or what kind of call, and when. */
     fun callLabel(call: com.callnotes.data.CallEntity): String {
-        val who = call.contactName ?: call.number ?: when (call.kind) {
-            com.callnotes.data.CallKind.VOIP -> "שיחת אינטרנט"
-            com.callnotes.data.CallKind.IMPORT -> "קובץ מיובא"
-            else -> if (call.incoming) "שיחה נכנסת" else "שיחה יוצאת"
-        }
+        val who = com.callnotes.data.Caller.label(call.contactName, call.number, call.kind, call.incoming)
         val time = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).format(java.util.Date(call.startedAt))
         return "$who · $time"
     }
@@ -101,36 +97,29 @@ object Notifications {
             runCatching { java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM")) }.getOrNull()
         }
         val text = listOfNotNull(callLabel, due?.let { "עד $it" }, if (!task.certain) "לא בטוח" else null).joinToString(" · ")
-        val open = openTask(context, task.id)
-        post(context, taskNotificationId(task.id),
-            NotificationCompat.Builder(context, CHANNEL_TASKS)
-                .also { hideOnLockScreen(context, it, CHANNEL_TASKS, "משימה חדשה") }
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("משימה חדשה: ${task.title}")
-                .setContentText(text)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(task.title + "\n" + text))
-                .setContentIntent(open)
-                .setAutoCancel(true)
-                .setGroup("tasks")
-                .setCategory(NotificationCompat.CATEGORY_REMINDER))
+        postTask(context, task, "משימה חדשה: ${task.title}", text, publicTitle = "משימה חדשה")
     }
 
     /** A task is due today (or was due while the phone was off). Tap opens it. */
     fun taskDue(context: Context, task: com.callnotes.data.TaskEntity, callLabel: String?) {
         val late = task.dueDate?.let { runCatching { java.time.LocalDate.parse(it).isBefore(java.time.LocalDate.now()) }.getOrNull() } == true
         val text = listOfNotNull(if (late) "עבר המועד" else "להיום", callLabel).joinToString(" · ")
+        postTask(context, task, "תזכורת: ${task.title}", text, publicTitle = "תזכורת למשימה")
+    }
+
+    /** One notification per task (new or due — the later replaces the earlier); tap opens it. */
+    private fun postTask(context: Context, task: com.callnotes.data.TaskEntity, title: String, text: String, publicTitle: String) =
         post(context, taskNotificationId(task.id),
             NotificationCompat.Builder(context, CHANNEL_TASKS)
-                .also { hideOnLockScreen(context, it, CHANNEL_TASKS, "תזכורת למשימה") }
+                .also { hideOnLockScreen(context, it, CHANNEL_TASKS, publicTitle) }
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle("תזכורת: ${task.title}")
+                .setContentTitle(title)
                 .setContentText(text)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(task.title + "\n" + text))
                 .setContentIntent(openTask(context, task.id))
                 .setAutoCancel(true)
                 .setGroup("tasks")
                 .setCategory(NotificationCompat.CATEGORY_REMINDER))
-    }
 
     /** Removes the new-task / reminder notification of a task (it was ticked done). */
     fun cancelTask(context: Context, taskId: Long) =

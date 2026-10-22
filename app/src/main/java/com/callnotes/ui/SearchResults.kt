@@ -83,11 +83,7 @@ fun LazyListScope.searchResults(
     }
 }
 
-private fun who(h: SearchHit) = h.contactName ?: h.number ?: when (h.kind) {
-    CallKind.VOIP -> "שיחת אינטרנט"
-    CallKind.IMPORT -> "קובץ מיובא"
-    else -> if (h.incoming) "שיחה נכנסת" else "שיחה יוצאת"
-}
+private fun who(h: SearchHit) = com.callnotes.data.Caller.label(h.contactName, h.number, h.kind, h.incoming)
 
 /** A window of the text around the first match, so long lines show the relevant part. */
 internal fun snippet(text: String, q: String, around: Int = 60): String {

@@ -1,40 +1,49 @@
 package com.callnotes.util
 
 import android.content.Context
+import android.content.SharedPreferences
+import com.callnotes.inference.ModelRole
+import kotlin.properties.ReadWriteProperty
+import kotlin.reflect.KProperty
 
+/**
+ * All settings, in one SharedPreferences file ("prefs"). Keys are part of the stored data:
+ * never rename one without migrating it. Every property is cheap to read (no caching
+ * needed); writes apply asynchronously except [processingStage].
+ */
 class Prefs(context: Context) {
 
     private val sp = context.applicationContext.getSharedPreferences("prefs", Context.MODE_PRIVATE)
 
+    // ---- Recording ---------------------------------------------------------------------
+
     /** Master switch: record calls at all. */
-    var recordingEnabled: Boolean
-        get() = sp.getBoolean("recording_enabled", true)
-        set(value) = sp.edit().putBoolean("recording_enabled", value).apply()
+    var recordingEnabled by bool(KEY_RECORDING, true)
 
     /** Also record internet calls (WhatsApp, Telegram, Meet…). Experimental. */
-    var recordVoip: Boolean
-        get() = sp.getBoolean("record_voip", true)
-        set(value) = sp.edit().putBoolean("record_voip", value).apply()
+    var recordVoip by bool(KEY_VOIP, true)
 
     /**
-     * Put each call on speakerphone. Off by default: on tested devices the mic
-     * already captures both sides. Kept for devices where the far side is too quiet.
+     * Put each call on speakerphone. Off by default: on tested devices the mic already
+     * captures both sides. Kept for devices where the far side is too quiet.
      */
-    var autoSpeaker: Boolean
-        get() = sp.getBoolean("auto_speaker_v2", false)
-        set(value) = sp.edit().putBoolean("auto_speaker_v2", value).apply()
+    var autoSpeaker by bool(KEY_SPEAKER, false)
+
+    // ---- Processing --------------------------------------------------------------------
+
+    /** Transcribe and summarise each recording automatically once the models are ready. */
+    var autoTranscribe by bool(KEY_AUTO, true)
+
+    /** Whisper preset name: ACCURATE / BALANCED / FAST (see WhisperSpeed). */
+    var transcribeSpeed by string("transcribe_speed", "ACCURATE")
 
     /** Do nothing (record, transcribe, summarise) while the phone's battery saver is on. */
-    var pauseInBatterySaver: Boolean
-        get() = sp.getBoolean("pause_battery_saver", false)
-        set(value) = sp.edit().putBoolean("pause_battery_saver", value).apply()
+    var pauseInBatterySaver by bool(KEY_SAVER, false)
 
-    /** Whisper preset: ACCURATE / BALANCED / FAST (see WhisperSpeed). */
-    var transcribeSpeed: String
-        get() = sp.getString("transcribe_speed", "ACCURATE") ?: "ACCURATE"
-        set(value) = sp.edit().putString("transcribe_speed", value).apply()
+    /** Transcribe and summarise only while the phone is plugged in. */
+    var onlyWhileCharging by bool(KEY_CHARGING, false)
 
-    /** Measured speed per preset: total audio and total transcription time, in ms. */
+    /** Measured speed per preset: total call audio and total recognition time, in ms. */
     fun speedStats(preset: String): Pair<Long, Long> =
         sp.getLong("speed_audio_$preset", 0) to sp.getLong("speed_work_$preset", 0)
 
@@ -42,11 +51,6 @@ class Prefs(context: Context) {
         val (a, w) = speedStats(preset)
         sp.edit().putLong("speed_audio_$preset", a + audioMs).putLong("speed_work_$preset", w + workMs).apply()
     }
-
-    /** Transcribe and summarise only while the phone is plugged in (owner's switch). */
-    var onlyWhileCharging: Boolean
-        get() = sp.getBoolean("only_while_charging", false)
-        set(value) = sp.edit().putBoolean("only_while_charging", value).apply()
 
     /** Battery used per preset: summed percent (×1000) and the call audio it covered (ms). */
     fun energyStats(preset: String): Pair<Long, Long> =
@@ -58,107 +62,110 @@ class Prefs(context: Context) {
             .putLong("energy_audio_$preset", a + audioMs).apply()
     }
 
-    /** Delete recordings of transcribed calls after this many days; 0 = never. */
-    var audioRetentionDays: Int
-        get() = sp.getInt("audio_retention_days", 0)
-        set(value) = sp.edit().putInt("audio_retention_days", value).apply()
-
-    /** Delete whole calls (without open tasks) after this many days; 0 = never. */
-    var callRetentionDays: Int
-        get() = sp.getInt("call_retention_days", 0)
-        set(value) = sp.edit().putInt("call_retention_days", value).apply()
-
-    /** Re-encode recordings as AAC after transcription (~8× smaller). Off by default. */
-    var compressRecordings: Boolean
-        get() = sp.getBoolean("compress_recordings", false)
-        set(value) = sp.edit().putBoolean("compress_recordings", value).apply()
-
-    /** Extra encryption of the database and recordings (security/DataProtection). Off by default. */
-    var encryptData: Boolean
-        get() = sp.getBoolean("encrypt_data", false)
-        set(value) = sp.edit().putBoolean("encrypt_data", value).apply()
-
-    /** Set when an encrypted database could not be opened and was set aside. */
-    var dataKeyLost: Boolean
-        get() = sp.getBoolean("data_key_lost", false)
-        set(value) = sp.edit().putBoolean("data_key_lost", value).apply()
-
-    /** Ask for biometrics / the phone's PIN to open the app (see ui/AppLock). */
-    var appLock: Boolean
-        get() = sp.getBoolean("app_lock", false)
-        set(value) = sp.edit().putBoolean("app_lock", value).apply()
-
-    /** A notification on the morning a task is due. */
-    var taskReminders: Boolean
-        get() = sp.getBoolean("task_reminders", true)
-        set(value) = sp.edit().putBoolean("task_reminders", value).apply()
-
-    /** Transcribe each recording automatically once the model is ready. */
-    var autoTranscribe: Boolean
-        get() = sp.getBoolean("auto_transcribe", true)
-        set(value) = sp.edit().putBoolean("auto_transcribe", value).apply()
-
-    /** Download models only on Wi-Fi. */
-    var wifiOnly: Boolean
-        get() = sp.getBoolean("wifi_only", true)
-        set(value) = sp.edit().putBoolean("wifi_only", value).apply()
-
-    /** Model being downloaded (ModelCatalog id), or null. */
-    var downloadModelId: String?
-        get() = sp.getString("download_model_id", null)
-        set(value) = sp.edit().putString("download_model_id", value).apply()
-
-    /** Human-readable result of the last transcription run, for the settings screen. */
-    var lastProcessing: String?
-        get() = sp.getString("last_processing", null)
-        set(value) = sp.edit().putString("last_processing", value).apply()
+    /** Human-readable result of the last processing run, for the settings screen. */
+    var lastProcessing by nullableString("last_processing")
 
     /**
-     * What a transcription run is doing right now ("loading model", "call 12, chunk 3/9"…),
-     * or null when no run is active. Written synchronously: if the process dies (out of
-     * memory, native crash) the next launch reads where it stopped.
+     * What a processing run is doing right now, or null when none is active. Written
+     * synchronously: if the process dies (out of memory, native crash) the next launch
+     * reads where it stopped ([com.callnotes.processing.ProcessingLog.recoverIfDied]).
      */
     var processingStage: String?
         get() = sp.getString("processing_stage", null)
+        @android.annotation.SuppressLint("ApplySharedPref") // must be on disk before a crash
         set(value) { sp.edit().putString("processing_stage", value).commit() }
 
-    /**
-     * Puts the switches back to their defaults (recording on, internet calls on, speaker off,
-     * auto-transcribe on, Wi-Fi-only downloads). Leaves the model, permissions and data alone.
-     */
-    fun resetSwitches() {
-        sp.edit()
-            .remove("recording_enabled").remove("record_voip").remove("auto_speaker_v2")
-            .remove("auto_transcribe").remove("wifi_only").remove("pause_battery_saver").remove("task_reminders").remove("only_while_charging")
-            .remove("audio_retention_days").remove("call_retention_days")
-            .apply()
-    }
+    // ---- Tasks -------------------------------------------------------------------------
+
+    /** A notification on the morning a task is due. */
+    var taskReminders by bool(KEY_REMINDERS, true)
+
+    // ---- Privacy and storage -----------------------------------------------------------
+
+    /** Delete recordings of transcribed calls after this many days; 0 = never. */
+    var audioRetentionDays by int(KEY_AUDIO_DAYS, 0)
+
+    /** Delete whole calls (without open tasks) after this many days; 0 = never. */
+    var callRetentionDays by int(KEY_CALL_DAYS, 0)
+
+    /** Re-encode recordings as AAC after transcription (~8× smaller). */
+    var compressRecordings by bool("compress_recordings", false)
+
+    /** Extra encryption of the database and recordings (security/DataProtection). */
+    var encryptData by bool("encrypt_data", false)
+
+    /** Set when an encrypted database could not be opened and was set aside. */
+    var dataKeyLost by bool("data_key_lost", false)
+
+    /** Ask for biometrics / the phone's PIN to open the app (see ui/AppLock). */
+    var appLock by bool("app_lock", false)
+
+    // ---- Models ------------------------------------------------------------------------
+
+    /** Download models only on Wi-Fi. */
+    var wifiOnly by bool(KEY_WIFI, true)
 
     /**
-     * Active model per role (see ModelCatalog). Only ever set to an installed model.
-     * The analysis role keeps the pre-0.4 key, which held the user's Gemma choice.
+     * Active model per role (ModelCatalog id). Only ever set to an installed model.
+     * The analysis role keeps the pre-0.4 key "model_id", which held the user's Gemma choice.
      */
-    fun modelFor(role: com.callnotes.inference.ModelRole): String? =
-        if (role == com.callnotes.inference.ModelRole.ANALYZE) modelId
-        else sp.getString("model_${role.name.lowercase()}", null)
+    fun modelFor(role: ModelRole): String? = sp.getString(modelKey(role), null)
 
-    fun setModelFor(role: com.callnotes.inference.ModelRole, id: String) {
-        if (role == com.callnotes.inference.ModelRole.ANALYZE) modelId = id
-        else sp.edit().putString("model_${role.name.lowercase()}", id).apply()
-    }
+    fun setModelFor(role: ModelRole, id: String) = sp.edit().putString(modelKey(role), id).apply()
 
-    /** Active model id (see ModelCatalog). Only ever set to an installed model. */
-    var modelId: String?
-        get() = sp.getString("model_id", null)
-        set(value) = sp.edit().putString("model_id", value).apply()
+    private fun modelKey(role: ModelRole) =
+        if (role == ModelRole.ANALYZE) "model_id" else "model_${role.name.lowercase()}"
 
-    /** Model ids still to download after the current one (comma-separated), for packs. */
-    var downloadQueue: String
-        get() = sp.getString("download_queue", "") ?: ""
-        set(value) = sp.edit().putString("download_queue", value).apply()
+    /** Model being downloaded (ModelCatalog id), or null. */
+    var downloadModelId by nullableString("download_model_id")
 
     /** Active DownloadManager id for the model, or -1. */
-    var downloadId: Long
-        get() = sp.getLong("download_id", -1L)
-        set(value) = sp.edit().putLong("download_id", value).apply()
+    var downloadId by long("download_id", -1L)
+
+    /** Model ids still to download after the current one (comma-separated), for packs. */
+    var downloadQueue by string("download_queue", "")
+
+    /**
+     * Puts the switches back to their defaults. Leaves models, permissions, the app lock,
+     * encryption and all data alone.
+     */
+    fun resetSwitches() {
+        sp.edit().apply { RESETTABLE.forEach(::remove) }.apply()
+    }
+
+    // ---- Delegates ---------------------------------------------------------------------
+
+    private fun bool(key: String, default: Boolean) = pref({ getBoolean(key, default) }, { putBoolean(key, it) })
+    private fun int(key: String, default: Int) = pref({ getInt(key, default) }, { putInt(key, it) })
+    private fun long(key: String, default: Long) = pref({ getLong(key, default) }, { putLong(key, it) })
+    private fun string(key: String, default: String) = pref({ getString(key, default) ?: default }, { putString(key, it) })
+    private fun nullableString(key: String) = pref<String?>({ getString(key, null) }, { putString(key, it) })
+
+    /** A property stored under one key; reads go to SharedPreferences, writes apply(). */
+    private inline fun <T> pref(
+        crossinline get: SharedPreferences.() -> T,
+        crossinline put: SharedPreferences.Editor.(T) -> SharedPreferences.Editor,
+    ) = object : ReadWriteProperty<Any?, T> {
+        override fun getValue(thisRef: Any?, property: KProperty<*>): T = sp.get()
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) = sp.edit().put(value).apply()
+    }
+
+    private companion object {
+        const val KEY_RECORDING = "recording_enabled"
+        const val KEY_VOIP = "record_voip"
+        const val KEY_SPEAKER = "auto_speaker_v2"
+        const val KEY_AUTO = "auto_transcribe"
+        const val KEY_SAVER = "pause_battery_saver"
+        const val KEY_CHARGING = "only_while_charging"
+        const val KEY_REMINDERS = "task_reminders"
+        const val KEY_AUDIO_DAYS = "audio_retention_days"
+        const val KEY_CALL_DAYS = "call_retention_days"
+        const val KEY_WIFI = "wifi_only"
+
+        /** What "restore defaults" resets. */
+        val RESETTABLE = listOf(
+            KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
+            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_AUDIO_DAYS, KEY_CALL_DAYS,
+        )
+    }
 }

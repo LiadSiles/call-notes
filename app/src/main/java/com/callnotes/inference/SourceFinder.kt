@@ -30,7 +30,7 @@ object SourceFinder {
     }
 
     internal fun contentWords(text: String): List<String> =
-        TranscriptMerger.normalizeText(text).split(' ').filter { it.length >= 2 && it !in STOP }.distinct()
+        TranscriptText.normalizeText(text).split(' ').filter { it.length >= 2 && it !in STOP }.distinct()
 
     /** The word as written and without a one-letter prefix (ו ה ב ל מ ש כ), for longer words. */
     internal fun forms(w: String): List<String> =

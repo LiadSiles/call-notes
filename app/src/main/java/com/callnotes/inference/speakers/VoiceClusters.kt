@@ -86,32 +86,14 @@ object VoiceClusters {
         return Result(labels, mapOf(0 to c[0], 1 to c[1]), similarity, share)
     }
 
-    private fun viterbi(windows: List<Window>, e: List<FloatArray?>, c: Array<FloatArray>): IntArray {
-        val n = windows.size
-        fun emit(i: Int, s: Int): Double {
-            val v = e[i] ?: return 0.0 // too short: no evidence, follows neighbours
+    private fun viterbi(windows: List<Window>, e: List<FloatArray?>, c: Array<FloatArray>): IntArray =
+        TwoSpeakerViterbi.decode(
+            windows.size,
             // Evidence is the margin between the two voices, scaled so a clear window
-            // outweighs one switch.
-            return 8.0 * (dot(v, c[s]) - dot(v, c[1 - s]))
-        }
-        fun switchCost(gap: Long) = if (gap > PAUSE_MS) ln(0.3 / 0.7) else ln(0.08 / 0.92)
-        val score = Array(n) { DoubleArray(2) }
-        val from = Array(n) { IntArray(2) }
-        for (s in 0..1) score[0][s] = emit(0, s)
-        for (i in 1 until n) {
-            val sw = switchCost(windows[i].gapBeforeMs)
-            for (s in 0..1) {
-                val stay = score[i - 1][s]
-                val move = score[i - 1][1 - s] + sw
-                if (stay >= move) { score[i][s] = stay + emit(i, s); from[i][s] = s }
-                else { score[i][s] = move + emit(i, s); from[i][s] = 1 - s }
-            }
-        }
-        val out = IntArray(n)
-        out[n - 1] = if (score[n - 1][0] >= score[n - 1][1]) 0 else 1
-        for (i in n - 1 downTo 1) out[i - 1] = from[i][out[i]]
-        return out
-    }
+            // outweighs one switch; a window too short to fingerprint follows its neighbours.
+            emit = { i, s -> e[i]?.let { v -> 8.0 * (dot(v, c[s]) - dot(v, c[1 - s])) } ?: 0.0 },
+            switchCost = { i -> if (windows[i].gapBeforeMs > PAUSE_MS) ln(0.3 / 0.7) else ln(0.08 / 0.92) },
+        )
 
     fun turns(windows: List<Window>, labels: IntArray): List<SpeakerAligner.Turn> =
         windows.indices.map { SpeakerAligner.Turn(windows[it].startMs, windows[it].endMs, labels[it]) }

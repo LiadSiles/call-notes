@@ -25,6 +25,11 @@ object TaskReminders {
 
     const val HOUR = 9
     private const val ACTION_FIRE = "com.callnotes.action.TASK_REMINDER"
+    private val HANDLED = setOf(
+        ACTION_FIRE, Retention.ACTION_DAILY,
+        Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED,
+        Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED,
+    )
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Re-plans in the background (safe to call from the UI thread). */
@@ -67,6 +72,7 @@ object TaskReminders {
     /** The alarm itself, plus boot / update / clock changes (all just re-plan). */
     class Receiver : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action !in HANDLED) return // exported for system broadcasts: ignore anything else
             val pending = goAsync()
             val app = context.applicationContext
             scope.launch {

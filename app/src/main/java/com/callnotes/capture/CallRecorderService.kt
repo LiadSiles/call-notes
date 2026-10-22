@@ -6,12 +6,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.os.Build
-import android.os.PowerManager
-import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.view.accessibility.AccessibilityEvent
 import androidx.core.content.ContextCompat
 import com.callnotes.CallNotesApp
@@ -19,9 +19,12 @@ import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SpeakerResult
+import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.TranscriptionService
+import com.callnotes.util.BatterySaver
 import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
+import com.callnotes.util.RecordingFiles
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -141,8 +144,8 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
     }
 
     private fun startSession(incoming: Boolean, kind: String) {
-        if (com.callnotes.util.BatterySaver.paused(this)) {
-            com.callnotes.processing.ProcessingLog.write(this, "call not recorded: battery saver is on (paused by setting)")
+        if (BatterySaver.paused(this)) {
+            ProcessingLog.write(this, "call not recorded: battery saver is on (paused by setting)")
             return
         }
         val startedAt = System.currentTimeMillis()
@@ -217,8 +220,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
 
         val voip = current.kind == CallKind.VOIP
         if (voip && endedAt - current.startedAt < MIN_VOIP_MS) {
-            current.file.delete()
-            CallTrace.fileFor(current.file).delete()
+            RecordingFiles.delete(current.file.path)
             return
         }
 
@@ -231,8 +233,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
 
         // An outgoing call nobody answered: we only recorded ringing — drop it.
         if (log != null && !incoming && log.durationSec == 0L) {
-            current.file.delete()
-            CallTrace.fileFor(current.file).delete()
+            RecordingFiles.delete(current.file.path)
             return
         }
 

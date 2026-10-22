@@ -3,10 +3,11 @@ package com.callnotes.inference
 import java.io.File
 
 /*
- * The two swappable "sockets" from the plan. Any model the user picks plugs into one
- * (or both) of these, so the rest of the app never knows which model ran.
- * Transcriber: ivrit.ai Hebrew Whisper via whisper.cpp (0.4; Gemma 4 audio until 0.3.8).
- * Analyzer: Gemma 4 (next).
+ * The two swappable "sockets": the processing workers only see these interfaces, so a
+ * model can be replaced without touching the pipeline.
+ * Transcriber: ivrit.ai Hebrew Whisper via whisper.cpp ([com.callnotes.inference.whisper]).
+ * Analyzer: Gemma 4 via LiteRT-LM ([GemmaAnalyzer]); the prompt and the checks on its
+ * answer live in [AnalysisPrompt].
  */
 
 /** Audio -> timestamped text. */
@@ -20,8 +21,8 @@ interface Transcriber : AutoCloseable {
     fun abort() {}
 
     /**
-     * [audio] is a 16 kHz mono 16-bit WAV (the recorder's format; imports are converted
-     * first). [onProgress] reports (chunks done, chunks total).
+     * [audio] is a 16 kHz mono 16-bit WAV (the recorder's format; anything else is
+     * converted first). [onProgress] reports (done, total).
      */
     suspend fun transcribe(
         audio: File,
@@ -30,10 +31,18 @@ interface Transcriber : AutoCloseable {
     ): Transcript
 }
 
-/** Transcript -> structured summary, tasks and dates. */
-interface Analyzer {
+/** A language model that answers a prompt (the summary prompt from [AnalysisPrompt]). */
+interface Analyzer : AutoCloseable {
     val modelId: String
-    suspend fun analyze(transcript: Transcript, call: CallContext): CallAnalysis
+
+    /** Loads the model up front (slow: seconds). Optional; [ask] loads lazily. */
+    suspend fun load() {}
+
+    /** The model's full answer; [onChars] reports how much has been written so far. */
+    suspend fun ask(prompt: String, onChars: (Int) -> Unit = {}): String
+
+    /** Stops the current answer as soon as the engine allows (any thread). */
+    fun abort() {}
 }
 
 data class Transcript(
@@ -43,9 +52,7 @@ data class Transcript(
 ) {
     /** [speaker]: 0/1 after speaker separation, null before / without it. */
     data class Segment(val startMs: Long, val endMs: Long, val text: String, val speaker: Int? = null)
-    data class Word(val startMs: Long, val endMs: Long, val text: String, val probability: Float = 1f)
-
-    val text: String get() = segments.joinToString(" ") { it.text }
+    data class Word(val startMs: Long, val endMs: Long, val text: String)
 }
 
 /** What the analyzer knows about the call besides the words. */
@@ -63,7 +70,6 @@ data class CallAnalysis(
     val decisions: List<Point>,
     val tasks: List<Task>,
     val followUps: List<Point>,
-    val language: String,
     /** False if the model said the transcript was too unclear to summarise reliably. */
     val summaryCertain: Boolean = true,
 ) {
@@ -80,7 +86,6 @@ data class CallAnalysis(
         val duePhrase: String?,
         /** ISO date, recomputed in code relative to the call time. */
         val dueDate: String?,
-        val confidence: Float,
         val sourceQuote: String?,
         val lines: List<Int> = emptyList(),
         val certain: Boolean = true,
@@ -90,14 +95,12 @@ data class CallAnalysis(
 enum class ModelRole {
     TRANSCRIBE,
     ANALYZE,
-    /** pyannote segmentation (who speaks when). */
-    SPEAKER_SEGMENTATION,
     /** Voice fingerprint model (which voice is which). */
     SPEAKER_EMBEDDING,
 }
 
 /** Runtime that executes a model. (Not to be confused with LiteRT-LM's `Engine` class.) */
-enum class InferenceEngine { LITERT_LM, LLAMA_CPP, WHISPER_CPP, SHERPA_ONNX }
+enum class InferenceEngine { LITERT_LM, WHISPER_CPP, SHERPA_ONNX }
 
 /** One entry in the downloadable model catalog. */
 data class ModelSpec(
@@ -159,23 +162,6 @@ object ModelCatalog {
         minRamGb = 5.0,
     )
 
-    /**
-     * Speaker separation, run by sherpa-onnx v1.13.8 (k2-fsa). pyannote segmentation-3.0
-     * exported to ONNX (MIT), from the sherpa-onnx author's HF mirror, pinned commit.
-     */
-    val PYANNOTE_SEGMENTATION = ModelSpec(
-        id = "pyannote-segmentation-3.0",
-        displayName = "pyannote segmentation 3.0",
-        roles = setOf(ModelRole.SPEAKER_SEGMENTATION),
-        engine = InferenceEngine.SHERPA_ONNX,
-        fileName = "pyannote-segmentation-3.0.onnx",
-        downloadUrl = "https://huggingface.co/csukuangfj/sherpa-onnx-pyannote-segmentation-3-0/resolve/" +
-            "9403a6902bb58e3d5ae8c7e77c3422de279db2e0/model.onnx",
-        sizeBytes = 5_992_913,
-        sha256 = "220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079",
-        minRamGb = 2.0,
-    )
-
     /** WeSpeaker ResNet34-LM (VoxCeleb, CC-BY-4.0) — the embedding pyannote's own pipeline uses. */
     val WESPEAKER_RESNET34 = ModelSpec(
         id = "wespeaker-resnet34-lm",
@@ -196,8 +182,8 @@ object ModelCatalog {
      */
     val SPEAKER_PACK = listOf(WESPEAKER_RESNET34)
 
-    /** Files of models no longer used; deleted on start. */
-    val RETIRED = listOf(PYANNOTE_SEGMENTATION)
+    /** Files of models no longer used (pyannote segmentation, ≤ 0.5.2); deleted on start. */
+    val RETIRED_FILES = listOf("pyannote-segmentation-3.0.onnx")
 
     /** Best first within each role. */
     val all = listOf(WHISPER_HE_TURBO, GEMMA_4_E4B, GEMMA_4_E2B, WESPEAKER_RESNET34)

@@ -6,11 +6,11 @@ import android.media.AudioManager
 import android.os.Build
 
 /**
- * Tries to move call audio to the loudspeaker through the audio API.
+ * Tries to move call audio to the loudspeaker through the audio API (optional "auto
+ * speaker" setting, for phones whose mic hears the far side too quietly).
  *
- * Whether Android honours this for a cellular call owned by another app varies by
- * device and version — that is exactly what the prototype is here to find out.
- * [isSpeakerOn] reports the real route, so success is always verified, never assumed.
+ * Whether Android honours this for a cellular call owned by another app varies by device
+ * and version, so [isSpeakerOn] reports the real route: success is verified, never assumed.
  */
 class SpeakerController(context: Context) {
 

@@ -1,5 +1,6 @@
 package com.callnotes.ui
 
+import com.callnotes.processing.Phase
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -182,33 +183,30 @@ fun CallsScreen(
                         if (i > 0) Spacer(Modifier.padding(6.dp))
                         val who = st.callId?.let { id -> items.firstOrNull { it.call.id == id }?.call }?.let { displayName(it) }
                         val label = when (st.phase) {
-                            "stopping" -> "עוצר…"
-                            "speakers" -> "מזהה מי אמר מה"
-                            "loading" -> "טוען את מודל התמלול"
-                            "preparing_model" -> "מכין גרסה מהירה של המודל · ${if (st.chunksTotal > 0) st.chunksDone * 100 / st.chunksTotal else 0}%"
-                            "loading_analyzer" -> "טוען את מודל הסיכום"
-                            "analyzing" -> "מסכם"
-                            "waiting_memory" -> "ממתין לזיכרון כדי לסכם"
-                            "waiting_thermal" -> "הטלפון חם — ממתין שיתקרר"
-                            else -> if (st.chunksTotal > 0) "מתמלל · ${st.chunksDone * 100 / st.chunksTotal}%" else "מתמלל"
+                            Phase.SPEAKERS -> "מזהה מי אמר מה"
+                            Phase.LOADING -> "טוען את מודל התמלול"
+                            Phase.PREPARING_MODEL -> "מכין גרסה מהירה של המודל · ${if (st.progressMax > 0) st.progress * 100 / st.progressMax else 0}%"
+                            Phase.LOADING_ANALYZER -> "טוען את מודל הסיכום"
+                            Phase.ANALYZING -> "מסכם"
+                            Phase.WAITING_MEMORY -> "ממתין לזיכרון כדי לסכם"
+                            Phase.WAITING_THERMAL -> "הטלפון חם — ממתין שיתקרר"
+                            else -> if (st.progressMax > 0) "מתמלל · ${st.progress * 100 / st.progressMax}%" else "מתמלל"
                         } + (who?.let { " · $it" } ?: "")
                         Text(label, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.padding(2.dp))
-                        if (st.chunksTotal > 0 && st.phase == "transcribing") {
+                        if (st.progressMax > 0 && st.phase == Phase.TRANSCRIBING) {
                             LinearProgressIndicator(
-                                progress = { st.chunksDone.toFloat() / st.chunksTotal },
+                                progress = { st.progress.toFloat() / st.progressMax },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         } else {
                             LinearProgressIndicator(Modifier.fillMaxWidth())
                         }
                     }
-                    if (workRows.none { it.phase == "stopping" }) {
-                        TextButton(onClick = {
-                            com.callnotes.processing.TranscriptionService.stopAll(context)
-                            autoOn = false
-                        }) { Text("עצירת הכל") }
-                    }
+                    TextButton(onClick = {
+                        com.callnotes.processing.TranscriptionService.stopAll(context)
+                        autoOn = false
+                    }) { Text("עצירת הכל") }
                 }
             }
 
@@ -267,7 +265,7 @@ internal fun CallsHeader(status: Pair<String, Tone>, canSearch: Boolean, onSearc
 internal fun CallRow(item: CallListItem, processing: ProcessingStatus.State, onClick: () -> Unit) {
     val call = item.call
     val live = processing.callId == call.id
-    val status = statusOf(call, if (live) processing.chunksDone else null, if (live) processing.chunksTotal else null)
+    val status = statusOf(call, if (live) processing.progress else null, if (live) processing.progressMax else null)
     Surface(
         color = androidx.compose.ui.graphics.Color.Transparent,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),

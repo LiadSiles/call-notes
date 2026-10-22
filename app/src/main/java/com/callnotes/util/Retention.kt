@@ -5,10 +5,8 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import com.callnotes.CallNotesApp
-import com.callnotes.capture.CallTrace
 import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.ProcessingStatus
-import java.io.File
 
 /**
  * Automatic deletion, as the user sets it (both off by default):
@@ -48,7 +46,7 @@ object Retention {
         if (prefs.callRetentionDays > 0) {
             for (c in dao.callsToExpire(now - prefs.callRetentionDays * DAY)) {
                 if (c.id in busy) continue
-                c.filePath?.let { deleteAudioFiles(it) }
+                c.filePath?.let(RecordingFiles::delete)
                 dao.delete(c.id)
                 calls++
             }
@@ -56,17 +54,13 @@ object Retention {
         if (prefs.audioRetentionDays > 0) {
             for (c in dao.audioToExpire(now - prefs.audioRetentionDays * DAY)) {
                 if (c.id in busy) continue
-                c.filePath?.let { deleteAudioFiles(it) }
+                c.filePath?.let(RecordingFiles::delete)
                 dao.markAudioDeleted(c.id, now)
                 audio++
             }
         }
         if (audio + calls > 0) ProcessingLog.write(context, "retention: deleted $audio recordings, $calls calls")
+        if (calls > 0) TaskReminders.plan(context)
         return audio to calls
-    }
-
-    private fun deleteAudioFiles(path: String) {
-        File(path).delete()
-        CallTrace.fileFor(File(path)).delete()
     }
 }

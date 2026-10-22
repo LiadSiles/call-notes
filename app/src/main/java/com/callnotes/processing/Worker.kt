@@ -104,7 +104,7 @@ abstract class Worker(protected val host: TranscriptionService, val notification
         var logged = false
         while (power.currentThermalStatus >= PowerManager.THERMAL_STATUS_SEVERE) {
             if (!logged) { step("waiting for the phone to cool down"); logged = true }
-            publish(ProcessingStatus.State(running = true, phase = "waiting_thermal"))
+            publish(ProcessingStatus.State(running = true, phase = Phase.WAITING_THERMAL))
             host.showWork(this, "הטלפון חם", "ממתין שיתקרר")
             delay(60_000)
         }

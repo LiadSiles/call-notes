@@ -1,5 +1,6 @@
 package com.callnotes.ui
 
+import com.callnotes.processing.Phase
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -56,7 +57,7 @@ fun SummarySection(
 ) {
     val cs = MaterialTheme.colorScheme
     val running = processing.running && processing.callId == c.id &&
-        processing.phase in setOf("loading_analyzer", "analyzing", "waiting_memory")
+        processing.phase in setOf(Phase.LOADING_ANALYZER, Phase.ANALYZING, Phase.WAITING_MEMORY)
     val analysis = remember(c.analysisJson) { AnalysisPrompt.fromJson(c.analysisJson) }
 
     SectionHeader("סיכום ומשימות")
@@ -65,8 +66,8 @@ fun SummarySection(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     when {
-                        processing.phase == "loading_analyzer" && running -> "טוען את מודל הסיכום…"
-                        processing.phase == "waiting_memory" && running -> "ממתין לזיכרון פנוי — התמלול רץ במקביל…"
+                        processing.phase == Phase.LOADING_ANALYZER && running -> "טוען את מודל הסיכום…"
+                        processing.phase == Phase.WAITING_MEMORY && running -> "ממתין לזיכרון פנוי — התמלול רץ במקביל…"
                         running -> "מסכם את השיחה…"
                         else -> "ממתין לסיכום…"
                     },

@@ -93,39 +93,23 @@ object LevelSpeakers {
     }
 
     /** Most likely speaker sequence; switching costs less after a longer pause. */
-    private fun viterbi(levels: DoubleArray, gaps: LongArray, means: DoubleArray, sd: Double): IntArray {
-        val n = levels.size
-        fun emit(i: Int, s: Int): Double {
-            if (levels[i] <= -80) return 0.0 // unmeasurable word: no evidence either way
-            val z = (levels[i] - means[s]) / sd
-            return -0.5 * z * z
-        }
-        fun switchCost(gapMs: Long): Double {
-            val p = when {
-                gapMs < 250 -> 0.03
-                gapMs < 700 -> 0.15
-                gapMs < 1500 -> 0.3
-                else -> 0.45
-            }
-            return ln(p) - ln(1 - p)
-        }
-        val score = Array(n) { DoubleArray(2) }
-        val from = Array(n) { IntArray(2) }
-        for (s in 0..1) score[0][s] = emit(0, s)
-        for (i in 1 until n) {
-            val sw = switchCost(gaps[i])
-            for (s in 0..1) {
-                val stay = score[i - 1][s]
-                val move = score[i - 1][1 - s] + sw
-                if (stay >= move) { score[i][s] = stay + emit(i, s); from[i][s] = s }
-                else { score[i][s] = move + emit(i, s); from[i][s] = 1 - s }
-            }
-        }
-        val out = IntArray(n)
-        out[n - 1] = if (score[n - 1][0] >= score[n - 1][1]) 0 else 1
-        for (i in n - 1 downTo 1) out[i - 1] = from[i][out[i]]
-        return out
-    }
+    private fun viterbi(levels: DoubleArray, gaps: LongArray, means: DoubleArray, sd: Double): IntArray =
+        TwoSpeakerViterbi.decode(
+            levels.size,
+            emit = { i, s ->
+                if (levels[i] <= -80) 0.0 // unmeasurable word: no evidence either way
+                else { val z = (levels[i] - means[s]) / sd; -0.5 * z * z }
+            },
+            switchCost = { i ->
+                val p = when {
+                    gaps[i] < 250 -> 0.03
+                    gaps[i] < 700 -> 0.15
+                    gaps[i] < 1500 -> 0.3
+                    else -> 0.45
+                }
+                ln(p) - ln(1 - p)
+            },
+        )
 
     /** Word labels as speaker turns, for [SpeakerAligner.align]. */
     fun turns(words: List<Transcript.Word>, labels: IntArray): List<SpeakerAligner.Turn> =
@@ -133,15 +117,18 @@ object LevelSpeakers {
 
     /** Audio of [speaker]'s words (up to [maxSeconds]), for a voice fingerprint. */
     fun samplesOf(samples: FloatArray, words: List<Transcript.Word>, labels: IntArray, speaker: Int, maxSeconds: Int = 20): FloatArray {
-        val out = ArrayList<Float>()
+        val out = FloatArray(maxSeconds * 16_000)
+        var size = 0
         for (i in words.indices) {
             if (labels[i] != speaker) continue
             val from = (words[i].startMs * 16).toInt().coerceIn(0, samples.size)
             val to = (words[i].endMs * 16).toInt().coerceIn(from, samples.size)
-            for (k in from until to) out += samples[k]
-            if (out.size >= maxSeconds * 16_000) break
+            val n = minOf(to - from, out.size - size)
+            System.arraycopy(samples, from, out, size, n)
+            size += n
+            if (size == out.size) break
         }
-        return out.toFloatArray()
+        return out.copyOf(size)
     }
 
     /**

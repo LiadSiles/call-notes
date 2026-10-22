@@ -187,11 +187,8 @@ internal fun TaskCard(
     }
 }
 
-private fun who(item: TaskListItem) = item.callContactName ?: item.callNumber ?: when (item.callKind) {
-    CallKind.VOIP -> "שיחת אינטרנט"
-    CallKind.IMPORT -> "קובץ מיובא"
-    else -> if (item.callIncoming) "שיחה נכנסת" else "שיחה יוצאת"
-}
+private fun who(item: TaskListItem) =
+    com.callnotes.data.Caller.label(item.callContactName, item.callNumber, item.callKind, item.callIncoming)
 
 /** "עד 22.10 (מחר)", overdue marked. */
 internal fun dueLabel(date: String?, phrase: String?): String? {

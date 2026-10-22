@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
+import com.callnotes.inference.whisper.WhisperSpeed
 import com.callnotes.util.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
-import java.security.MessageDigest
 
 /**
  * Tracks which models are installed, which one is active, and the (single) download in
@@ -62,7 +62,7 @@ class ModelManager(private val context: Context) {
             prefs.downloadId = -1L
         }
         // Free the space of models the app no longer uses.
-        ModelCatalog.RETIRED.forEach { fileFor(it).delete(); partFor(it).delete() }
+        ModelCatalog.RETIRED_FILES.forEach { File(modelsDir, it).delete(); File(modelsDir, "$it.part").delete() }
         refresh()
     }
 
@@ -130,7 +130,7 @@ class ModelManager(private val context: Context) {
     private fun begin(spec: ModelSpec, wifiOnly: Boolean) {
         partFor(spec).delete()
         val request = DownloadManager.Request(Uri.parse(spec.downloadUrl))
-            .setTitle("${spec.displayName} — מודל לתמלול")
+            .setTitle("${spec.displayName} — הורדת מודל")
             .setDescription("סיכומי שיחות")
             .setDestinationUri(Uri.fromFile(partFor(spec)))
             .setAllowedOverMetered(!wifiOnly)
@@ -153,7 +153,7 @@ class ModelManager(private val context: Context) {
 
     fun delete(spec: ModelSpec) {
         if (prefs.downloadModelId == spec.id) cancelDownload()
-        if (spec.engine == InferenceEngine.WHISPER_CPP) com.callnotes.inference.whisper.WhisperSpeed.deleteDerived(fileFor(spec))
+        if (spec.engine == InferenceEngine.WHISPER_CPP) WhisperSpeed.deleteDerived(fileFor(spec))
         fileFor(spec).delete()
         partFor(spec).delete()
         refresh()
@@ -199,7 +199,7 @@ class ModelManager(private val context: Context) {
         verifying = spec
         scope.launch {
             val part = partFor(spec)
-            val ok = part.exists() && part.length() == spec.sizeBytes && sha256(part) == spec.sha256
+            val ok = part.exists() && part.length() == spec.sizeBytes && com.callnotes.util.Hashing.sha256Hex(part) == spec.sha256
             prefs.downloadId = -1L
             prefs.downloadModelId = null
             val result = if (ok && part.renameTo(fileFor(spec))) {
@@ -232,16 +232,4 @@ class ModelManager(private val context: Context) {
         )
     }
 
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().buffered(1 shl 20).use { input ->
-            val buf = ByteArray(1 shl 20)
-            while (true) {
-                val n = input.read(buf)
-                if (n < 0) break
-                digest.update(buf, 0, n)
-            }
-        }
-        return digest.digest().joinToString("") { "%02x".format(it) }
-    }
 }

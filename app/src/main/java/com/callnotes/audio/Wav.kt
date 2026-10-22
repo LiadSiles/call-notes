@@ -20,6 +20,7 @@ object Wav {
         val durationMs get() = sampleCount * 1000 / sampleRate
     }
 
+    /** 44-byte PCM16 header for [dataBytes] of audio. */
     fun header(dataBytes: Long, sampleRate: Int = SAMPLE_RATE, channels: Int = 1): ByteArray {
         val bitsPerSample = 16
         val byteRate = sampleRate * channels * bitsPerSample / 8
@@ -69,30 +70,29 @@ object Wav {
         null
     }
 
-    /** Reads [count] mono samples starting at [start] (working format only). */
-    fun readSamples(file: File, info: Info, start: Long, count: Int): ShortArray {
-        val n = count.coerceAtMost((info.sampleCount - start).coerceAtLeast(0).toInt())
-        val bytes = ByteArray(n * 2)
+    /**
+     * All samples of a working-format file as floats in [-1, 1), read in blocks straight into
+     * the result (a 30-minute call is 115 MB as floats; no second full-size copy is made).
+     */
+    fun readFloats(file: File): FloatArray {
+        val info = readInfo(file) ?: error("Not a WAV file: ${file.name}")
+        require(info.isWorkingFormat) { "Expected 16 kHz mono PCM16, got $info" }
+        val n = info.sampleCount.toInt()
+        val out = FloatArray(n)
+        val block = ByteArray(1 shl 16)
         RandomAccessFile(file, "r").use { f ->
-            f.seek(info.dataOffset + start * 2)
-            f.readFully(bytes)
+            f.seek(info.dataOffset)
+            var i = 0
+            while (i < n) {
+                val bytes = minOf(block.size, (n - i) * 2)
+                f.readFully(block, 0, bytes)
+                for (k in 0 until bytes / 2) {
+                    val s = (block[2 * k].toInt() and 0xFF) or (block[2 * k + 1].toInt() shl 8)
+                    out[i++] = s.toShort() / 32768f
+                }
+            }
         }
-        return ShortArray(n) { i ->
-            ((bytes[2 * i].toInt() and 0xFF) or (bytes[2 * i + 1].toInt() shl 8)).toShort()
-        }
-    }
-
-    fun write(file: File, samples: ShortArray, sampleRate: Int = SAMPLE_RATE) {
-        val data = ByteArray(samples.size * 2)
-        for (i in samples.indices) {
-            val s = samples[i].toInt()
-            data[2 * i] = (s and 0xFF).toByte()
-            data[2 * i + 1] = ((s shr 8) and 0xFF).toByte()
-        }
-        file.outputStream().use { out ->
-            out.write(header(data.size.toLong(), sampleRate))
-            out.write(data)
-        }
+        return out
     }
 
     private fun readLe32(f: RandomAccessFile): Long {

@@ -5,7 +5,6 @@ import com.callnotes.audio.Wav
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SegmentEntity
-import com.callnotes.inference.InferenceEngine
 import com.callnotes.inference.ModelCatalog
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
@@ -126,11 +125,11 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
     }
 
     private suspend fun load(spec: ModelSpec, file: File, call: CallEntity): Transcriber? {
-        publish(ProcessingStatus.State(running = true, callId = call.id, phase = "loading"))
+        publish(ProcessingStatus.State(running = true, callId = call.id, phase = Phase.LOADING))
         host.showWork(this, "מתמלל: ${label(call)}", "טוען את מודל התמלול…", callId = call.id)
         step("loading model ${spec.id} (${"%.2f".format(file.length() / 1e9)} GB) · ${ProcessingLog.freeRam(host)}")
         val started = System.currentTimeMillis()
-        var preset = if (spec.engine == InferenceEngine.WHISPER_CPP) WhisperSpeed.current(Prefs(host)) else WhisperSpeed.ACCURATE
+        var preset = WhisperSpeed.current(Prefs(host))
         if (preset.quantType != null && !preset.fileFor(file).isFile) {
             val err = prepareVariant(file, preset, call)
             if (err != null) {
@@ -140,8 +139,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             }
         }
         val useQuant = preset.quantType != null && preset.fileFor(file).isFile
-        val t = if (useQuant || preset == WhisperSpeed.ACCURATE) Transcribers.create(host, spec, file, preset)
-            else WhisperTranscriber(spec, file, preset.beamSize) // FAST without its copy
+        val t = Transcribers.create(spec, file, preset)
         speed = preset
         step("preset ${preset.name}: ${if (useQuant) preset.fileFor(file).name else file.name}, beam ${preset.beamSize}")
         return try {
@@ -198,7 +196,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         val started = System.currentTimeMillis()
         val title = "מתמלל: ${label(call)}"
         step("preparing ${preset.suffix} copy of ${base.name} · ${ProcessingLog.freeRam(host)}")
-        publish(ProcessingStatus.State(running = true, callId = call.id, phase = "preparing_model"))
+        publish(ProcessingStatus.State(running = true, callId = call.id, phase = Phase.PREPARING_MODEL))
         host.showWork(this, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)…", callId = call.id)
         preparing = true
         val err = try {
@@ -210,7 +208,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                     }
                     try {
                         WhisperSpeed.prepare(base, preset) { pct ->
-                            publish(ProcessingStatus.State(true, call.id, pct, 100, "preparing_model"))
+                            publish(ProcessingStatus.State(true, call.id, pct, 100, Phase.PREPARING_MODEL))
                             host.showWork(this@TranscribeWorker, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)… $pct%", pct, 100, call.id)
                         }
                     } finally {
@@ -230,7 +228,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
     /** Returns true if the call was transcribed. */
     private suspend fun process(call: CallEntity, transcriber: Transcriber): Boolean {
         dao.setStatusOnly(call.id, CallStatus.TRANSCRIBING)
-        publish(ProcessingStatus.State(true, call.id, 0, 0, "transcribing"))
+        publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.TRANSCRIBING))
         val title = "מתמלל: ${label(call)}"
         host.showWork(this, title, "מכין את האודיו…", callId = call.id)
         val converted = File(host.cacheDir, "convert_${call.id}.wav")
@@ -255,7 +253,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                     step("call ${call.id}: $pct% after ${secs(started)}")
                 }
                 if (call.id !in cancelled) {
-                    publish(ProcessingStatus.State(true, call.id, done, total, "transcribing"))
+                    publish(ProcessingStatus.State(true, call.id, done, total, Phase.TRANSCRIBING))
                     host.showWork(this, title, "$pct%", done, total, call.id)
                 }
             }
@@ -315,10 +313,8 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         val started = System.currentTimeMillis()
         return try {
             step("call ${call.id}: separating speakers")
-            publish(ProcessingStatus.State(true, call.id, 0, 0, "speakers"))
-            val info = Wav.readInfo(audio) ?: return null
-            val pcm = Wav.readSamples(audio, info, 0, info.sampleCount.toInt())
-            val samples = FloatArray(pcm.size) { pcm[it] / 32768f }
+            publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.SPEAKERS))
+            val samples = Wav.readFloats(audio)
             val owner = VoiceProfile.load(host)
 
             val level = LevelSpeakers.analyse(samples, transcript.words)

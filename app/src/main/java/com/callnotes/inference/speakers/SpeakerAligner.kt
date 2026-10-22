@@ -3,9 +3,9 @@ package com.callnotes.inference.speakers
 import com.callnotes.inference.Transcript
 
 /**
- * Joins Whisper's words with the diarizer's speaker turns into a conversation: each word
- * gets the speaker whose turn overlaps it most, and consecutive words of one speaker
- * become one line. Pure logic (unit-tested).
+ * Joins Whisper's words with speaker turns (from [LevelSpeakers] or [VoiceClusters]) into
+ * a conversation: each word gets the speaker whose turn overlaps it most, and consecutive
+ * words of one speaker become one line. Pure logic (unit-tested).
  */
 object SpeakerAligner {
 

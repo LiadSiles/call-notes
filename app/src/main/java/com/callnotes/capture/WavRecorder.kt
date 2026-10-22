@@ -6,14 +6,15 @@ import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioRecordingConfiguration
 import android.media.MediaRecorder
+import com.callnotes.audio.Wav
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.Executor
 
 /**
- * Records 16 kHz mono 16-bit PCM straight into a WAV file — the format the
- * transcription models take, so no decoding step is needed later.
- * (~1.9 MB per minute; compression comes later.)
+ * Records 16 kHz mono 16-bit PCM straight into a WAV file — the format Whisper takes, so
+ * no decoding step is needed later (~1.9 MB per minute; optionally compressed after
+ * transcription, see [com.callnotes.audio.AudioCompressor]).
  */
 class WavRecorder(
     private val file: File,
@@ -131,7 +132,7 @@ class WavRecorder(
     private fun writeLoop(rec: AudioRecord, samplesPerRead: Int) {
         RandomAccessFile(file, "rw").use { out ->
             out.setLength(0)
-            out.write(ByteArray(WAV_HEADER_BYTES)) // placeholder, filled in at the end
+            out.write(ByteArray(Wav.HEADER_BYTES)) // placeholder, filled in at the end
 
             val samples = ShortArray(samplesPerRead)
             val bytes = ByteArray(samplesPerRead * 2)
@@ -172,28 +173,7 @@ class WavRecorder(
             }
 
             out.seek(0)
-            out.write(wavHeader(dataBytes, sampleRate))
-        }
-    }
-
-    private companion object {
-        const val WAV_HEADER_BYTES = 44
-
-        fun wavHeader(dataBytes: Long, sampleRate: Int): ByteArray {
-            val channels = 1
-            val bitsPerSample = 16
-            val byteRate = sampleRate * channels * bitsPerSample / 8
-            val h = ByteArray(WAV_HEADER_BYTES)
-            fun str(at: Int, s: String) = s.forEachIndexed { i, c -> h[at + i] = c.code.toByte() }
-            fun int32(at: Int, v: Long) { for (i in 0..3) h[at + i] = ((v shr (8 * i)) and 0xFF).toByte() }
-            fun int16(at: Int, v: Int) { h[at] = (v and 0xFF).toByte(); h[at + 1] = ((v shr 8) and 0xFF).toByte() }
-
-            str(0, "RIFF"); int32(4, 36 + dataBytes); str(8, "WAVE")
-            str(12, "fmt "); int32(16, 16); int16(20, 1); int16(22, channels)
-            int32(24, sampleRate.toLong()); int32(28, byteRate.toLong())
-            int16(32, channels * bitsPerSample / 8); int16(34, bitsPerSample)
-            str(36, "data"); int32(40, dataBytes)
-            return h
+            out.write(Wav.header(dataBytes, sampleRate))
         }
     }
 }

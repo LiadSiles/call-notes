@@ -6,11 +6,12 @@ import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * All database access. Grouped by concern: calls, search, energy, retention, analysis and
+ * tasks, transcription status, segments. Multi-step changes are `@Transaction`s.
+ */
 @Dao
 abstract class CallDao {
-
-    @Query("SELECT * FROM calls ORDER BY startedAt DESC")
-    abstract fun observeAll(): Flow<List<CallEntity>>
 
     /** Calls with the first line of their transcript, for the list. */
     @Query(
@@ -166,9 +167,6 @@ abstract class CallDao {
     )
     abstract suspend fun setTaskDone(id: Long, done: Boolean)
 
-    @Query("SELECT * FROM tasks WHERE id = :id")
-    abstract suspend fun task(id: Long): TaskEntity?
-
     /** The next task whose due-date reminder hasn't been shown. */
     @Query(
         "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND dueDate IS NOT NULL " +
@@ -301,15 +299,14 @@ abstract class CallDao {
         clearAnalysis(callId)
     }
 
+    /**
+     * Forgets the summary so the call is summarised again. Its tasks stay until the new
+     * summary replaces them ([replaceAnalysis]), so ticks, reminders and repeat links carry
+     * over to the same tasks in the new summary instead of being lost.
+     */
     @Query(
         "UPDATE calls SET analysisStatus = NULL, analysisJson = NULL, summaryTitle = NULL, " +
             "analysisModel = NULL, analysisError = NULL WHERE id = :id"
     )
-    abstract suspend fun clearAnalysisFields(id: Long)
-
-    @Transaction
-    open suspend fun clearAnalysis(id: Long) {
-        deleteTasks(id)
-        clearAnalysisFields(id)
-    }
+    abstract suspend fun clearAnalysis(id: Long)
 }

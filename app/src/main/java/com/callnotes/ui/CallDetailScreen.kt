@@ -1,5 +1,6 @@
 package com.callnotes.ui
 
+import com.callnotes.processing.Phase
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -332,8 +333,10 @@ fun CallDetailScreen(
                 confirmDelete = false
                 if (player.loadedId == c.id) player.release()
                 scope.launch(Dispatchers.IO) {
-                    path?.let { File(it).delete(); CallTrace.fileFor(File(it)).delete() }
+                    path?.let(com.callnotes.util.RecordingFiles::delete)
+                    tasks.forEach { com.callnotes.util.Notifications.cancelTask(context, it.id) }
                     dao.delete(c.id)
+                    com.callnotes.util.TaskReminders.plan(context)
                 }
                 onBack()
             }) { Text("מחיקה", color = MaterialTheme.colorScheme.error) }
@@ -410,12 +413,10 @@ private fun TranscriptState(
 
     @Composable
     fun Progress(title: String, detail: String?, fraction: Float?) {
-      val stopping = processing.phase == "stopping"
       Panel {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(if (stopping) "עוצר…" else title, style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f))
-            if (!stopping) OutlinedButton(onClick = onCancel) { Text("ביטול") }
+            Text(title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = onCancel) { Text("ביטול") }
         }
         detail?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
@@ -427,29 +428,29 @@ private fun TranscriptState(
     }
 
     when {
-        onThis && processing.phase == "preparing_model" -> Progress(
+        onThis && processing.phase == Phase.PREPARING_MODEL -> Progress(
             "מכין גרסה מהירה של מודל התמלול… " +
-                if (processing.chunksTotal > 0) "${processing.chunksDone * 100 / processing.chunksTotal}%" else "",
+                if (processing.progressMax > 0) "${processing.progress * 100 / processing.progressMax}%" else "",
             "קורה פעם אחת אחרי בחירת מהירות חדשה בהגדרות. העותק נשמר בטלפון בלבד.",
-            if (processing.chunksTotal > 0) processing.chunksDone.toFloat() / processing.chunksTotal else null,
+            if (processing.progressMax > 0) processing.progress.toFloat() / processing.progressMax else null,
         )
         // The model is loading for this call (before its status changes).
-        onThis && c.status != CallStatus.TRANSCRIBING && processing.phase in setOf("loading", "stopping") -> Progress(
+        onThis && c.status != CallStatus.TRANSCRIBING && processing.phase == Phase.LOADING -> Progress(
             "טוען את מודל התמלול… ${elapsed(processing.since)}",
             "בטעינה הראשונה זה יכול לקחת עד דקה או שתיים.",
             null,
         )
-        c.status == CallStatus.TRANSCRIBING && onThis && processing.phase == "speakers" -> Progress(
+        c.status == CallStatus.TRANSCRIBING && onThis && processing.phase == Phase.SPEAKERS -> Progress(
             "מזהה מי אמר מה…" +
-                if (processing.chunksTotal > 0) " ${processing.chunksDone * 100 / processing.chunksTotal}%" else "",
+                if (processing.progressMax > 0) " ${processing.progress * 100 / processing.progressMax}%" else "",
             "הפרדת הדוברים לפי הקול, על הטלפון.",
-            if (processing.chunksTotal > 0) processing.chunksDone.toFloat() / processing.chunksTotal else null,
+            if (processing.progressMax > 0) processing.progress.toFloat() / processing.progressMax else null,
         )
         c.status == CallStatus.TRANSCRIBING && onThis -> Progress(
-            if (processing.chunksTotal > 0) "מתמלל… ${processing.chunksDone * 100 / processing.chunksTotal}%"
+            if (processing.progressMax > 0) "מתמלל… ${processing.progress * 100 / processing.progressMax}%"
             else "מכין את האודיו…",
             "התמלול רץ על הטלפון ויכול לקחת כמה דקות לשיחה ארוכה.",
-            if (processing.chunksTotal > 0) processing.chunksDone.toFloat() / processing.chunksTotal else null,
+            if (processing.progressMax > 0) processing.progress.toFloat() / processing.progressMax else null,
         )
         c.status == CallStatus.TRANSCRIBING -> Panel {
             // Status says transcribing but nothing runs: the run was cut off.
@@ -462,7 +463,7 @@ private fun TranscriptState(
             "השיחה הזו תתומלל ראשונה; השנייה תחזור לתור.",
             null,
         )
-        queued && processing.phase == "waiting_thermal" -> Progress(
+        queued && processing.phase == Phase.WAITING_THERMAL -> Progress(
             "הטלפון חם — התמלול יתחיל כשיתקרר", null, null,
         )
         queued -> Progress("מתחיל תמלול…", null, null)

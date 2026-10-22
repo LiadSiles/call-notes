@@ -139,12 +139,12 @@ fun kindLabel(call: CallEntity): String = when {
 }
 
 /** Status pill text and tone for a call; null when there's nothing worth showing. */
-fun statusOf(call: CallEntity, chunksDone: Int? = null, chunksTotal: Int? = null): Pair<String, Tone>? =
+fun statusOf(call: CallEntity, progress: Int? = null, progressMax: Int? = null): Pair<String, Tone>? =
     when (call.status) {
         CallStatus.RECORD_FAILED -> "ההקלטה נכשלה" to Tone.Bad
         CallStatus.RECORDED -> "ממתין לתמלול" to Tone.Neutral
         CallStatus.TRANSCRIBING ->
-            (if (chunksTotal != null && chunksTotal > 0) "מתמלל ${chunksDone!! * 100 / chunksTotal}%" else "מתמלל…") to Tone.Busy
+            (if (progressMax != null && progressMax > 0) "מתמלל ${progress!! * 100 / progressMax}%" else "מתמלל…") to Tone.Busy
         CallStatus.TRANSCRIBE_FAILED -> "התמלול נכשל" to Tone.Bad
         CallStatus.TRANSCRIBED -> "תומלל" to Tone.Good
         CallStatus.HELD -> "התמלול בוטל" to Tone.Neutral
@@ -194,4 +194,3 @@ fun shareRecording(context: Context, path: String) {
     context.startActivity(Intent.createChooser(send, "שיתוף הקלטה").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
 
-val Transparent = Color.Transparent

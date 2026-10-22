@@ -40,6 +40,7 @@ fun SpeedSection(models: ModelManager, prefs: Prefs) {
     if (spec.engine != InferenceEngine.WHISPER_CPP) return
     val base = models.fileFor(spec)
     val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
+    val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf(WhisperSpeed.current(prefs)) }
     var filesVersion by remember { mutableIntStateOf(0) }
 
@@ -89,7 +90,7 @@ fun SpeedSection(models: ModelManager, prefs: Prefs) {
             if (derived > 0) TextButton(modifier = Modifier.padding(start = 6.dp), onClick = {
                 WhisperSpeed.deleteDerived(base)
                 filesVersion++
-            }, enabled = !(ProcessingStatus.state.value.running)) {
+            }, enabled = !processing.running) {
                 Text("מחיקת העותקים המהירים (%.1f GB)".format(derived / 1e9))
             }
         }

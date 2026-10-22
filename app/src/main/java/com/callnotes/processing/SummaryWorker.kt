@@ -7,7 +7,9 @@ import com.callnotes.data.CallStatus
 import com.callnotes.data.TaskEntity
 import com.callnotes.inference.AnalysisPrompt
 import com.callnotes.inference.CallContext
+import com.callnotes.inference.Analyzer
 import com.callnotes.inference.GemmaAnalyzer
+import com.callnotes.inference.TranscriptText
 import com.callnotes.inference.ModelRole
 import com.callnotes.inference.TaskMatcher
 import com.callnotes.processing.TranscriptionService.Companion.describe
@@ -31,7 +33,7 @@ import java.time.ZoneId
 class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_SUMMARY) {
 
     override val tag = "summary"
-    @Volatile private var analyzer: GemmaAnalyzer? = null
+    @Volatile private var analyzer: Analyzer? = null
     /** Poked when a transcription finishes or a summary is requested. */
     val wake = Channel<Unit>(Channel.CONFLATED)
 
@@ -110,14 +112,14 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 logged = true
                 log("waiting for memory before loading the summary model (${ProcessingLog.freeRam(host)})")
             }
-            publish(ProcessingStatus.State(running = true, callId = call.id, phase = "waiting_memory"))
+            publish(ProcessingStatus.State(running = true, callId = call.id, phase = Phase.WAITING_MEMORY))
             host.showWork(this, "מסכם: ${label(call)}", "ממתין לזיכרון פנוי (מתמלל במקביל)…", callId = call.id)
             delay(5_000)
         }
     }
 
-    private suspend fun load(spec: com.callnotes.inference.ModelSpec, file: java.io.File, call: CallEntity): GemmaAnalyzer? {
-        publish(ProcessingStatus.State(running = true, callId = call.id, phase = "loading_analyzer"))
+    private suspend fun load(spec: com.callnotes.inference.ModelSpec, file: java.io.File, call: CallEntity): Analyzer? {
+        publish(ProcessingStatus.State(running = true, callId = call.id, phase = Phase.LOADING_ANALYZER))
         host.showWork(this, "מסכם: ${label(call)}", "טוען את מודל הסיכום…", callId = call.id)
         step("loading analysis model ${spec.id} · ${ProcessingLog.freeRam(host)}")
         val started = System.currentTimeMillis()
@@ -136,11 +138,11 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         }
     }
 
-    private suspend fun analyse(call: CallEntity, analyzer: GemmaAnalyzer): Boolean {
+    private suspend fun analyse(call: CallEntity, analyzer: Analyzer): Boolean {
         val started = System.currentTimeMillis()
         val battery = com.callnotes.util.Energy.read(host)
         val title = "מסכם: ${label(call)}"
-        publish(ProcessingStatus.State(true, call.id, 0, 0, "analyzing"))
+        publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.ANALYZING))
         host.showWork(this, title, "קורא את השיחה…", callId = call.id)
         return try {
             val segments = dao.segments(call.id)
@@ -185,20 +187,20 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                     certain = t.certain, createdAt = now)
             }
             // Re-summarising shouldn't announce tasks the user has already seen (or ticked off).
-            val before = dao.tasksOf(call.id).associateBy { TranscriptMergerKey.of(it.title) }
+            val before = dao.tasksOf(call.id).associateBy { taskKey(it.title) }
             val kept = tasks.map { t ->
-                val old = before[TranscriptMergerKey.of(t.title)] ?: return@map t
+                val old = before[taskKey(t.title)] ?: return@map t
                 t.copy(done = old.done, remindedAt = old.remindedAt.takeIf { old.dueDate == t.dueDate })
             }
             val laterRepeats = dao.repeatsOf(call.id) // re-summary: keep later calls pointing here
             dao.replaceAnalysis(call.id, AnalysisPrompt.toJson(result), result.title.ifBlank { null }, analyzer.modelId, kept)
             val saved = dao.tasksOf(call.id)
             laterRepeats.forEach { r ->
-                saved.firstOrNull { TranscriptMergerKey.of(it.title) == TranscriptMergerKey.of(r.originalTitle) }
+                saved.firstOrNull { taskKey(it.title) == taskKey(r.originalTitle) }
                     ?.let { dao.setDuplicate(r.id, it.id) }
             }
             val repeats = linkRepeats(call, saved)
-            val fresh = saved.filter { TranscriptMergerKey.of(it.title) !in before && !it.done && it.id !in repeats }
+            val fresh = saved.filter { taskKey(it.title) !in before && !it.done && it.id !in repeats }
             fresh.forEach { Notifications.newTask(host, it, label(call)) }
             com.callnotes.util.TaskReminders.plan(host)
             val used = com.callnotes.util.Energy.percentUsed(battery, com.callnotes.util.Energy.read(host))
@@ -246,7 +248,5 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
     }
 }
 
-/** Compares task titles loosely (re-summaries reword slightly). */
-internal object TranscriptMergerKey {
-    fun of(title: String) = com.callnotes.inference.TranscriptMerger.normalizeText(title)
-}
+/** Task titles compared loosely (punctuation, niqqud, final letters), to match a re-summary's tasks. */
+private fun taskKey(title: String) = TranscriptText.normalizeText(title)

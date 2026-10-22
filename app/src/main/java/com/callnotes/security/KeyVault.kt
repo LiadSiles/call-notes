@@ -28,8 +28,6 @@ object KeyVault {
 
     class KeyLost(cause: Throwable) : Exception("data key can't be unwrapped", cause)
 
-    fun hasKey(context: Context): Boolean = File(context.filesDir, KEY_FILE).isFile
-
     /** The data key, created on first use. Throws [KeyLost] if it exists but can't be unwrapped. */
     @Synchronized
     fun dataKey(context: Context): ByteArray {

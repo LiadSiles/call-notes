@@ -125,7 +125,7 @@ private fun Choice(title: String, body: String, options: List<Int>, value: Int, 
 /** App lock switch. Turning it on or off asks for the phone's lock first. */
 @Composable
 fun LockSection(prefs: Prefs) {
-    val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity ?: return
+    val activity = androidx.activity.compose.LocalActivity.current as? androidx.fragment.app.FragmentActivity ?: return
     var on by remember { mutableStateOf(prefs.appLock) }
     var problem by remember { mutableStateOf<String?>(null) }
     CardGroup {
@@ -165,7 +165,7 @@ fun CompressionSection(prefs: Prefs) {
 @Composable
 fun EncryptionSection(prefs: Prefs) {
     val context = LocalContext.current
-    val activity = context as? android.app.Activity
+    val activity = androidx.activity.compose.LocalActivity.current
     val app = context.applicationContext as CallNotesApp
     var on by remember { mutableStateOf(prefs.encryptData) }
     var confirm by remember { mutableStateOf<Boolean?>(null) }

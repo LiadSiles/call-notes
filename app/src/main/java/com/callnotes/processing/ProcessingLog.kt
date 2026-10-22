@@ -11,9 +11,9 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Plain-text log of transcription runs (`files/transcription.log`): timings, memory,
- * chunk counts and errors — never transcript text — so the owner can share it in a chat
- * when transcription misbehaves. Every [step] is also stored as the current stage, so a
+ * Plain-text log of processing runs (`files/transcription.log`, name kept from 0.3):
+ * timings, memory, battery, model and speaker-separation decisions, errors — never
+ * transcript text — so the owner can share it when something misbehaves. Every [step] is also stored as the current stage, so a
  * run that kills the process is reported on the next launch ([recoverIfDied]).
  */
 object ProcessingLog {

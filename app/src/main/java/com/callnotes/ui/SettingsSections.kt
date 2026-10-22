@@ -83,10 +83,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Below this peak level (~-40 dBFS) the recording is effectively silent. */
 /*
- * Setup checklist, optional permissions and recording switches — moved unchanged from the
- * 0.3.x single-screen UI; only the containers were restyled to the new panels.
+ * Settings page bodies: setup checklist, optional permissions, and the switch groups for
+ * recording, battery and reminders. Each group is a [CardGroup] of [SwitchRow]s with any
+ * longer explanation in a [Note] below it.
  */
 
 @Composable
@@ -302,21 +302,4 @@ internal fun ReminderSettings(prefs: Prefs) {
     }
 }
 
-@Composable
-private fun ToggleRow(
-    title: String,
-    body: String,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onChange: (Boolean) -> Unit,
-) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
-    }
-}
 

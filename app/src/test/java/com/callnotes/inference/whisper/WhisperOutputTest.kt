@@ -21,7 +21,6 @@ class WhisperOutputTest {
             tokBytes, tokOff,
             LongArray(tokens.size) { tokens[it].third[0] }, LongArray(tokens.size) { tokens[it].third[1] },
             LongArray(tokens.size) { tokens[it].third[2] }, IntArray(tokens.size) { tokens[it].second },
-            FloatArray(tokens.size) { 0.9f },
         )
     }
 

@@ -34,14 +34,14 @@ class GemmaAnalyzer(
     private val context: Context,
     private val spec: ModelSpec,
     private val modelFile: File,
-) : AutoCloseable {
+) : Analyzer {
 
-    val modelId: String get() = spec.id
+    override val modelId: String get() = spec.id
 
     private var engine: Engine? = null
     @Volatile private var active: Conversation? = null
 
-    suspend fun load() = withContext(Dispatchers.IO) {
+    override suspend fun load() = withContext(Dispatchers.IO) {
         if (engine != null) return@withContext
         engine = Engine(
             EngineConfig(
@@ -53,8 +53,7 @@ class GemmaAnalyzer(
         ).also { it.initialize() }
     }
 
-    /** The model's full answer. [onChars] reports how much has been written so far. */
-    suspend fun ask(prompt: String, onChars: (Int) -> Unit = {}): String = withContext(Dispatchers.IO) {
+    override suspend fun ask(prompt: String, onChars: (Int) -> Unit): String = withContext(Dispatchers.IO) {
         load()
         val config = ConversationConfig(
             samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
@@ -91,8 +90,8 @@ class GemmaAnalyzer(
         }
     }
 
-    /** Stops the current answer now (any thread). */
-    fun abort() {
+    /** Stops the current answer now: generation ends at the next token. */
+    override fun abort() {
         active?.let { runCatching { it.cancelProcess() } }
     }
 
