@@ -6,8 +6,9 @@ Recordings, transcripts and settings live in the app's private internal storage
 (`/data/data/com.callnotes/`). Model files live in the app-specific external dir
 (`/storage/emulated/0/Android/data/com.callnotes/files/models/`) because
 DownloadManager can't write to internal storage; on Android 11+ other apps can't read
-it. Both are removed on uninstall, nothing is backed up (`allowBackup="false"`), and
-nothing is written to shared storage.
+it. Both are removed on uninstall, nothing is backed up (`allowBackup="false"`) or moved
+by a device-to-device transfer (`dataExtractionRules`, all domains excluded — 0.10.1),
+and nothing is written to shared storage.
 
 | What | Path (under the app dir) | Written by | Size |
 |---|---|---|---|

@@ -8,6 +8,10 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 // Encryption (SQLCipher) is planned for 0.8; the prototype keeps plain Room.
+/**
+ * Room database `callnotes.db`. Schema changes are explicit migrations (never destructive);
+ * optional SQLCipher encryption is set up in [build] via DataProtection.
+ */
 @Database(entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class], version = 10, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 

@@ -54,6 +54,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * The only screen host: three tabs (calls, tasks, settings) and the call detail, all in
+ * Compose. A FragmentActivity because BiometricPrompt (app lock) needs one. Notification
+ * taps arrive as [openRequest] / [openTaskRequest].
+ */
 class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

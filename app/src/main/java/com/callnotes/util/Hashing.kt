@@ -3,6 +3,7 @@ package com.callnotes.util
 import java.io.File
 import java.security.MessageDigest
 
+/** File checksums: model verification and the before/after fingerprint of recordings in the log. */
 object Hashing {
     /** SHA-256 of a file as lowercase hex (streamed; works for multi-GB model files). */
     fun sha256Hex(file: File): String {

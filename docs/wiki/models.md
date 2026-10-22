@@ -2,19 +2,22 @@
 
 _Last verified: 2026-10-20 (code at 0.3.0)._
 
-## Status (0.3.0)
-
-Transcription is implemented; analysis (summary/tasks) is 0.4.
+## Where things are (0.10.1)
 
 | Piece | Where |
 |---|---|
 | Catalog with pinned files | `inference/Models.kt` → `ModelCatalog` |
 | Device choice, download, SHA-256 check | `inference/ModelManager.kt` |
 | Any audio → 16 kHz mono WAV | `audio/AudioDecoder.kt` |
-| 28 s / 3 s chunking at quiet points | `audio/Chunker.kt` |
-| Gemma via LiteRT-LM | `inference/GemmaTranscriber.kt` |
-| Overlap merge, loop detection, announcement filter | `inference/TranscriptMerger.kt` (+ unit tests) |
-| Queue in a foreground service | `processing/TranscriptionService.kt` |
+| Whisper (JNI, presets, on-device quantization) | `inference/whisper/`, `app/src/main/cpp/` |
+| Loop detection, announcement filter, text normalisation | `inference/TranscriptText.kt` (+ unit tests) |
+| Who said what (loudness, voice clusters, alignment) | `inference/speakers/` |
+| Summary prompt, parsing and checks | `inference/AnalysisPrompt.kt`, `SourceFinder.kt`, `TaskMatcher.kt` |
+| Gemma via LiteRT-LM (summaries only) | `inference/GemmaAnalyzer.kt` |
+| Two parallel workers in a foreground service | `processing/` |
+
+The Gemma *transcription* path of 0.3 (28 s chunks, overlap merge, level
+normalisation) was removed in 0.10.1; see git history before that version.
 
 Pinned files (litert-community, not gated, Apache-2.0, checked 2026-10-20):
 

@@ -2,6 +2,7 @@ package com.callnotes.util
 
 import java.io.File
 
+/** CPU facts the native inference engines need. */
 object CpuInfo {
     /**
      * Threads for heavy native inference: the performance cores only. On big.LITTLE

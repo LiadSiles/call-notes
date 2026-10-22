@@ -3,6 +3,26 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-22 — Code review: what changed and what was kept on purpose (0.10.1)
+Owner asked for a senior-level review: readable, documented, no unused code, faster
+where possible, no change to anything in use.
+- Removed: Gemma-as-transcriber (GemmaTranscriber, Chunker, AudioLevel, chunk-overlap
+  merging) — unreachable since 0.4 (no catalog entry); `InferenceEngine.LLAMA_CPP`;
+  the pyannote ModelSpec/role (its file is still deleted on start via `RETIRED_FILES`);
+  unused fields (Whisper token probability end-to-end incl. JNI, task confidence,
+  analysis language), unused DAO queries, a "stopping" phase nothing ever set.
+- Fixed: `clearAnalysis` deleted a call's tasks before the summary worker could carry
+  ticks/reminders/repeat links over by title, so "סכם מחדש" and re-transcription lost
+  them and re-announced every task. Tasks now stay until `replaceAnalysis` swaps them.
+  Also: MediaCodec leak on decode errors, Android 12+ device-to-device transfer of app
+  data (`dataExtractionRules` now excludes everything), exported reminder receiver
+  accepted any action, non-atomic ServiceStatus updates, model polling on the main thread.
+- Kept on purpose: the vendored sherpa-onnx Kotlin files (verbatim copy, see README);
+  the capture path's logic (device-tested; only imports and helpers touched); the
+  manual LazyColumn index arithmetic in the call screen (documented; a key-based jump
+  needs a larger refactor); `AnalysisPrompt.contains` leniency (tightening it would
+  mark more items "not sure" — a behaviour change to decide on separately).
+
 ### 2026-10-22 — Redesign: calm hub + pages, bundled font, screenshots in CI (0.10.0)
 Owner: pages should be clearer, calmer and cleaner; settings was crowded; wants an
 elegant, modern look. Settings became a hub — a status card and one row per category

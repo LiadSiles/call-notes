@@ -38,13 +38,15 @@ decisions already taken and why).
 
 ```
 app/src/main/java/com/callnotes/
+  audio/      WAV I/O, decoding to the working format, AAC compression
   capture/    call detection, recording, speakerphone, call-log lookup
   data/       Room (CallEntity, CallDao, AppDatabase)
-  inference/  Transcriber / Analyzer interfaces, model catalog, Whisper (whisper/),
-              speakers (speakers/), Gemma
+  inference/  Transcriber / Analyzer interfaces, model catalog + downloads, Whisper
+              (whisper/: JNI, presets, quantization), speakers (speakers/), Gemma, prompt
   processing/ foreground service with two parallel workers (transcribe, summary), log
-  ui/         Compose UI, setup checks, audio player
-  util/       prefs, notifications
+  security/   optional extra encryption (Keystore-wrapped key, SQLCipher, sealed files)
+  ui/         Compose UI (design system in Design.kt + theme/), settings pages, app lock
+  util/       prefs, notifications, reminders, retention, energy, hashing
 app/src/main/java/com/k2fsa/sherpa/onnx/  sherpa-onnx Kotlin API (verbatim copy)
 app/src/main/cpp/   JNI bridge to whisper.cpp (third_party/whisper.cpp submodule)
 scripts/fetch-sherpa-onnx.sh  prebuilt diarization runtime (run before building)
@@ -61,3 +63,7 @@ scripts/fetch-sherpa-onnx.sh  prebuilt diarization runtime (run before building)
 - Commits: imperative subject, body explains *why*. One logical change per commit.
 - Prefer verifying over assuming: any device-dependent behaviour gets a diagnostic
   surfaced in the UI (see the per-call chips) so a test call answers the question.
+- Review aids in CI: `screenshots` branch (rendered layouts per dev branch) and
+  `reports` branch (Kotlin warnings + Android lint per dev branch).
+- No dead code: remove what nothing calls (git history keeps it). The one exception is
+  the verbatim sherpa-onnx API copy in `com/k2fsa` (see its README).

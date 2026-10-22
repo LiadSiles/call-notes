@@ -15,6 +15,12 @@ import androidx.core.content.ContextCompat
 import com.callnotes.R
 import com.callnotes.ui.MainActivity
 
+/**
+ * Every notification the app shows: recording in progress, one per background operation
+ * (with Cancel / Stop all), new and due tasks, and problems. Channels: "recording" (quiet,
+ * ongoing), "alerts" (problems, speaker prompt), "tasks". With the app lock on, task and
+ * processing notifications hide their text on the lock screen.
+ */
 object Notifications {
 
     private const val CHANNEL_RECORDING = "recording"
