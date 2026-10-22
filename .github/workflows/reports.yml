@@ -1,0 +1,54 @@
+name: Code reports
+
+# Kotlin compiler warnings and Android lint, published as text to the `reports` branch
+# (`<branch>/warnings.txt`, `<branch>/lint.txt`) so they can be read without the web UI.
+on:
+  push:
+    branches: ["dev/**"]
+    paths:
+      - "app/src/**"
+      - "app/build.gradle.kts"
+      - "gradle/**"
+      - ".github/workflows/reports.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Compile and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:compileDebugKotlin :app:compileDebugUnitTestKotlin --rerun-tasks --console=plain 2>&1 | tee compile.log || true
+          ./gradlew :app:lintDebug --console=plain 2>&1 | tee lint.log || true
+          mkdir -p /tmp/reports
+          grep -E '^w: ' compile.log | sed 's#file:///home/runner/work/call-notes/call-notes/##' | sort -u > /tmp/reports/warnings.txt || true
+          grep -E '^e: ' compile.log | sed 's#file:///home/runner/work/call-notes/call-notes/##' >> /tmp/reports/warnings.txt || true
+          if [ -f app/build/reports/lint-results-debug.txt ]; then cp app/build/reports/lint-results-debug.txt /tmp/reports/lint.txt; else tail -60 lint.log > /tmp/reports/lint.txt; fi
+          wc -l /tmp/reports/*
+
+      - name: Publish to the reports branch
+        run: |
+          SRC="${GITHUB_REF_NAME//\//-}"
+          git config user.name "reports-bot"
+          git config user.email "reports-bot@users.noreply.github.com"
+          git fetch origin reports || true
+          if git rev-parse --verify origin/reports >/dev/null 2>&1; then
+            git checkout -B reports origin/reports
+          else
+            git checkout --orphan reports && git rm -rf . >/dev/null
+          fi
+          rm -rf "$SRC" && mkdir -p "$SRC" && cp /tmp/reports/*.txt "$SRC/"
+          git add "$SRC"
+          git commit -m "Reports for $GITHUB_REF_NAME @ ${GITHUB_SHA::7}" || exit 0
+          git push origin reports

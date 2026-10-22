@@ -84,6 +84,10 @@ android {
     lint {
         // Sideloaded build: the battery-exemption request is intentional (Play policy n/a).
         disable += "BatteryLife"
+        // Plain-text report for the "Code reports" workflow.
+        textReport = true
+        textOutput = file("build/reports/lint-results-debug.txt")
+        abortOnError = false
     }
 }
 
