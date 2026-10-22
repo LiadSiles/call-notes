@@ -2,7 +2,6 @@ package com.callnotes.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -259,7 +258,7 @@ fun HeroCard(
 }
 
 /**
- * A setting with a few fixed values, shown as a scrollable row of chips under a title.
+ * A setting with a few fixed values, shown as chips (wrapping to a second line) under a title.
  * [label] names each value; [enabled] false greys the row out.
  */
 @Composable
@@ -279,8 +278,10 @@ fun <T> ChipChoice(
             Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp))
         }
-        Row(
-            Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 14.dp, vertical = 4.dp),
+        // Wraps instead of scrolling, so the selected value is always visible.
+        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+        androidx.compose.foundation.layout.FlowRow(
+            Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             options.forEach { option ->
