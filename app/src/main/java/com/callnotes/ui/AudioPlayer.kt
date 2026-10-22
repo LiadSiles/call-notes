@@ -10,7 +10,7 @@ import androidx.compose.runtime.setValue
  * Plays one recording at a time. The loaded recording stays loaded while paused, so
  * the card keeps its seek bar; opening another recording releases the previous one.
  */
-class AudioPlayer {
+class AudioPlayer(private val appContext: android.content.Context) {
 
     /** The recording currently loaded (playing or paused), or null. */
     var loadedId by mutableStateOf<Long?>(null)
@@ -35,7 +35,12 @@ class AudioPlayer {
         release()
         player = try {
             MediaPlayer().apply {
-                setDataSource(path)
+                // An encrypted recording is decrypted on the fly, never written out.
+                if (com.callnotes.security.SealedFile.isSealed(path)) {
+                    setDataSource(com.callnotes.security.SealedFile.Source(appContext, java.io.File(path)))
+                } else {
+                    setDataSource(path)
+                }
                 setOnCompletionListener {
                     this@AudioPlayer.isPlaying = false
                     this@AudioPlayer.positionMs = this@AudioPlayer.durationMs

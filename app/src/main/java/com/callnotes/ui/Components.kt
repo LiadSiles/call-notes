@@ -185,7 +185,11 @@ fun dayLabel(millis: Long): String {
 fun gb(bytes: Long) = "%.1fGB".format(bytes / 1_000_000_000.0)
 
 fun shareRecording(context: Context, path: String) {
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", File(path))
+    // An encrypted recording is shared as a decrypted temporary copy (removed at next start).
+    val file = if (com.callnotes.security.SealedFile.isSealed(path)) {
+        runCatching { com.callnotes.security.DataProtection.plainCopy(context, File(path), "share") }.getOrNull() ?: return
+    } else File(path)
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
     val send = Intent(Intent.ACTION_SEND)
         .setType("audio/*")
         .putExtra(Intent.EXTRA_STREAM, uri)

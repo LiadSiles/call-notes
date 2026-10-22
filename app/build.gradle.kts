@@ -15,8 +15,8 @@ android {
         applicationId = "com.callnotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 26
-        versionName = "0.8.0"
+        versionCode = 27
+        versionName = "0.9.0"
 
         // LiteRT-LM ships native libraries; phones are arm64. Keeps the APK small.
         ndk { abiFilters += "arm64-v8a" }
@@ -101,6 +101,8 @@ dependencies {
     // Optional app lock (fingerprint / face / the phone's PIN).
     implementation(libs.androidx.biometric)
     implementation(libs.androidx.fragment.ktx)
+    // Optional extra encryption of the database (SQLCipher, AES-256).
+    implementation(libs.sqlcipher.android)
 
     // On-device Gemma 4 inference (text + audio).
     implementation(libs.litertlm.android)

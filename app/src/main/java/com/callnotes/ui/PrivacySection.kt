@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
 import com.callnotes.util.Prefs
 import com.callnotes.util.Retention
@@ -172,5 +173,86 @@ fun CompressionSection(prefs: Prefs) {
             }
             androidx.compose.material3.Switch(checked = on, onCheckedChange = { on = it; prefs.compressRecordings = it })
         }
+    }
+}
+
+/** Optional extra encryption of the database and recordings. */
+@Composable
+fun EncryptionSection(prefs: Prefs) {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    val app = context.applicationContext as CallNotesApp
+    var on by remember { mutableStateOf(prefs.encryptData) }
+    var confirm by remember { mutableStateOf<Boolean?>(null) }
+    var keyLost by remember { mutableStateOf(prefs.dataKeyLost) }
+    val progress by com.callnotes.security.DataProtection.progress.collectAsStateWithLifecycle()
+    val service by com.callnotes.capture.ServiceStatus.state.collectAsStateWithLifecycle()
+    val processing by com.callnotes.processing.ProcessingStatus.state.collectAsStateWithLifecycle()
+    val summary by com.callnotes.processing.ProcessingStatus.summary.collectAsStateWithLifecycle()
+    val dbPending = remember(on) { !com.callnotes.security.DataProtection.databaseMatchesSetting(context) }
+
+    Panel(Modifier.padding(top = 8.dp)) {
+        Column {
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("הצפנה נוספת", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "אנדרואיד כבר מצפין את נתוני האפליקציה עם נעילת הטלפון. הצפנה נוספת מגינה גם אם תיקיית הנתונים " +
+                            "מועתקת מטלפון פרוץ (root) או בבדיקה פורנזית: מסד הנתונים (תמלולים, סיכומים, משימות) וההקלטות " +
+                            "מוצפנים ב-AES-256 עם מפתח ששמור במאגר המפתחות המאובטח של הטלפון. הקלטה מוצפנת אחרי שתומללה.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                androidx.compose.material3.Switch(checked = on, onCheckedChange = { confirm = it })
+            }
+            if (progress.running) {
+                Text("${if (on) "מצפין" else "מפענח"} הקלטות… ${progress.done}/${progress.total}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 6.dp))
+            }
+            if (dbPending) {
+                val busy = service.recordingNow || processing.running || summary.running || progress.running
+                Text(
+                    if (on) "מסד הנתונים יוצפן בהפעלה הבאה של האפליקציה." else "ההצפנה של מסד הנתונים תוסר בהפעלה הבאה של האפליקציה.",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                TextButton(onClick = { activity?.let { RestartActivity.restart(it) } }, enabled = !busy) {
+                    Text(if (busy) "הפעלה מחדש — אחרי שההקלטה / העיבוד יסתיימו" else "הפעלה מחדש עכשיו")
+                }
+            }
+            if (keyLost) {
+                Text(
+                    "מפתח ההצפנה נמחק מהטלפון, ולכן הנתונים המוצפנים הקודמים לא ניתנים לקריאה. האפליקציה התחילה מחדש עם נתונים ריקים.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                TextButton(onClick = { prefs.dataKeyLost = false; keyLost = false }) { Text("הבנתי") }
+            }
+        }
+    }
+
+    confirm?.let { want ->
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text(if (want) "להפעיל הצפנה נוספת?" else "לכבות את ההצפנה הנוספת?") },
+            text = {
+                Text(
+                    if (want) "ההקלטות שכבר תומללו יוצפנו עכשיו ברקע, ומסד הנתונים — בהפעלה הבאה של האפליקציה. " +
+                        "המפתח קיים רק בטלפון הזה: אם הוא יימחק (נדיר מאוד — למשל איפוס של אבטחת הטלפון), הנתונים המוצפנים לא יהיו ניתנים לשחזור."
+                    else "ההקלטות יפוענחו עכשיו ברקע, ומסד הנתונים — בהפעלה הבאה של האפליקציה."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = null
+                    prefs.encryptData = want; on = want
+                    app.launchBackground { com.callnotes.security.DataProtection.applyToAll(app) }
+                }) { Text(if (want) "הפעלה" else "כיבוי") }
+            },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("ביטול") } },
+        )
     }
 }

@@ -145,7 +145,7 @@ private fun AppRoot() {
         kickQueue()
     }
 
-    val player = remember { AudioPlayer() }
+    val player = remember { AudioPlayer(context.applicationContext) }
     DisposableEffect(Unit) { onDispose { player.release() } }
     LaunchedEffect(player.isPlaying) {
         while (player.isPlaying) { player.refreshPosition(); delay(200) }

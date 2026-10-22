@@ -63,6 +63,9 @@ abstract class CallDao {
 
     // --- Retention ---
 
+    @Query("SELECT * FROM calls WHERE filePath IS NOT NULL")
+    abstract suspend fun withRecording(): List<CallEntity>
+
     @Query("UPDATE calls SET filePath = :path WHERE id = :id")
     abstract suspend fun setFilePath(id: Long, path: String)
 

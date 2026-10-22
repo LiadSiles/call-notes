@@ -233,8 +233,11 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         host.showWork(this, title, "מכין את האודיו…", callId = call.id)
         val converted = File(host.cacheDir, "convert_${call.id}.wav")
         val started = System.currentTimeMillis()
+        var plainTemp: File? = null
         try {
-            val source = File(call.filePath!!)
+            val (source, temporary) = com.callnotes.security.DataProtection.sourceFor(host, call.id)
+                ?: error("recording missing")
+            if (temporary) plainTemp = source
             val before = fingerprint(source)
             step("call ${call.id}: preparing audio (${source.extension}, ${"%.1f".format(source.length() / 1e6)} MB, sha256 $before)")
             val audio = AudioDecoder.ensureWorkingFormat(source, converted)
@@ -273,6 +276,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 "${transcript.words.size} words, ${rows.sumOf { it.text.length }} chars · recording " +
                 if (after == before) "unchanged (sha256 $after)" else "CHANGED! $before → $after")
             compress(call.id)
+            com.callnotes.security.DataProtection.applyToCall(host, call.id, force = true)
             return true
         } catch (e: Throwable) {
             if (e is CancellationException || call.id in cancelled) {
@@ -287,6 +291,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             return false
         } finally {
             converted.delete()
+            plainTemp?.delete()
         }
     }
 

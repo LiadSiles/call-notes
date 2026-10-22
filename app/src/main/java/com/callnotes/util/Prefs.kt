@@ -58,6 +58,16 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("compress_recordings", false)
         set(value) = sp.edit().putBoolean("compress_recordings", value).apply()
 
+    /** Extra encryption of the database and recordings (security/DataProtection). Off by default. */
+    var encryptData: Boolean
+        get() = sp.getBoolean("encrypt_data", false)
+        set(value) = sp.edit().putBoolean("encrypt_data", value).apply()
+
+    /** Set when an encrypted database could not be opened and was set aside. */
+    var dataKeyLost: Boolean
+        get() = sp.getBoolean("data_key_lost", false)
+        set(value) = sp.edit().putBoolean("data_key_lost", value).apply()
+
     /** Ask for biometrics / the phone's PIN to open the app (see ui/AppLock). */
     var appLock: Boolean
         get() = sp.getBoolean("app_lock", false)

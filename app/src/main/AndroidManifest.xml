@@ -42,6 +42,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Restarts the app after the encryption setting changes (own process, no UI). -->
+        <activity
+            android:name=".ui.RestartActivity"
+            android:exported="false"
+            android:process=":restart"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <service
             android:name=".capture.CallRecorderService"
             android:exported="true"

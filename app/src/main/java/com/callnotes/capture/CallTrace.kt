@@ -92,6 +92,7 @@ class CallTrace(private val startedAt: Long) {
         }
 
         /** The trace file that belongs to a recording. */
-        fun fileFor(recording: File) = File(recording.parentFile, recording.nameWithoutExtension + ".trace.txt")
+        fun fileFor(recording: File) =
+            File(recording.parentFile, File(recording.name.removeSuffix(".enc")).nameWithoutExtension + ".trace.txt")
     }
 }

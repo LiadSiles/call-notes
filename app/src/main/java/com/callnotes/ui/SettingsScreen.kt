@@ -86,6 +86,7 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
         item { SectionHeader("פרטיות") }
         item { key(resetKey) { RetentionSection(prefs) } }
         item { LockSection(prefs) }
+        item { EncryptionSection(prefs) }
         item { key(resetKey) { CompressionSection(prefs) } }
         item { SectionHeader("כללי") }
         item { key(resetKey) { SettingsSection(prefs) } }

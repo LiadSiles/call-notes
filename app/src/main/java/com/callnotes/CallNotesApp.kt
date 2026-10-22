@@ -33,16 +33,27 @@ class CallNotesApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // The restart helper's own process must not touch the database or schedule anything.
+        if (getProcessName().endsWith(":restart")) return
+        com.callnotes.security.DataProtection.clearCache(this)
         Notifications.createChannels(this)
         recoverDeadRun()
         com.callnotes.util.TaskReminders.reschedule(this)
         com.callnotes.util.Retention.scheduleDaily(this)
-        appScope.launch { com.callnotes.util.Retention.run(this@CallNotesApp) }
+        appScope.launch {
+            com.callnotes.util.Retention.run(this@CallNotesApp)
+            com.callnotes.security.DataProtection.applyToAll(this@CallNotesApp)
+        }
         // Battery saver on → pause processing; off → pick up what's queued.
         com.callnotes.util.BatterySaver.watch(this) { paused ->
             if (paused) TranscriptionService.pauseForBatterySaver(this)
             else if (com.callnotes.util.Prefs(this).autoTranscribe) TranscriptionService.start(this)
         }
+    }
+
+    /** Work that should outlive the screen that started it (e.g. converting recordings). */
+    fun launchBackground(block: suspend () -> Unit) {
+        appScope.launch { block() }
     }
 
     /**
