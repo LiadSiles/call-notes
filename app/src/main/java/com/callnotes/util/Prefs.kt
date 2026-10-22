@@ -29,6 +29,20 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("pause_battery_saver", false)
         set(value) = sp.edit().putBoolean("pause_battery_saver", value).apply()
 
+    /** Whisper preset: ACCURATE / BALANCED / FAST (see WhisperSpeed). */
+    var transcribeSpeed: String
+        get() = sp.getString("transcribe_speed", "ACCURATE") ?: "ACCURATE"
+        set(value) = sp.edit().putString("transcribe_speed", value).apply()
+
+    /** Measured speed per preset: total audio and total transcription time, in ms. */
+    fun speedStats(preset: String): Pair<Long, Long> =
+        sp.getLong("speed_audio_$preset", 0) to sp.getLong("speed_work_$preset", 0)
+
+    fun addSpeedSample(preset: String, audioMs: Long, workMs: Long) {
+        val (a, w) = speedStats(preset)
+        sp.edit().putLong("speed_audio_$preset", a + audioMs).putLong("speed_work_$preset", w + workMs).apply()
+    }
+
     /** A notification on the morning a task is due. */
     var taskReminders: Boolean
         get() = sp.getBoolean("task_reminders", true)

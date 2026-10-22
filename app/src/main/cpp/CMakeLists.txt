@@ -23,7 +23,7 @@ set(GGML_CPU_ARM_ARCH "armv8.2-a+fp16+dotprod" CACHE STRING "" FORCE)
 
 add_subdirectory(${WHISPER_DIR} whisper_build EXCLUDE_FROM_ALL)
 
-add_library(callnotes_whisper SHARED whisper_jni.cpp)
+add_library(callnotes_whisper SHARED whisper_jni.cpp quantize_jni.cpp)
 target_link_libraries(callnotes_whisper PRIVATE whisper log android)
 target_compile_options(callnotes_whisper PRIVATE -O3 -fvisibility=hidden)
 target_link_options(callnotes_whisper PRIVATE -Wl,--gc-sections -Wl,--exclude-libs,ALL)

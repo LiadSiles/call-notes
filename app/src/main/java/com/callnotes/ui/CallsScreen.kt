@@ -132,6 +132,7 @@ fun CallsScreen(
                             "stopping" -> "עוצר…"
                             "speakers" -> "מזהה מי אמר מה"
                             "loading" -> "טוען את מודל התמלול"
+                            "preparing_model" -> "מכין גרסה מהירה של המודל · ${if (st.chunksTotal > 0) st.chunksDone * 100 / st.chunksTotal else 0}%"
                             "loading_analyzer" -> "טוען את מודל הסיכום"
                             "analyzing" -> "מסכם"
                             "waiting_memory" -> "ממתין לזיכרון כדי לסכם"

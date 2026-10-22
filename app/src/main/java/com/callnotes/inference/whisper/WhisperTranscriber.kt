@@ -25,9 +25,11 @@ class WhisperTranscriber(
     private val spec: ModelSpec,
     private val modelFile: File,
     private val beamSize: Int = 5,
+    /** "q8_0" etc. when running on a quantized copy; part of the id saved with each transcript. */
+    private val variant: String? = null,
 ) : Transcriber {
 
-    override val modelId: String get() = spec.id
+    override val modelId: String get() = listOfNotNull(spec.id, variant, "beam$beamSize".takeIf { beamSize != 5 }).joinToString("+")
 
     @Volatile private var handle = 0L
 

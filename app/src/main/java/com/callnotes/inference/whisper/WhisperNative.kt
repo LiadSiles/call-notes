@@ -41,6 +41,10 @@ object WhisperNative {
     external fun free(handle: Long)
     external fun abort(handle: Long)
     external fun systemInfo(): String
+    /** Writes a quantized copy (type 8 = q8_0, 5 = q5_0). Null on success, else the reason. */
+    external fun quantize(inPath: String, outPath: String, type: Int, listener: ProgressListener?): String?
+    /** Stops a running [quantize] at its next row chunk. */
+    external fun quantizeAbort()
     external fun transcribe(
         handle: Long,
         samples: FloatArray,

@@ -409,6 +409,12 @@ private fun TranscriptState(
     }
 
     when {
+        onThis && processing.phase == "preparing_model" -> Progress(
+            "מכין גרסה מהירה של מודל התמלול… " +
+                if (processing.chunksTotal > 0) "${processing.chunksDone * 100 / processing.chunksTotal}%" else "",
+            "קורה פעם אחת אחרי בחירת מהירות חדשה בהגדרות. העותק נשמר בטלפון בלבד.",
+            if (processing.chunksTotal > 0) processing.chunksDone.toFloat() / processing.chunksTotal else null,
+        )
         // The model is loading for this call (before its status changes).
         onThis && c.status != CallStatus.TRANSCRIBING && processing.phase in setOf("loading", "stopping") -> Progress(
             "טוען את מודל התמלול… ${elapsed(processing.since)}",

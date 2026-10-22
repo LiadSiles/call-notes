@@ -5,6 +5,7 @@ import com.callnotes.audio.Wav
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SegmentEntity
+import com.callnotes.inference.InferenceEngine
 import com.callnotes.inference.ModelCatalog
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
@@ -17,13 +18,19 @@ import com.callnotes.inference.speakers.VoiceClusters
 import com.callnotes.inference.speakers.VoiceEmbedder
 import com.callnotes.inference.speakers.VoiceProfile
 import com.callnotes.inference.whisper.WhisperNative
+import com.callnotes.inference.whisper.WhisperSpeed
 import com.callnotes.inference.whisper.WhisperTranscriber
 import com.callnotes.processing.TranscriptionService.Companion.describe
 import com.callnotes.processing.TranscriptionService.Companion.fingerprint
 import com.callnotes.util.CpuInfo
 import com.callnotes.util.Notifications
+import com.callnotes.util.Prefs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -44,7 +51,14 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
     private var embedder: VoiceEmbedder? = null
     private var embedderTried = false
 
-    override fun abortNative() { transcriber?.abort() }
+    /** Preset the loaded model runs with (null until loaded). */
+    @Volatile private var speed: WhisperSpeed? = null
+    @Volatile private var preparing = false
+
+    override fun abortNative() {
+        if (preparing) WhisperSpeed.abort()
+        transcriber?.abort()
+    }
     override fun publish(state: ProcessingStatus.State) = ProcessingStatus.set(state)
 
     /** Main thread. A manual request arrived: pause an automatic call on something else. */
@@ -88,7 +102,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             if (done + failed > 0) TranscriptionService.note(host, if (failed == 0) "תומללו $done" else "תומללו $done, נכשלו $failed")
             step("end · transcribed $done, failed $failed")
         } finally {
-            transcriber?.close(); transcriber = null
+            transcriber?.close(); transcriber = null; speed = null
             embedder?.close(); embedder = null; embedderTried = false
             modelLoaded = false
             end()
@@ -112,7 +126,20 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         host.showWork(this, "מתמלל: ${label(call)}", "טוען את מודל התמלול…", callId = call.id)
         step("loading model ${spec.id} (${"%.2f".format(file.length() / 1e9)} GB) · ${ProcessingLog.freeRam(host)}")
         val started = System.currentTimeMillis()
-        val t = Transcribers.create(host, spec, file)
+        var preset = if (spec.engine == InferenceEngine.WHISPER_CPP) WhisperSpeed.current(Prefs(host)) else WhisperSpeed.ACCURATE
+        if (preset.quantType != null && !preset.fileFor(file).isFile) {
+            val err = prepareVariant(file, preset, call)
+            if (err != null) {
+                log("could not prepare the ${preset.suffix} model ($err); using the full model with this preset's decoding")
+                TranscriptionService.note(host, "הכנת הגרסה המהירה נכשלה ($err). מתמלל עם המודל המלא.")
+                preset = if (preset.beamSize == WhisperSpeed.ACCURATE.beamSize) WhisperSpeed.ACCURATE else preset
+            }
+        }
+        val useQuant = preset.quantType != null && preset.fileFor(file).isFile
+        val t = if (useQuant || preset == WhisperSpeed.ACCURATE) Transcribers.create(host, spec, file, preset)
+            else WhisperTranscriber(spec, file, preset.beamSize) // FAST without its copy
+        speed = preset
+        step("preset ${preset.name}: ${if (useQuant) preset.fileFor(file).name else file.name}, beam ${preset.beamSize}")
         return try {
             t.load()
             modelLoaded = true
@@ -128,6 +155,43 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             TranscriptionService.note(host, "טעינת מודל התמלול נכשלה: ${e.javaClass.simpleName}")
             null
         }
+    }
+
+    /**
+     * Makes the quantized copy for a faster preset, once (a minute or two). Shown as part of
+     * this call's notification; cancel stops it and keeps nothing half-written.
+     */
+    private suspend fun prepareVariant(base: File, preset: WhisperSpeed, call: CallEntity): String? {
+        val started = System.currentTimeMillis()
+        val title = "מתמלל: ${label(call)}"
+        step("preparing ${preset.suffix} copy of ${base.name} · ${ProcessingLog.freeRam(host)}")
+        publish(ProcessingStatus.State(running = true, callId = call.id, phase = "preparing_model"))
+        host.showWork(this, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)…", callId = call.id)
+        preparing = true
+        val err = try {
+            withContext(Dispatchers.IO) {
+                val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+                coroutineScope {
+                    val watcher = launch {
+                        try { awaitCancellation() } finally { if (!finished.get()) WhisperSpeed.abort() }
+                    }
+                    try {
+                        WhisperSpeed.prepare(base, preset) { pct ->
+                            publish(ProcessingStatus.State(true, call.id, pct, 100, "preparing_model"))
+                            host.showWork(this@TranscribeWorker, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)… $pct%", pct, 100, call.id)
+                        }
+                    } finally {
+                        finished.set(true)
+                        watcher.cancel()
+                    }
+                }
+            }
+        } finally {
+            preparing = false
+        }
+        currentCoroutineContext().ensureActive()
+        if (err == null) log("${preset.suffix} copy ready in ${secs(started)} (${"%.2f".format(preset.fileFor(base).length() / 1e9)} GB)")
+        return err
     }
 
     /** Returns true if the call was transcribed. */
@@ -146,6 +210,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             val audioSec = (Wav.readInfo(audio)?.durationMs ?: 0L) / 1000
             log("call ${call.id}: $audioSec s of audio")
             var lastLogged = -1
+            val asrStarted = System.currentTimeMillis()
             val transcript = transcriber.transcribe(audio) { done, total ->
                 val pct = if (total > 0) done * 100 / total else 0
                 if (pct / 10 != lastLogged / 10 || done == total) {
@@ -158,6 +223,11 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 }
             }
             currentCoroutineContext().ensureActive()
+            val asrMs = System.currentTimeMillis() - asrStarted
+            speed?.let { s ->
+                if (audioSec > 0) Prefs(host).addSpeedSample(s.name, audioSec * 1000, asrMs)
+                log("call ${call.id}: speech recognition ${"%.2f".format(asrMs / 1000.0 / audioSec.coerceAtLeast(1))}× call length (preset ${s.name})")
+            }
             host.showWork(this, title, "מזהה מי אמר מה…", callId = call.id)
             val speakers = separateSpeakers(call, audio, transcript)
             if (call.id in cancelled) throw CancellationException("cancelled")

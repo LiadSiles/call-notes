@@ -153,6 +153,7 @@ class ModelManager(private val context: Context) {
 
     fun delete(spec: ModelSpec) {
         if (prefs.downloadModelId == spec.id) cancelDownload()
+        if (spec.engine == InferenceEngine.WHISPER_CPP) com.callnotes.inference.whisper.WhisperSpeed.deleteDerived(fileFor(spec))
         fileFor(spec).delete()
         partFor(spec).delete()
         refresh()
