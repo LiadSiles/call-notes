@@ -3,6 +3,9 @@ package com.callnotes.ui
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,7 +32,9 @@ internal fun TaskExtras(t: TaskEntity, callLabel: String?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { TaskActions.addToCalendar(context, t, callLabel) }, contentPadding = pad,
             modifier = Modifier.height(36.dp)) {
-            Text(if (t.dueDate != null) "הוספה ליומן" else "הוספה ליומן (לבחור תאריך)", style = MaterialTheme.typography.labelLarge)
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.DateRange, null,
+                modifier = Modifier.padding(end = 6.dp).size(16.dp))
+            Text("הוספה ליומן", style = MaterialTheme.typography.labelLarge)
         }
         if (t.duplicateOf != null) {
             TextButton(onClick = { scope.launch(Dispatchers.IO) { TaskActions.unlinkDuplicate(context, t) } },

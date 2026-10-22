@@ -180,7 +180,7 @@ fun SettingsHubContent(contentPadding: PaddingValues, s: HubState, onOpen: (Sett
                     attention = s.missingSteps > 0)
             }
         }
-        item { GroupLabel("") }
+        item { androidx.compose.foundation.layout.Spacer(Modifier.padding(top = 14.dp)) }
         item {
             CardGroup {
                 NavRow(Icons.Filled.Info, t.slate, SettingsPage.ABOUT.title, s.about, { onOpen(SettingsPage.ABOUT) })

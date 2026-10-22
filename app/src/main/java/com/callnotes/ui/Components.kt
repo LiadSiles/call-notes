@@ -157,6 +157,9 @@ fun formatDuration(millis: Long): String {
     else "%d:%02d".format(total / 60, total % 60)
 }
 
+/** "22.10 · 14:47" — compact date for secondary lines. */
+fun formatShort(millis: Long): String = SimpleDateFormat("d.M · HH:mm", Locale.US).format(Date(millis))
+
 fun formatTime(millis: Long): String = SimpleDateFormat("HH:mm", Locale.US).format(Date(millis))
 
 fun formatDateTime(millis: Long): String =

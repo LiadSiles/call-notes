@@ -3,6 +3,22 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-22 — Redesign: calm hub + pages, bundled font, screenshots in CI (0.10.0)
+Owner: pages should be clearer, calmer and cleaner; settings was crowded; wants an
+elegant, modern look. Settings became a hub — a status card and one row per category
+(icon tile, title, one-line summary of what's set) — with each category on its own page,
+so the long explanations moved off the main screen into short notes. Look: warm mist
+background, white cards without borders or shadows, inset hairlines, deep pine used
+sparingly, one soft tint per category. Font: Heebo (SIL OFL, `res/font/heebo.ttf`,
+variable weight) bundled — a downloadable Google Font would contact Google's servers,
+which the no-internet-services rule forbids. Extra icons are drawn from SVG paths
+(`AppIcons`) rather than adding material-icons-extended. To review layouts without a
+phone, `ScreenshotTest` renders stateless screen pieces with sample data on
+Robolectric (native graphics) and `.github/workflows/screenshots.yml` pushes the PNGs to
+the `screenshots` branch (`<branch>/*.png`); excluded from the normal build
+(`-Pscreenshots`). Side effect: `ui-test-manifest` (a test-only activity declaration) is
+in the debug APK.
+
 ### 2026-10-22 — Battery: measure, and let the owner defer work to the charger (0.9.1)
 Owner asked how much energy the app uses and wanted a switch to process only while
 charging. Nearly all energy is Whisper and Gemma after a call (all fast cores); the

@@ -160,14 +160,14 @@ internal fun TaskCard(
                     "other" -> "באחריות ${item.callContactName ?: "הצד השני"}"
                     else -> null
                 }
-                val meta = listOfNotNull(owner, dueLabel(t.dueDate, t.duePhrase), "$who · ${formatDateTime(item.callStartedAt)}")
+                val meta = listOfNotNull(owner, dueLabel(t.dueDate, t.duePhrase), "$who · ${formatShort(item.callStartedAt)}")
                 Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 if (!t.certain) Pill("לא בטוח", Tone.Bad, Modifier.padding(top = 6.dp))
                 // Where else it came up: tap opens that call at the line.
                 repeats.forEach { r ->
                     Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            "עלתה שוב: ${who(r)} · ${formatDateTime(r.callStartedAt)} ›",
+                            "עלתה שוב: ${who(r)} · ${formatShort(r.callStartedAt)} ›",
                             style = MaterialTheme.typography.bodySmall,
                             color = cs.primary,
                             modifier = Modifier.weight(1f).clickable { onOpen(r) },
@@ -196,7 +196,7 @@ private fun who(item: TaskListItem) = item.callContactName ?: item.callNumber ?:
 /** "עד 22.10 (מחר)", overdue marked. */
 internal fun dueLabel(date: String?, phrase: String?): String? {
     val d = date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-    val text = d?.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+    val text = d?.format(DateTimeFormatter.ofPattern("d.M"))
     val late = d != null && d.isBefore(LocalDate.now())
     return when {
         text != null && phrase != null -> "עד $text ($phrase)" + if (late) " · עבר המועד" else ""
