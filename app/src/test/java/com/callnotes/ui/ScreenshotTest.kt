@@ -78,7 +78,7 @@ class ScreenshotTest {
     @Test fun settingsSubPage() = shot("settings_battery") {
         val prefs = Prefs(LocalContext.current)
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
-            item { SubPageBar("הקלטה וסוללה") {} }
+            item { SubPageBar("הקלטה וסוללה", onBack = {}) }
             item { GroupLabel("שיחות") }
             item { RecordingSettings(prefs) }
             item { GroupLabel("מתי לעבד") }
