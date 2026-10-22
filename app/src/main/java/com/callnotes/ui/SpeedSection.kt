@@ -43,18 +43,11 @@ fun SpeedSection(models: ModelManager, prefs: Prefs) {
     var selected by remember { mutableStateOf(WhisperSpeed.current(prefs)) }
     var filesVersion by remember { mutableIntStateOf(0) }
 
-    Panel(Modifier.padding(top = 8.dp)) {
+    GroupLabel("מהירות")
+    CardGroup {
         Column {
-            Text("מהירות התמלול", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "פחות דיוק תמורת פחות זמן. כל האפשרויות רצות על הטלפון בלבד. " +
-                    "העותק המהיר נוצר מהמודל שכבר הורד, בתמלול הראשון אחרי הבחירה (דקה–שתיים, פעם אחת).",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp, bottom = 6.dp),
-            )
             WhisperSpeed.entries.forEachIndexed { i, s ->
-                if (i > 0) HorizontalDivider()
+                if (i > 0) RowDivider(inset = false)
                 val ready = remember(filesVersion, noteVersion) { s.quantType == null || s.fileFor(base).isFile }
                 val measured = remember(noteVersion) {
                     prefs.speedStats(s.name).let { (audio, work) -> if (audio >= 30_000) work.toDouble() / audio else null }
@@ -68,12 +61,12 @@ fun SpeedSection(models: ModelManager, prefs: Prefs) {
                         .selectable(selected = selected == s, role = Role.RadioButton) {
                             selected = s; prefs.transcribeSpeed = s.name
                         }
-                        .padding(vertical = 8.dp),
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.Top,
                 ) {
                     RadioButton(selected = selected == s, onClick = null, modifier = Modifier.padding(top = 2.dp, end = 10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(s.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(s.label, style = MaterialTheme.typography.titleSmall)
                         Text(s.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val status = listOfNotNull(
                             measured?.let { "נמדד בטלפון: %.1f× מאורך השיחה".format(it) },
@@ -93,7 +86,7 @@ fun SpeedSection(models: ModelManager, prefs: Prefs) {
             val derived = remember(filesVersion, noteVersion) {
                 WhisperSpeed.entries.filter { it.quantType != null }.sumOf { it.fileFor(base).takeIf { f -> f.isFile }?.length() ?: 0L }
             }
-            if (derived > 0) TextButton(onClick = {
+            if (derived > 0) TextButton(modifier = Modifier.padding(start = 6.dp), onClick = {
                 WhisperSpeed.deleteDerived(base)
                 filesVersion++
             }, enabled = !(ProcessingStatus.state.value.running)) {
@@ -101,4 +94,5 @@ fun SpeedSection(models: ModelManager, prefs: Prefs) {
             }
         }
     }
+    Note("העותק המהיר נוצר בטלפון מהמודל שכבר הורד, בתמלול הראשון אחרי הבחירה (דקה–שתיים, פעם אחת). המודל המלא נשאר.")
 }

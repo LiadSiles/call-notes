@@ -1,13 +1,14 @@
 package com.callnotes.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,22 +50,12 @@ fun RetentionSection(prefs: Prefs) {
         }
     }
 
-    Panel {
-        Column {
-            Text("שמירת נתונים", style = MaterialTheme.typography.titleSmall)
-            Text(
-                "מחיקה אוטומטית, פעם ביום. כבוי כברירת מחדל: שום דבר לא נמחק בלי שבחרת.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
-            )
-            Choice("מחיקת הקלטות אחרי", "רק של שיחות שכבר תומללו. התמלול, הסיכום והמשימות נשארים.",
-                Retention.AUDIO_DAYS, audio) { choose(true, it) }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Choice("מחיקת שיחות שלמות אחרי", "הקלטה, תמלול, סיכום ומשימות. שיחה עם משימה פתוחה נשמרת עד שהמשימה מסומנת כבוצעה.",
-                Retention.CALL_DAYS, calls) { choose(false, it) }
-        }
+    CardGroup {
+        Choice("מחיקת הקלטות אחרי", "של שיחות שתומללו. התמלול והסיכום נשארים.", Retention.AUDIO_DAYS, audio) { choose(true, it) }
+        RowDivider(inset = false)
+        Choice("מחיקת שיחות שלמות אחרי", "כולל תמלול, סיכום ומשימות.", Retention.CALL_DAYS, calls) { choose(false, it) }
     }
+    Note("כבוי כברירת מחדל — שום דבר לא נמחק בלי שבחרת. שיחה עם משימה פתוחה נשמרת עד שהמשימה מסומנת כבוצעה. הבדיקה רצה פעם ביום.")
 
     pending?.let { (isAudio, days, count) ->
         AlertDialog(
@@ -72,8 +63,8 @@ fun RetentionSection(prefs: Prefs) {
             title = { Text(if (isAudio) "למחוק $count הקלטות?" else "למחוק $count שיחות?") },
             text = {
                 Text(
-                    (if (isAudio) "$count הקלטות ישנות מ-${daysLabel(days)} יימחקו עכשיו, והתמלול שלהן יישאר."
-                    else "$count שיחות ישנות מ-${daysLabel(days)} יימחקו עכשיו לגמרי.") +
+                    (if (isAudio) "$count הקלטות ישנות מ${daysLabel(days)} יימחקו עכשיו, והתמלול שלהן יישאר."
+                    else "$count שיחות ישנות מ${daysLabel(days)} יימחקו עכשיו לגמרי.") +
                         " אי אפשר לשחזר אותן.",
                 )
             },
@@ -82,7 +73,7 @@ fun RetentionSection(prefs: Prefs) {
                     pending = null
                     apply(isAudio, days, prefs, { audio = it }, { calls = it })
                     scope.launch(Dispatchers.IO) { Retention.run(context) }
-                }) { Text("מחיקה") }
+                }) { Text("מחיקה", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { pending = null }) { Text("ביטול") } },
         )
@@ -93,7 +84,7 @@ private fun apply(isAudio: Boolean, days: Int, prefs: Prefs, setAudio: (Int) -> 
     if (isAudio) { prefs.audioRetentionDays = days; setAudio(days) } else { prefs.callRetentionDays = days; setCalls(days) }
 }
 
-private fun daysLabel(days: Int) = when (days) {
+internal fun daysLabel(days: Int) = when (days) {
     0 -> "אף פעם"
     1 -> "יום"
     7 -> "שבוע"
@@ -105,14 +96,28 @@ private fun daysLabel(days: Int) = when (days) {
     else -> "$days ימים"
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Choice(title: String, body: String, options: List<Int>, value: Int, onChoose: (Int) -> Unit) {
-    Text(title, style = MaterialTheme.typography.bodyLarge)
-    Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-        options.forEach { d ->
-            FilterChip(selected = value == d, onClick = { if (value != d) onChoose(d) }, label = { Text(daysLabel(d)) })
+    Column(Modifier.padding(top = 12.dp, bottom = 10.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 18.dp))
+        Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp))
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            options.forEach { d ->
+                FilterChip(
+                    selected = value == d,
+                    onClick = { if (value != d) onChoose(d) },
+                    label = { Text(daysLabel(d)) },
+                    shape = MaterialTheme.shapes.small,
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                )
+            }
         }
     }
 }
@@ -123,57 +128,37 @@ fun LockSection(prefs: Prefs) {
     val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity ?: return
     var on by remember { mutableStateOf(prefs.appLock) }
     var problem by remember { mutableStateOf<String?>(null) }
-    Panel(Modifier.padding(top = 8.dp)) {
-        Column {
-            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("נעילת האפליקציה", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "טביעת אצבע, זיהוי פנים או קוד הנעילה של הטלפון בכל פתיחה (אחרי 30 שניות ברקע). " +
-                            "גם מסתיר את האפליקציה בצילומי מסך ובמסך האפליקציות האחרונות, ואת תוכן ההתראות במסך הנעילה.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                androidx.compose.material3.Switch(checked = on, onCheckedChange = { want ->
-                    if (want && !AppLock.available(activity)) {
-                        problem = "לא מוגדרת נעילת מסך או טביעת אצבע בטלפון. הגדר נעילת מסך בהגדרות הטלפון ונסה שוב."
-                        return@Switch
-                    }
-                    AppLock.authenticate(activity, if (want) "הפעלת נעילה" else "כיבוי נעילה") { ok ->
-                        if (ok) {
-                            prefs.appLock = want; on = want
-                            AppLock.secureWindow(activity, want)
-                        }
-                    }
-                })
+    CardGroup {
+        SwitchRow("נעילת האפליקציה", "טביעת אצבע, פנים או קוד הטלפון בכל פתיחה.", on) { want ->
+            if (want && !AppLock.available(activity)) {
+                problem = "לא מוגדרת נעילת מסך או טביעת אצבע בטלפון. הגדר נעילת מסך בהגדרות הטלפון ונסה שוב."
+                return@SwitchRow
             }
-            problem?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 6.dp))
+            AppLock.authenticate(activity, if (want) "הפעלת נעילה" else "כיבוי נעילה") { ok ->
+                if (ok) {
+                    prefs.appLock = want; on = want
+                    AppLock.secureWindow(activity, want)
+                }
             }
         }
     }
+    problem?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(start = 10.dp, top = 8.dp))
+    }
+    Note("אחרי 30 שניות ברקע. גם מסתיר את האפליקציה בצילומי מסך ובמסך האפליקציות האחרונות, ואת תוכן ההתראות במסך הנעילה.")
 }
 
-/** Compression switch (storage, not privacy, but it lives with the other "what's kept" settings). */
+/** Compression switch: storage, but it lives with the other "what's kept" settings. */
 @Composable
 fun CompressionSection(prefs: Prefs) {
     var on by remember { mutableStateOf(prefs.compressRecordings) }
-    Panel(Modifier.padding(top = 8.dp)) {
-        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("דחיסת הקלטות", style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "אחרי התמלול ההקלטה נשמרת כ-AAC: בערך פי 8 פחות מקום, בלי הבדל נשמע בדיבור. " +
-                        "הקלטות קיימות נדחסות בהדרגה. הדחיסה סופית — כיבוי חל רק על הקלטות חדשות.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            androidx.compose.material3.Switch(checked = on, onCheckedChange = { on = it; prefs.compressRecordings = it })
+    CardGroup {
+        SwitchRow("דחיסת הקלטות", "אחרי התמלול: בערך פי 8 פחות מקום, בלי הבדל נשמע בדיבור.", on) {
+            on = it; prefs.compressRecordings = it
         }
     }
+    Note("הקלטות קיימות נדחסות בהדרגה. הדחיסה סופית — כיבוי חל רק על הקלטות חדשות.")
 }
 
 /** Optional extra encryption of the database and recordings. */
@@ -191,47 +176,31 @@ fun EncryptionSection(prefs: Prefs) {
     val summary by com.callnotes.processing.ProcessingStatus.summary.collectAsStateWithLifecycle()
     val dbPending = remember(on) { !com.callnotes.security.DataProtection.databaseMatchesSetting(context) }
 
-    Panel(Modifier.padding(top = 8.dp)) {
-        Column {
-            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("הצפנה נוספת", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "אנדרואיד כבר מצפין את נתוני האפליקציה עם נעילת הטלפון. הצפנה נוספת מגינה גם אם תיקיית הנתונים " +
-                            "מועתקת מטלפון פרוץ (root) או בבדיקה פורנזית: מסד הנתונים (תמלולים, סיכומים, משימות) וההקלטות " +
-                            "מוצפנים ב-AES-256 עם מפתח ששמור במאגר המפתחות המאובטח של הטלפון. הקלטה מוצפנת אחרי שתומללה.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                androidx.compose.material3.Switch(checked = on, onCheckedChange = { confirm = it })
-            }
-            if (progress.running) {
-                Text("${if (on) "מצפין" else "מפענח"} הקלטות… ${progress.done}/${progress.total}",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 6.dp))
-            }
-            if (dbPending) {
-                val busy = service.recordingNow || processing.running || summary.running || progress.running
-                Text(
-                    if (on) "מסד הנתונים יוצפן בהפעלה הבאה של האפליקציה." else "ההצפנה של מסד הנתונים תוסר בהפעלה הבאה של האפליקציה.",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-                TextButton(onClick = { activity?.let { RestartActivity.restart(it) } }, enabled = !busy) {
-                    Text(if (busy) "הפעלה מחדש — אחרי שההקלטה / העיבוד יסתיימו" else "הפעלה מחדש עכשיו")
-                }
-            }
-            if (keyLost) {
-                Text(
-                    "מפתח ההצפנה נמחק מהטלפון, ולכן הנתונים המוצפנים הקודמים לא ניתנים לקריאה. האפליקציה התחילה מחדש עם נתונים ריקים.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-                TextButton(onClick = { prefs.dataKeyLost = false; keyLost = false }) { Text("הבנתי") }
+    CardGroup {
+        SwitchRow("הצפנה נוספת", "מסד הנתונים וההקלטות ב-AES-256, במפתח ששמור רק בטלפון.", on) { confirm = it }
+        if (progress.running || dbPending) RowDivider(inset = false)
+        if (progress.running) {
+            InfoRow("${if (on) "מצפין" else "מפענח"} הקלטות", "${progress.done} מתוך ${progress.total}")
+        }
+        if (dbPending) {
+            val busy = service.recordingNow || processing.running || summary.running || progress.running
+            InfoRow(
+                if (on) "מסד הנתונים יוצפן בהפעלה הבאה" else "ההצפנה תוסר בהפעלה הבאה",
+                if (busy) "אפשר להפעיל מחדש אחרי שההקלטה או העיבוד יסתיימו." else null,
+            ) {
+                TextButton(onClick = { activity?.let { RestartActivity.restart(it) } }, enabled = !busy) { Text("הפעלה מחדש") }
             }
         }
+    }
+    Note("אנדרואיד כבר מצפין את נתוני האפליקציה עם נעילת הטלפון. ההצפנה הנוספת מגינה גם על עותק של התיקייה מטלפון פרוץ או בבדיקה פורנזית. הקלטה מוצפנת אחרי שתומללה.")
+    if (keyLost) {
+        Text(
+            "מפתח ההצפנה נמחק מהטלפון, ולכן הנתונים המוצפנים הקודמים לא ניתנים לקריאה. האפליקציה התחילה מחדש עם נתונים ריקים.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(start = 10.dp, top = 8.dp),
+        )
+        TextButton(onClick = { prefs.dataKeyLost = false; keyLost = false }) { Text("הבנתי") }
     }
 
     confirm?.let { want ->

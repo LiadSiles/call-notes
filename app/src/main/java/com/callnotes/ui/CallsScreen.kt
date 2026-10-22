@@ -84,8 +84,8 @@ fun CallsScreen(
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 104.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             if (searching) {
                 item {
@@ -102,24 +102,29 @@ fun CallsScreen(
                                 Icon(Icons.Filled.Close, "סגירת החיפוש")
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp).focusRequester(focus),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                        ),
+                        modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 4.dp).focusRequester(focus),
                     )
                 }
                 searchResults(query, hits, onOpenAt)
                 return@LazyColumn
             }
             item {
-                Row(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("שיחות", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-                    if (items.isNotEmpty()) androidx.compose.material3.IconButton(onClick = { searching = true; hits = null }) {
-                        Icon(Icons.Filled.Search, "חיפוש")
-                    }
-                    when {
-                        service.recordingNow -> Pill("מקליט עכשיו", Tone.Busy)
-                        ready -> Pill("ההקלטה פעילה", Tone.Good)
-                        else -> Pill("דרושה הגדרה", Tone.Bad)
-                    }
-                }
+                CallsHeader(
+                    status = when {
+                        service.recordingNow -> "מקליט עכשיו" to Tone.Busy
+                        ready -> "ההקלטה פעילה" to Tone.Good
+                        else -> "דרושה השלמת הגדרה" to Tone.Bad
+                    },
+                    canSearch = items.isNotEmpty(),
+                    onSearch = { searching = true; hits = null },
+                )
             }
 
             if (saverPaused) item {
@@ -216,15 +221,18 @@ fun CallsScreen(
                 )
             }
 
-            var lastDay: String? = null
-            items.forEach { entry ->
-                val day = dayLabel(entry.call.startedAt)
-                if (day != lastDay) {
-                    lastDay = day
-                    item(key = "day_$day") { SectionHeader(day) }
-                }
-                item(key = entry.call.id) {
-                    CallRow(entry, processing, onClick = { onOpen(entry.call.id) })
+            // One card per day, calls as rows inside it.
+            items.groupBy { dayLabel(it.call.startedAt) }.forEach { (day, calls) ->
+                item(key = "day_$day") {
+                    Column {
+                        GroupLabel(day, Modifier.padding(top = 4.dp))
+                        CardGroup {
+                            calls.forEachIndexed { i, entry ->
+                                if (i > 0) RowDivider(inset = true)
+                                CallRow(entry, processing, onClick = { onOpen(entry.call.id) })
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -238,18 +246,34 @@ fun CallsScreen(
     }
 }
 
+/** Page title, recording status and the search button. */
 @Composable
-private fun CallRow(item: CallListItem, processing: ProcessingStatus.State, onClick: () -> Unit) {
+internal fun CallsHeader(status: Pair<String, Tone>, canSearch: Boolean, onSearch: () -> Unit) {
+    PageHeader("שיחות") {
+        Pill(status.first, status.second)
+        if (canSearch) {
+            Spacer(Modifier.width(6.dp))
+            androidx.compose.material3.FilledTonalIconButton(
+                onClick = onSearch,
+                colors = androidx.compose.material3.IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                ),
+            ) { Icon(Icons.Filled.Search, "חיפוש") }
+        }
+    }
+}
+
+@Composable
+internal fun CallRow(item: CallListItem, processing: ProcessingStatus.State, onClick: () -> Unit) {
     val call = item.call
     val live = processing.callId == call.id
     val status = statusOf(call, if (live) processing.chunksDone else null, if (live) processing.chunksTotal else null)
     Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = androidx.compose.ui.graphics.Color.Transparent,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
     ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.Top) {
-            Avatar(call)
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.Top) {
+            Avatar(call, size = 40)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -265,7 +289,8 @@ private fun CallRow(item: CallListItem, processing: ProcessingStatus.State, onCl
                 )
                 item.preview?.takeIf { it.isNotBlank() }?.let {
                     Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 2,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                 }
                 if (status != null && status.second != Tone.Good) {
                     Pill(status.first, status.second, Modifier.padding(top = 8.dp))

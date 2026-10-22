@@ -37,7 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.Lifecycle
@@ -193,15 +196,32 @@ private fun AppRoot() {
                 onFocusConsumed = { openFocus = null; openFocusText = null },
             )
         } else {
+            val hairline = MaterialTheme.colorScheme.outlineVariant
+            val navColors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                selectedIconColor = MaterialTheme.colorScheme.primary,
+                selectedTextColor = MaterialTheme.colorScheme.primary,
+                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
                 bottomBar = {
-                    NavigationBar {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        tonalElevation = 0.dp,
+                        modifier = Modifier.drawBehind {
+                            // Hairline above the bar instead of a shadow.
+                            drawLine(hairline, androidx.compose.ui.geometry.Offset(0f, 0f),
+                                androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
+                        },
+                    ) {
                         NavigationBarItem(
                             selected = tab == Tab.Calls,
                             onClick = { tab = Tab.Calls },
                             icon = { Icon(Icons.Filled.Call, null) },
                             label = { Text("שיחות") },
+                            colors = navColors,
                         )
                         NavigationBarItem(
                             selected = tab == Tab.Tasks,
@@ -212,12 +232,14 @@ private fun AppRoot() {
                                 }) { Icon(Icons.Filled.CheckCircle, null) }
                             },
                             label = { Text("משימות") },
+                            colors = navColors,
                         )
                         NavigationBarItem(
                             selected = tab == Tab.Settings,
                             onClick = { tab = Tab.Settings },
                             icon = { Icon(Icons.Filled.Settings, null) },
                             label = { Text("הגדרות") },
+                            colors = navColors,
                         )
                     }
                 },

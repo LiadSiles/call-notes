@@ -38,14 +38,7 @@ import java.util.Locale
 
 /** Section title above a group of cards. */
 @Composable
-fun SectionHeader(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.padding(start = 4.dp, top = 20.dp, bottom = 8.dp),
-    )
-}
+fun SectionHeader(text: String, modifier: Modifier = Modifier) = GroupLabel(text, modifier)
 
 /** White rounded panel used for every group of content. */
 @Composable
@@ -57,7 +50,7 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
     ) {
-        Column(Modifier.padding(16.dp)) { content() }
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp)) { content() }
     }
 }
 
@@ -77,10 +70,10 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
         modifier
             .clip(RoundedCornerShape(50))
             .background(bg)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(6.dp).clip(CircleShape).background(fg.copy(alpha = 0.8f)))
+        Box(Modifier.size(6.dp).clip(CircleShape).background(fg.copy(alpha = 0.75f)))
         Spacer(Modifier.width(6.dp))
         Text(text, style = MaterialTheme.typography.labelSmall, color = fg, maxLines = 1)
     }
@@ -97,13 +90,14 @@ fun Avatar(call: CallEntity, size: Int = 44) {
         call.kind == CallKind.VOIP -> "◎"
         else -> "#"
     }
-    val palette = listOf(cs.primaryContainer, cs.secondaryContainer, cs.surfaceVariant)
-    val bg = palette[(name.hashCode() and 0x7fffffff) % palette.size]
+    val t = com.callnotes.ui.theme.LocalTints.current
+    val palette = listOf(t.green, t.indigo, t.brass, t.teal, t.plum, t.rose)
+    val (bg, fg) = if (name.isEmpty()) t.slate else palette[(name.hashCode() and 0x7fffffff) % palette.size]
     Box(
         Modifier.size(size.dp).clip(CircleShape).background(bg),
         contentAlignment = Alignment.Center,
     ) {
-        Text(glyph, style = MaterialTheme.typography.titleMedium, color = cs.onSurface)
+        Text(glyph, style = MaterialTheme.typography.titleMedium, color = fg)
     }
 }
 
@@ -111,20 +105,20 @@ fun Avatar(call: CallEntity, size: Int = 44) {
 @Composable
 fun EmptyState(icon: ImageVector, title: String, body: String, modifier: Modifier = Modifier) {
     Column(
-        modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 24.dp),
+        modifier.fillMaxWidth().padding(vertical = 56.dp, horizontal = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
-            Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+            Modifier.size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(28.dp))
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
         }
-        Spacer(Modifier.size(4.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.size(8.dp))
+        Text(title, style = MaterialTheme.typography.titleLarge)
         Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 3, overflow = TextOverflow.Ellipsis)
+            maxLines = 4, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
 

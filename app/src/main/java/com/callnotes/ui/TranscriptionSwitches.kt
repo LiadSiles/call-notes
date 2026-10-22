@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,21 +35,12 @@ fun TranscriptionSwitches(prefs: Prefs) {
     val lastRun = remember(noteVersion) { prefs.lastProcessing }
     var showLog by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    Panel(Modifier.padding(top = 8.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("תמלול אוטומטי", style = MaterialTheme.typography.bodyLarge)
-                Text("כל הקלטה מתומללת ברקע בסיומה.", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.width(12.dp))
-            Switch(checked = auto, onCheckedChange = { auto = it; prefs.autoTranscribe = it })
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
-            Text(lastRun?.let { "הרצה אחרונה: $it" } ?: "התמלול עוד לא רץ.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            TextButton(onClick = { showLog = true }) { Text("יומן תמלול") }
+    CardGroup {
+        SwitchRow("תמלול וסיכום אוטומטיים", "כל הקלטה מעובדת ברקע בסיומה.", auto) { auto = it; prefs.autoTranscribe = it }
+        RowDivider(inset = false)
+        InfoRow("יומן עיבוד", lastRun?.let { "הרצה אחרונה: $it" } ?: "העיבוד עוד לא רץ.", onClick = { showLog = true }) {
+            Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight, null,
+                tint = MaterialTheme.colorScheme.outline)
         }
     }
     if (showLog) TraceDialog(ProcessingLog.file(context), onDismiss = { showLog = false }, title = "יומן תמלול")

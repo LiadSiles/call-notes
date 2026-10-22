@@ -68,6 +68,19 @@ android {
         compose = true
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric screenshot tests (ScreenshotTest) need resources: the bundled font.
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty("roborazzi.test.record", "true")
+                // Screenshots only on request (-Pscreenshots): the normal build stays fast.
+                if (!project.hasProperty("screenshots")) it.exclude("**/ScreenshotTest*")
+                else it.filter.includeTestsMatching("com.callnotes.ui.ScreenshotTest")
+            }
+        }
+    }
+
     lint {
         // Sideloaded build: the battery-exemption request is intentional (Play policy n/a).
         disable += "BatteryLife"
@@ -108,6 +121,14 @@ dependencies {
     implementation(libs.litertlm.android)
 
     testImplementation(libs.junit)
+    // Screenshot tests (Robolectric + Roborazzi), run only with -Pscreenshots.
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.test.ext.junit)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     // Real org.json for unit tests (android.jar's copy is a stub there).
     testImplementation("org.json:json:20240303")
 }

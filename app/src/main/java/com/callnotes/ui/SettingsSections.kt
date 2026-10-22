@@ -246,60 +246,59 @@ private fun SetupRow(
     }
 }
 
+/** Recording switches: master, internet calls, automatic speaker. */
 @Composable
-internal fun SettingsSection(prefs: Prefs) {
+internal fun RecordingSettings(prefs: Prefs) {
     var recording by remember { mutableStateOf(prefs.recordingEnabled) }
     var autoSpeaker by remember { mutableStateOf(prefs.autoSpeaker) }
     var voip by remember { mutableStateOf(prefs.recordVoip) }
+    CardGroup {
+        SwitchRow("הקלטת שיחות", "כל שיחה מוקלטת אוטומטית מתחילתה ועד סופה.", recording) {
+            recording = it; prefs.recordingEnabled = it
+        }
+        RowDivider(inset = false)
+        SwitchRow("שיחות אינטרנט", "WhatsApp, טלגרם, Meet ודומיהן. ניסיוני, ללא שם הצד השני.", voip, enabled = recording) {
+            voip = it; prefs.recordVoip = it
+        }
+        RowDivider(inset = false)
+        SwitchRow("רמקול אוטומטי", "רק אם הצד השני נשמע חלש בהקלטות.", autoSpeaker) {
+            autoSpeaker = it; prefs.autoSpeaker = it
+        }
+    }
+    Note("ברמקול אוטומטי כל שיחה עוברת לרמקול; הוא לא פועל כשמחוברות אוזניות. בשיחות אינטרנט ייתכן שבחלק מהמכשירים הצד השני לא יישמע.")
+}
+
+/** Battery switches: pause in battery saver, process only while charging. */
+@Composable
+internal fun BatterySettings(prefs: Prefs) {
     var batterySaver by remember { mutableStateOf(prefs.pauseInBatterySaver) }
-    var reminders by remember { mutableStateOf(prefs.taskReminders) }
     var charging by remember { mutableStateOf(prefs.onlyWhileCharging) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
-
-    Panel {
-        Column {
-            
-            ToggleRow("הקלטת שיחות", "מתג ראשי", recording) {
-                recording = it; prefs.recordingEnabled = it
-            }
-            HorizontalDivider()
-            ToggleRow(
-                "שיחות אינטרנט (ניסיוני)",
-                "מקליט גם שיחות WhatsApp, טלגרם, Meet וכדומה. ללא שם הצד השני. " +
-                    "ייתכן שבחלק מהמכשירים הצד השני לא יישמע.",
-                voip,
-                enabled = recording,
-            ) { voip = it; prefs.recordVoip = it }
-            HorizontalDivider()
-            ToggleRow(
-                "רמקול אוטומטי",
-                "הפעל רק אם בהקלטות הצד השני נשמע חלש. מעביר כל שיחה לרמקול; לא פועל כשמחוברות אוזניות.",
-                autoSpeaker,
-            ) { autoSpeaker = it; prefs.autoSpeaker = it }
-            HorizontalDivider()
-            ToggleRow(
-                "השהיה במצב חיסכון בסוללה",
-                "כשחיסכון הסוללה של הטלפון פעיל, האפליקציה לא מקליטה שיחות חדשות ולא מתמללת או מסכמת. " +
-                    "שיחה שכבר מוקלטת ממשיכה עד סופה; העבודה שבתור ממשיכה כשהחיסכון נכבה.",
-                batterySaver,
-            ) { batterySaver = it; prefs.pauseInBatterySaver = it }
-            HorizontalDivider()
-            ToggleRow(
-                "עיבוד רק בזמן טעינה",
-                "שיחות מוקלטות כרגיל, אבל התמלול והסיכום מחכים עד שהטלפון מחובר למטען (למשל בלילה). " +
-                    "לחיצה ידנית על \"תמלל\" או \"סכם\" עובדת גם בלי מטען. ניתוק באמצע מסיים את השיחה הנוכחית ועוצר.",
-                charging,
-            ) {
-                charging = it; prefs.onlyWhileCharging = it
-                if (!it && prefs.autoTranscribe) com.callnotes.processing.TranscriptionService.start(ctx)
-            }
-            HorizontalDivider()
-            ToggleRow(
-                "תזכורת ביום היעד",
-                "התראה בבוקר (בסביבות ${com.callnotes.util.TaskReminders.HOUR}:00) של היום שבו משימה פתוחה צריכה להתבצע.",
-                reminders,
-            ) { reminders = it; prefs.taskReminders = it; com.callnotes.util.TaskReminders.reschedule(ctx) }
+    CardGroup {
+        SwitchRow("עיבוד רק בזמן טעינה", "ההקלטה כרגילה; התמלול והסיכום מחכים למטען.", charging) {
+            charging = it; prefs.onlyWhileCharging = it
+            if (!it && prefs.autoTranscribe) com.callnotes.processing.TranscriptionService.start(ctx)
         }
+        RowDivider(inset = false)
+        SwitchRow("השהיה בחיסכון סוללה", "בזמן חיסכון סוללה לא מקליטים ולא מעבדים.", batterySaver) {
+            batterySaver = it; prefs.pauseInBatterySaver = it
+        }
+    }
+    Note("לחיצה ידנית על \"תמלל\" או \"סכם\" עובדת גם בלי מטען. שיחה שכבר מוקלטת ממשיכה עד סופה, ועבודה שבתור ממשיכה כשהמגבלה מוסרת.")
+    Note("כמה סוללה כל פעולה צרכה מופיע ב\"פרטים טכניים\" של כל שיחה, וכמה צורכת כל מהירות תמלול — בעמוד התמלול.")
+}
+
+/** Due-date reminders switch. */
+@Composable
+internal fun ReminderSettings(prefs: Prefs) {
+    var reminders by remember { mutableStateOf(prefs.taskReminders) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    CardGroup {
+        SwitchRow(
+            "תזכורת ביום היעד",
+            "התראה בסביבות ${com.callnotes.util.TaskReminders.HOUR}:00 ביום שמשימה פתוחה צריכה להתבצע.",
+            reminders,
+        ) { reminders = it; prefs.taskReminders = it; com.callnotes.util.TaskReminders.reschedule(ctx) }
     }
 }
 

@@ -1,0 +1,58 @@
+name: Screenshots
+
+# Renders the main screens with sample data (Robolectric + Roborazzi, no phone needed) and
+# publishes the PNGs to the `screenshots` branch, one folder per source branch, so design
+# changes can be reviewed from anywhere with plain git.
+on:
+  push:
+    branches: ["dev/**"]
+    paths:
+      - "app/src/main/java/com/callnotes/ui/**"
+      - "app/src/main/res/**"
+      - "app/src/test/java/com/callnotes/ui/ScreenshotTest.kt"
+      - ".github/workflows/screenshots.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Render
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          if ! ./gradlew :app:testDebugUnitTest -Pscreenshots --console=plain 2>&1 | tee build.log; then
+            grep -E '^e: |error:|ERROR:|What went wrong|FAILED|Exception|Caused by' -A3 build.log | head -40 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+            exit 1
+          fi
+          ls -la app/build/screenshots
+
+      - name: Publish to the screenshots branch
+        run: |
+          SRC="${GITHUB_REF_NAME//\//-}"
+          git config user.name "screenshots-bot"
+          git config user.email "screenshots-bot@users.noreply.github.com"
+          git fetch origin screenshots || true
+          mkdir -p /tmp/shots && cp app/build/screenshots/*.png /tmp/shots/
+          if git rev-parse --verify origin/screenshots >/dev/null 2>&1; then
+            git checkout -B screenshots origin/screenshots
+          else
+            git checkout --orphan screenshots && git rm -rf . >/dev/null
+          fi
+          rm -rf "$SRC" && mkdir -p "$SRC" && cp /tmp/shots/*.png "$SRC/"
+          git add "$SRC"
+          git commit -m "Screenshots for $GITHUB_REF_NAME @ ${GITHUB_SHA::7}" || exit 0
+          git push origin screenshots
+          echo "::notice::screenshots/$SRC updated"

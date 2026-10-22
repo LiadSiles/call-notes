@@ -30,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -101,13 +102,10 @@ fun TasksScreen(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize().padding(contentPadding),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 0.dp, bottom = 40.dp),
     ) {
         item {
-            Row(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("משימות", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-                if (open.isNotEmpty()) Pill("${open.size} פתוחות", Tone.Busy)
-            }
+            PageHeader("משימות", subtitle = if (open.isEmpty()) null else "${open.size} פתוחות · מהשיחות שלך") {}
         }
         if (all != null && tasks.isEmpty()) item {
             EmptyState(
@@ -131,7 +129,7 @@ fun TasksScreen(
 }
 
 @Composable
-private fun TaskCard(
+internal fun TaskCard(
     item: TaskListItem,
     repeats: List<TaskListItem>,
     highlighted: Boolean,
@@ -145,14 +143,14 @@ private fun TaskCard(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = bg,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onOpen(item) },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(MaterialTheme.shapes.medium).clickable { onOpen(item) },
     ) {
-        Row(Modifier.padding(end = 14.dp, top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.padding(start = 4.dp, end = 16.dp, top = 6.dp, bottom = 12.dp), verticalAlignment = Alignment.Top) {
             Checkbox(checked = t.done, onCheckedChange = onDone)
             Column(Modifier.weight(1f).padding(top = 12.dp)) {
                 Text(
                     t.title,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.titleMedium,
                     textDecoration = if (t.done) TextDecoration.LineThrough else null,
                     color = if (t.done) cs.onSurfaceVariant else cs.onSurface,
                 )
