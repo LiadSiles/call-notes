@@ -91,6 +91,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             ProcessingStatus.unrequestAnalysis(id)
             dao.get(id)?.takeIf { it.status == CallStatus.TRANSCRIBED }?.let { return it }
         }
+        if (com.callnotes.util.Energy.waitingForCharger(host)) return null
         return if (Prefs(host).autoTranscribe) dao.nextUnanalyzed() else null
     }
 
@@ -137,6 +138,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
 
     private suspend fun analyse(call: CallEntity, analyzer: GemmaAnalyzer): Boolean {
         val started = System.currentTimeMillis()
+        val battery = com.callnotes.util.Energy.read(host)
         val title = "מסכם: ${label(call)}"
         publish(ProcessingStatus.State(true, call.id, 0, 0, "analyzing"))
         host.showWork(this, title, "קורא את השיחה…", callId = call.id)
@@ -199,9 +201,12 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             val fresh = saved.filter { TranscriptMergerKey.of(it.title) !in before && !it.done && it.id !in repeats }
             fresh.forEach { Notifications.newTask(host, it, label(call)) }
             com.callnotes.util.TaskReminders.plan(host)
+            val used = com.callnotes.util.Energy.percentUsed(battery, com.callnotes.util.Energy.read(host))
+            dao.setAnalyzeCost(call.id, used, System.currentTimeMillis() - started)
             log("call ${call.id}: summary done in ${secs(started)} · ${answer.length} chars out · " +
                 "${result.keyPoints.size} points (${result.keyPoints.count { !it.certain }} unsure), " +
-                "${tasks.size} tasks (${tasks.count { !it.certain }} unsure, ${fresh.size} new, ${repeats.size} repeats)")
+                "${tasks.size} tasks (${tasks.count { !it.certain }} unsure, ${fresh.size} new, ${repeats.size} repeats) · battery " +
+                (used?.let { "%.2f%%".format(it) } ?: "not measured"))
             true
         } catch (e: Throwable) {
             if (e is CancellationException || call.id in cancelled) throw (e as? CancellationException ?: CancellationException("cancelled"))

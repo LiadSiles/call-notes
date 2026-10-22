@@ -43,6 +43,21 @@ class Prefs(context: Context) {
         sp.edit().putLong("speed_audio_$preset", a + audioMs).putLong("speed_work_$preset", w + workMs).apply()
     }
 
+    /** Transcribe and summarise only while the phone is plugged in (owner's switch). */
+    var onlyWhileCharging: Boolean
+        get() = sp.getBoolean("only_while_charging", false)
+        set(value) = sp.edit().putBoolean("only_while_charging", value).apply()
+
+    /** Battery used per preset: summed percent (×1000) and the call audio it covered (ms). */
+    fun energyStats(preset: String): Pair<Long, Long> =
+        sp.getLong("energy_milli_$preset", 0) to sp.getLong("energy_audio_$preset", 0)
+
+    fun addEnergySample(preset: String, audioMs: Long, percent: Double) {
+        val (e, a) = energyStats(preset)
+        sp.edit().putLong("energy_milli_$preset", e + (percent * 1000).toLong())
+            .putLong("energy_audio_$preset", a + audioMs).apply()
+    }
+
     /** Delete recordings of transcribed calls after this many days; 0 = never. */
     var audioRetentionDays: Int
         get() = sp.getInt("audio_retention_days", 0)
@@ -114,7 +129,7 @@ class Prefs(context: Context) {
     fun resetSwitches() {
         sp.edit()
             .remove("recording_enabled").remove("record_voip").remove("auto_speaker_v2")
-            .remove("auto_transcribe").remove("wifi_only").remove("pause_battery_saver").remove("task_reminders")
+            .remove("auto_transcribe").remove("wifi_only").remove("pause_battery_saver").remove("task_reminders").remove("only_while_charging")
             .remove("audio_retention_days").remove("call_retention_days")
             .apply()
     }

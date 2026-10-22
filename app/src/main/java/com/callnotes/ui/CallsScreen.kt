@@ -69,6 +69,7 @@ fun CallsScreen(
     var autoOn by remember(noteVersion, resumeTick) { mutableStateOf(prefs.autoTranscribe) }
     val waiting = items.count { it.call.status == com.callnotes.data.CallStatus.RECORDED }
     val saverPaused = remember(resumeTick, noteVersion) { com.callnotes.util.BatterySaver.paused(context) }
+    val waitingCharger = remember(resumeTick, noteVersion) { com.callnotes.util.Energy.waitingForCharger(context) }
     val ready = setup.requiredOk && service.connected && service.monitoring
     var searching by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
@@ -128,6 +129,15 @@ fun CallsScreen(
                     action = "להגדרות",
                     onAction = onOpenSettings,
                     warn = true,
+                )
+            }
+            if (waitingCharger && !saverPaused && waiting > 0 && !processing.running) item {
+                Banner(
+                    title = "ממתין לטעינה",
+                    body = (if (waiting == 1) "הקלטה אחת ממתינה" else "$waiting הקלטות ממתינות") +
+                        " — יתומללו ויסוכמו כשהטלפון יחובר למטען. אפשר לתמלל שיחה מסוימת עכשיו מתוך השיחה עצמה.",
+                    action = "להגדרות",
+                    onAction = onOpenSettings,
                 )
             }
             if (!ready) item {

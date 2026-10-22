@@ -45,6 +45,12 @@ class CallNotesApp : Application() {
             com.callnotes.security.DataProtection.applyToAll(this@CallNotesApp)
         }
         // Battery saver on → pause processing; off → pick up what's queued.
+        // Only-while-charging: plugging in picks up the queue (unplugging lets the current item finish).
+        com.callnotes.util.Energy.watchCharger(this) { plugged ->
+            if (plugged && com.callnotes.util.Prefs(this).autoTranscribe && com.callnotes.util.Prefs(this).onlyWhileCharging) {
+                TranscriptionService.start(this)
+            }
+        }
         com.callnotes.util.BatterySaver.watch(this) { paused ->
             if (paused) TranscriptionService.pauseForBatterySaver(this)
             else if (com.callnotes.util.Prefs(this).autoTranscribe) TranscriptionService.start(this)

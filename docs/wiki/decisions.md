@@ -3,6 +3,20 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-22 — Battery: measure, and let the owner defer work to the charger (0.9.1)
+Owner asked how much energy the app uses and wanted a switch to process only while
+charging. Nearly all energy is Whisper and Gemma after a call (all fast cores); the
+accessibility service and the recording are light. Each operation reads
+`BATTERY_PROPERTY_CHARGE_COUNTER` (µAh; whole percent where unsupported) before and
+after → percent of an estimated full charge, stored per call (`calls.transcribeEnergy`,
+`analyzeEnergy`, `transcribeMs`, `analyzeMs` — DB v10) and summed per speed preset. It is
+the whole phone's drain in that window (screen, other apps, a parallel summary), so an
+upper bound; nothing is recorded while plugged in. "Only while charging" (= plugged in,
+`EXTRA_PLUGGED`, full or not) gates the automatic queue in both workers and in
+`TranscriptionService.start`; explicit taps still run; unplugging lets the current call
+finish; `ACTION_POWER_CONNECTED` (registered at runtime — not deliverable to a manifest
+receiver since Android 8) restarts the queue.
+
 ### 2026-10-22 — Extra encryption is opt-in and reversible (0.9.0)
 Android's file-based encryption already protects app storage at rest with the lock
 screen; app-level encryption adds protection for a copied data folder, a rooted phone or

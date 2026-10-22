@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 // Encryption (SQLCipher) is planned for 0.8; the prototype keeps plain Room.
-@Database(entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class], version = 9, exportSchema = false)
+@Database(entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class], version = 10, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun calls(): CallDao
@@ -29,6 +29,16 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /** 0.3: transcripts. */
+        /** Calls: battery and time used by transcription and summary. */
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE calls ADD COLUMN transcribeEnergy REAL")
+                db.execSQL("ALTER TABLE calls ADD COLUMN analyzeEnergy REAL")
+                db.execSQL("ALTER TABLE calls ADD COLUMN transcribeMs INTEGER")
+                db.execSQL("ALTER TABLE calls ADD COLUMN analyzeMs INTEGER")
+            }
+        }
+
         /** Calls: when retention deleted the recording. */
         private val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -97,7 +107,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context): AppDatabase {
             val builder = Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
             when (com.callnotes.security.DataProtection.prepareDatabase(context, context.getDatabasePath(NAME))) {
                 com.callnotes.security.DataProtection.Db.ENCRYPTED -> {
                     com.callnotes.security.DbCrypt.loadLibrary()

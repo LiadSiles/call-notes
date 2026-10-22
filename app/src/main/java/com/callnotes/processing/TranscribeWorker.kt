@@ -120,6 +120,8 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             val call = dao.get(id)
             if (call != null && call.filePath != null && call.status == CallStatus.RECORDED) return call to true
         }
+        // Only-while-charging: the user's own request above still runs; the queue waits.
+        if (com.callnotes.util.Energy.waitingForCharger(host)) return null
         return dao.nextPending()?.let { it to false }
     }
 
@@ -234,6 +236,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         val converted = File(host.cacheDir, "convert_${call.id}.wav")
         val started = System.currentTimeMillis()
         var plainTemp: File? = null
+        val battery = com.callnotes.util.Energy.read(host)
         try {
             val (source, temporary) = com.callnotes.security.DataProtection.sourceFor(host, call.id)
                 ?: error("recording missing")
@@ -275,6 +278,11 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             log("call ${call.id}: done in ${secs(started)} ($audioSec s audio), ${rows.size} segments, " +
                 "${transcript.words.size} words, ${rows.sumOf { it.text.length }} chars · recording " +
                 if (after == before) "unchanged (sha256 $after)" else "CHANGED! $before → $after")
+            val used = com.callnotes.util.Energy.percentUsed(battery, com.callnotes.util.Energy.read(host))
+            val tookMs = System.currentTimeMillis() - started
+            dao.setTranscribeCost(call.id, used, tookMs)
+            if (used != null && audioSec > 0) speed?.let { Prefs(host).addEnergySample(it.name, audioSec * 1000, used) }
+            log("call ${call.id}: battery " + (used?.let { "%.2f%%".format(it) } ?: "not measured (charging or no data)"))
             compress(call.id)
             com.callnotes.security.DataProtection.applyToCall(host, call.id, force = true)
             return true

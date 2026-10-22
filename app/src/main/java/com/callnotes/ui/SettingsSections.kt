@@ -253,6 +253,7 @@ internal fun SettingsSection(prefs: Prefs) {
     var voip by remember { mutableStateOf(prefs.recordVoip) }
     var batterySaver by remember { mutableStateOf(prefs.pauseInBatterySaver) }
     var reminders by remember { mutableStateOf(prefs.taskReminders) }
+    var charging by remember { mutableStateOf(prefs.onlyWhileCharging) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
 
     Panel {
@@ -282,6 +283,16 @@ internal fun SettingsSection(prefs: Prefs) {
                     "שיחה שכבר מוקלטת ממשיכה עד סופה; העבודה שבתור ממשיכה כשהחיסכון נכבה.",
                 batterySaver,
             ) { batterySaver = it; prefs.pauseInBatterySaver = it }
+            HorizontalDivider()
+            ToggleRow(
+                "עיבוד רק בזמן טעינה",
+                "שיחות מוקלטות כרגיל, אבל התמלול והסיכום מחכים עד שהטלפון מחובר למטען (למשל בלילה). " +
+                    "לחיצה ידנית על \"תמלל\" או \"סכם\" עובדת גם בלי מטען. ניתוק באמצע מסיים את השיחה הנוכחית ועוצר.",
+                charging,
+            ) {
+                charging = it; prefs.onlyWhileCharging = it
+                if (!it && prefs.autoTranscribe) com.callnotes.processing.TranscriptionService.start(ctx)
+            }
             HorizontalDivider()
             ToggleRow(
                 "תזכורת ביום היעד",

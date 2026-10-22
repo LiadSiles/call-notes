@@ -87,6 +87,12 @@ data class CallEntity(
     val analysisError: String? = null,
     /** When the recording was deleted by the retention setting (DB v9); the text stays. */
     val audioDeletedAt: Long? = null,
+    /** Battery percent used by transcription / summary (DB v10); null = unknown or charging. */
+    val transcribeEnergy: Double? = null,
+    val analyzeEnergy: Double? = null,
+    /** How long transcription / summary took, ms (DB v10). */
+    val transcribeMs: Long? = null,
+    val analyzeMs: Long? = null,
 )
 
 object AnalysisStatus {

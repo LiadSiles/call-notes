@@ -59,6 +59,10 @@ fun SpeedSection(models: ModelManager, prefs: Prefs) {
                 val measured = remember(noteVersion) {
                     prefs.speedStats(s.name).let { (audio, work) -> if (audio >= 30_000) work.toDouble() / audio else null }
                 }
+                // Battery per 10 minutes of call, from transcriptions measured off the charger.
+                val energy = remember(noteVersion) {
+                    prefs.energyStats(s.name).let { (milli, audio) -> if (audio >= 60_000) milli / 1000.0 / (audio / 600_000.0) else null }
+                }
                 Row(
                     Modifier.fillMaxWidth()
                         .selectable(selected = selected == s, role = Role.RadioButton) {
@@ -73,6 +77,7 @@ fun SpeedSection(models: ModelManager, prefs: Prefs) {
                         Text(s.note, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         val status = listOfNotNull(
                             measured?.let { "נמדד בטלפון: %.1f× מאורך השיחה".format(it) },
+                            energy?.let { "~%.1f%% סוללה ל-10 דקות שיחה".format(it) },
                             if (!ready) "יוכן בתמלול הבא (~%.1f GB)".format(s.expectedBytes(base) / 1e9) else null,
                             if (s.quantType != null && ready) "מוכן · %.2f GB".format(s.fileFor(base).length() / 1e9) else null,
                         )

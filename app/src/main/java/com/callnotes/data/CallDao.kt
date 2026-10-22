@@ -61,6 +61,14 @@ abstract class CallDao {
     )
     abstract suspend fun searchCalls(q: String): List<SearchHit>
 
+    // --- Energy ---
+
+    @Query("UPDATE calls SET transcribeEnergy = :percent, transcribeMs = :ms WHERE id = :id")
+    abstract suspend fun setTranscribeCost(id: Long, percent: Double?, ms: Long)
+
+    @Query("UPDATE calls SET analyzeEnergy = :percent, analyzeMs = :ms WHERE id = :id")
+    abstract suspend fun setAnalyzeCost(id: Long, percent: Double?, ms: Long)
+
     // --- Retention ---
 
     @Query("SELECT * FROM calls WHERE filePath IS NOT NULL")

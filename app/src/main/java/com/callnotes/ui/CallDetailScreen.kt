@@ -272,11 +272,22 @@ fun CallDetailScreen(
                 SectionHeader("פרטים טכניים")
                 Panel {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            c.transcriptModel?.let { "תומלל עם $it" } ?: "נתוני אבחון של ההקלטה",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                c.transcriptModel?.let { "תומלל עם $it" } ?: "נתוני אבחון של ההקלטה",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            // What processing this call cost (whole phone during the operation; not while charging).
+                            val costs = listOfNotNull(
+                                c.transcribeMs?.let { "תמלול: ${formatDuration(it)}" + (com.callnotes.util.Energy.label(c.transcribeEnergy)?.let { e -> " · $e" } ?: " · בטעינה / לא נמדד") },
+                                c.analyzeMs?.let { "סיכום: ${formatDuration(it)}" + (com.callnotes.util.Energy.label(c.analyzeEnergy)?.let { e -> " · $e" } ?: " · בטעינה / לא נמדד") },
+                            )
+                            if (costs.isNotEmpty()) Text(
+                                costs.joinToString("\n"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         TextButton(onClick = { showTech = !showTech }) { Text(if (showTech) "הסתרה" else "הצגה") }
                     }
                     if (showTech) {

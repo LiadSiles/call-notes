@@ -283,6 +283,11 @@ class TranscriptionService : Service() {
                 note(context, "מושהה — מצב חיסכון בסוללה פעיל")
                 return false
             }
+            // Only-while-charging: automatic starts wait for the charger; explicit requests run.
+            if (callId == null && analyseId == null && com.callnotes.util.Energy.waitingForCharger(context)) {
+                note(context, "ממתין לטעינה — העיבוד יתחיל כשהטלפון יחובר למטען")
+                return false
+            }
             val canTranscribe = app.models.readyModel() != null
             val canAnalyse = app.models.readyModel(ModelRole.ANALYZE) != null
             when {
