@@ -147,9 +147,9 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
 /home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/capture/CallLogResolver.kt:38: Warning: This Cursor should be freed up after use with #close() [Recycle]
             context.contentResolver.query(
                                     ~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/Importer.kt:25: Warning: This InputStream should be freed up after use with #close() [Recycle]
-        resolver.openInputStream(uri)!!.use { input -> file.outputStream().use { input.copyTo(it) } }
-                 ~~~~~~~~~~~~~~~
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/Importer.kt:27: Warning: This InputStream should be freed up after use with #close() [Recycle]
+            val input = resolver.openInputStream(uri) ?: error("cannot open $uri")
+                                 ~~~~~~~~~~~~~~~
 
    Explanation for issues of type "Recycle":
    Many resources, such as TypedArrays, VelocityTrackers, etc., should be
