@@ -1,6 +1,6 @@
 # Roadmap and status
 
-_Last updated: 2026-10-21_
+_Last updated: 2026-10-22_
 
 | Version | Scope | Status |
 |---|---|---|
@@ -28,11 +28,12 @@ _Last updated: 2026-10-21_
 | 0.5.5 | Transcription and summaries in parallel (two workers); a notification per operation naming the call (recording, transcribing, summarising) with Cancel / Stop all, tap opens the call; instant cancel (Whisper abort, Gemma streaming + cancelProcess) | ✅ built, awaiting device test |
 | 0.6.0 | Tasks tab (all calls, open first, checkbox, jump to source line); notification per new task → tasks tab; summaries cite numbered transcript lines + "certain", verified in code ("לא בטוח" pill); every item jumps to its line; speaker fixes (long-press, swap); handset calls: loudness overrides voice sample; pause in battery saver; DB v7 | ✅ built, awaiting device test |
 | 0.6.1 | Items/tasks without cited lines are located by text (`SourceFinder`); visible "הצג בשיחה ›" cue; tasks screen opens the call at that line | ✅ built, awaiting device test |
-| 0.6.x | Tasks: reminders at due date, calendar export, duplicate detection across calls | |
-| 0.6+ | Model swapping UI: reprocess, comparison screen, quantized Whisper | |
-| 0.7 | Path B adapters: Samsung, OnePlus/Oppo/Realme, Vivo | |
-| 0.8 | Privacy + reliability: SQLCipher, biometric lock, retention, audio compression, FTS search | |
-| 0.9 | Closed beta (5–10 users), in-app updates, end-to-end test call in setup | |
+| 0.7.0 | Tasks: due-date reminder (09:00, inexact alarm, re-planned at boot/update/clock change); "add to calendar" → Google Calendar's prefilled new-event screen; a task repeated in a later call is linked to the first (shown once, not re-announced, ticked together, "not the same task" undo); Whisper speed presets (accurate f16 / balanced q8_0 / fast q5_0 + greedy) with on-device quantization and measured speed per preset; DB v8 | ✅ built (CI green), awaiting device test |
+| 0.8 | Privacy: user-chosen retention (recordings / whole calls), app lock (biometric / PIN, FLAG_SECURE, private notifications), search, optional AAC compression | in progress |
+| 0.9 | Optional extra encryption: SQLCipher database + encrypted recordings (Keystore-wrapped key) | planned |
+| later | Model swapping UI: reprocess, comparison screen | |
+| next | Path B adapters: Samsung, OnePlus/Oppo/Realme, Vivo | |
+| beta | Closed beta (5–10 users), end-to-end test call in setup | |
 | 1.0 | Release-signed build, polish, privacy policy, legal review | |
 
 **After 1.0:** VoIP calling mode, names for internet calls, diarization, Bluetooth accessory.
@@ -48,13 +49,12 @@ _Last updated: 2026-10-21_
 ## Next (proposed order, 2026-10-21)
 
 1. Field-test fixes from the logs above.
-2. 0.6.x tasks: reminder at the due date, "add to calendar" (opens the phone's calendar
-   app — owner decides, since that app may sync), duplicates across calls.
-3. Speed: quantize the ivrit.ai model on the device after download (q8/q5), optional
-   greedy decoding; measure quality vs speed.
-4. 0.8 privacy before 0.7: encrypted database + recordings, app lock (biometric),
-   retention (auto-delete audio after N days), compressed audio, search.
-5. 0.7 other phones: Path B (OEM dialer recordings) for devices where the accessibility
+2. ~~Tasks: reminders, Google Calendar, duplicates~~ (0.7.0). ~~Speed presets~~ (0.7.0).
+3. 0.8 privacy: retention chosen by the owner, app lock, search, compression; 0.9 optional
+   extra encryption (database + recordings).
+4. Before more speed work: owner compares presets on real calls (settings show the
+   measured speed of each; re-transcribe a call to compare text).
+5. Other phones: Path B (OEM dialer recordings) for devices where the accessibility
    mic capture is silent.
 6. 0.9 beta on other phones; 1.0 release signing, privacy policy, legal review.
    Open decision: in-app update checks contact GitHub — conflicts with "no internet

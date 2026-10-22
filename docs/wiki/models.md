@@ -63,8 +63,14 @@ Facts about Gemma 4 below come from Google's model cards and the LiteRT-LM docs.
 | Transcriber (`abort()` sets whisper's abort flag, checked between graph nodes) | `inference/whisper/WhisperTranscriber.kt` |
 
 Facts and choices:
-- File is f16 ggml (1.6 GB). No quantized Hebrew build is published; quantizing
-  ourselves is a later option (q5/q8 ≈ 0.6–0.9 GB, faster).
+- File is f16 ggml (1.6 GB). No quantized Hebrew build is published, so the app makes
+  its own (0.7.0, `WhisperSpeed`, `cpp/quantize_jni.cpp`): **accurate** = f16, beam 5;
+  **balanced** = q8_0 copy (~0.87 GB), beam 5; **fast** = q5_0 copy (~0.57 GB), greedy.
+  Quantized: every 2-D tensor except the conv biases and positional embeddings (as
+  upstream; whisper.cpp checks each tensor's byte size against the file's ftype, so
+  all `wtype` tensors must be converted). Header ftype = `GGML_QNT_VERSION*1000 + ftype`.
+  The transcript's model id records the preset (`whisper-he-turbo+q8_0`). Measured speed
+  per preset is kept in prefs (`speed_audio_*`, `speed_work_*`) and shown in settings.
 - Build: `GGML_CPU_ARM_ARCH=armv8.2-a+fp16+dotprod`; the app refuses to load the lib
   unless `/proc/cpuinfo` lists `asimddp`, `fphp`, `asimdhp` (illegal-instruction guard).
   Release flags are forced even in the debug APK (`-DCMAKE_BUILD_TYPE=Release`).

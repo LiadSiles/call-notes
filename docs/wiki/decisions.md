@@ -3,6 +3,30 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-22 — Calendar = Google Calendar, through its own editor (0.7.0)
+Owner chose Google Calendar. The app opens Calendar's prefilled "new event" screen
+(`ACTION_INSERT`, package `com.google.android.calendar`, any calendar app as fallback)
+instead of writing events itself: no calendar permission, and nothing leaves the app
+until the user taps Save there. Only the task title, the due phrase and the call label go
+in — not the quote. Google Calendar syncs to the user's Google account; that's the user's
+explicit, per-task choice.
+
+### 2026-10-22 — Repeated tasks: strict match, original keeps the identity (0.7.0)
+A task in a new call that matches an open task from an earlier call (last 60 days) is
+stored with `duplicateOf` = that task: shown once (under the original, with "came up
+again" links), not announced again, no second reminder, ticking either ticks both.
+Matching (`TaskMatcher`) is deliberately strict — ≥ 75 % of the shorter title's content
+words (Hebrew prefixes folded), same owner and no conflicting due dates — because a
+wrong merge hides a task while a missed one only shows it twice. Undo: "לא אותה משימה".
+
+### 2026-10-22 — Faster Whisper by quantizing on the phone (0.7.0)
+No quantized ivrit.ai build is published, and the app must not use a server. The app
+writes q8_0 / q5_0 copies of the downloaded f16 model itself, with a streamed port of
+whisper.cpp's `quantize` (same tensor rules, row chunks → low memory, progress, cancel).
+The copy is made once, the first time a faster preset transcribes; the f16 file is kept
+so "accurate" stays one tap away. Settings show measured speed per preset on this phone
+(× call length) rather than promised numbers.
+
 ### 2026-10-21 — Summaries must show their evidence (0.6.0)
 Owner: summaries, key points and tasks must be very accurate, and anything uncertain must
 be marked. Rather than trust the model's self-assessment alone, every item cites

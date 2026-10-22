@@ -21,6 +21,8 @@ nothing is written to shared storage.
 | LiteRT-LM cache | `cache/` | LiteRT-LM | engine-managed |
 | Model | `Android/data/com.callnotes/files/models/gemma-4-E*-it.litertlm` (+ `.part` while downloading) | `ModelManager` | 2.6–3.7 GB |
 | Transcription log | `files/transcription.log` (timings, memory, errors — no transcript text) | `ProcessingLog` | ≤ 64 KB, trimmed |
+| Faster Whisper copies (only if a faster preset was used) | `Android/data/com.callnotes/files/models/<whisper>.q8_0.bin`, `.q5_0.bin` | `WhisperSpeed.prepare` | ~0.87 / ~0.57 GB |
+| Task reminders / repeats (DB v8) | `tasks.remindedAt`, `tasks.duplicateOf` | `TaskReminders`, `SummaryWorker` | small |
 | Owner's voice fingerprint (no audio kept) | `files/voice_profile.bin` | `VoiceProfile` | ~1 KB |
 | Voice-fingerprint model | `Android/data/com.callnotes/files/models/wespeaker-en-voxceleb-resnet34-lm.onnx` | `ModelManager` | 26.5 MB |
 | Settings | `shared_prefs/prefs.xml` | `Prefs` | tiny |
