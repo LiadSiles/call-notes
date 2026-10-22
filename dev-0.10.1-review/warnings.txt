@@ -1,1 +1,3 @@
 w: ⚠️ Deprecated Gradle Version
+e: app/src/test/java/com/callnotes/inference/AnalysisPromptTest.kt:64:103 Argument type mismatch: actual type is 'String', but 'Boolean' was expected.
+e: app/src/test/java/com/callnotes/inference/AnalysisPromptTest.kt:64:109 Too many arguments for 'constructor(title: String, summary: String, keyPoints: List<CallAnalysis.Point>, decisions: List<CallAnalysis.Point>, tasks: List<CallAnalysis.Task>, followUps: List<CallAnalysis.Point>, summaryCertain: Boolean = ...): CallAnalysis'.

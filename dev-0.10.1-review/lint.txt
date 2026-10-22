@@ -1,11 +1,10 @@
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:123: Warning: Consider using apply() instead; commit writes its data to persistent storage immediately, whereas apply will handle it in the background [ApplySharedPref]
-        set(value) { sp.edit().putString("processing_stage", value).commit() }
-                                                                    ~~~~~~~~
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:150: Warning: SharedPreferences.edit() without a corresponding commit() or apply() call [CommitPrefEdits]
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) = sp.edit().put(value).apply()
+                                                                                 ~~~~~~~~~
 
-   Explanation for issues of type "ApplySharedPref":
-   Consider using apply() instead of commit on shared preferences. Whereas
-   commit blocks and writes its data to persistent storage immediately, apply
-   will handle it in the background.
+   Explanation for issues of type "CommitPrefEdits":
+   After calling edit() on a SharedPreference, you must call commit() or
+   apply() on the editor to save the results.
 
 /home/runner/work/call-notes/call-notes/gradle/wrapper/gradle-wrapper.properties:3: Warning: A newer version of Gradle than 8.14.3 is available: 8.14.6 [AndroidGradlePluginVersion]
 distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.3-bin.zip
@@ -92,18 +91,6 @@ roborazzi = "1.43.0"
    MavenCentral dependency, and connects to the library every time, which
    makes it more flexible but also much slower.
 
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/PrivacySection.kt:128: Error: LocalContext should not be cast to Activity, use LocalActivity instead [ContextCastToActivity from androidx.activity.compose]
-    val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity ?: return
-                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-   Explanation for issues of type "ContextCastToActivity":
-   Casting Context to Activity is an error as Contexts are not always
-   Activities. Use LocalActivity instead
-
-   Vendor: Jetpack Activity Compose
-   Identifier: androidx.activity.compose
-   Feedback: https://issuetracker.google.com/issues/new?component=612128
-
 /home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/Components.kt:61: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
 fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier) {
                                                   ~~~~~~~~
@@ -123,20 +110,6 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
    Identifier: androidx.compose.ui
    Feedback: https://issuetracker.google.com/issues/new?component=612128
 
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/SpeedSection.kt:92: Error: StateFlow.value should not be called within composition [StateFlowValueCalledInComposition from androidx.compose.runtime]
-            }, enabled = !(ProcessingStatus.state.value.running)) {
-                                                  ~~~~~
-
-   Explanation for issues of type "StateFlowValueCalledInComposition":
-   Calling StateFlow.value within composition will not observe changes to the
-   StateFlow, so changes might not be reflected within the composition.
-   Instead you should use stateFlow.collectAsState() to observe changes to the
-   StateFlow, and recompose when it changes.
-
-   Vendor: Jetpack Compose
-   Identifier: androidx.compose.runtime
-   Feedback: https://issuetracker.google.com/issues/new?component=612128
-
 /home/runner/work/call-notes/call-notes/app/build.gradle.kts:22: Warning: Missing x86_64 ABI support for ChromeOS [ChromeOsAbiSupport]
         ndk { abiFilters += "arm64-v8a" }
                             ~~~~~~~~~~~
@@ -151,21 +124,9 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
 
    https://developer.android.com/ndk/guides/abis
 
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/TaskReminders.kt:69: Warning: This broadcast receiver declares an intent-filter for a protected broadcast action string, which can only be sent by the system, not third-party applications. However, the receiver's onReceive method does not appear to call getAction to ensure that the received Intent's action string matches the expected value, potentially making it possible for another actor to send a spoofed intent with no action string or a different action string and cause undesired behavior. [UnsafeProtectedBroadcastReceiver]
-        override fun onReceive(context: Context, intent: Intent) {
-                     ~~~~~~~~~
-
-   Explanation for issues of type "UnsafeProtectedBroadcastReceiver":
-   `BroadcastReceiver`s that declare an intent-filter for a
-   protected-broadcast action string must check that the received intent's
-   action string matches the expected value, otherwise it is possible for
-   malicious actors to spoof intents.
-
-   https://goo.gle/UnsafeProtectedBroadcastReceiver
-
-/home/runner/work/call-notes/call-notes/app/src/main/AndroidManifest.xml:30: Warning: The attribute android:allowBackup is deprecated from Android 12 and higher and may be removed in future versions. Consider adding the attribute android:dataExtractionRules specifying an @xml resource which configures cloud backups and device transfers on Android 12 and higher. [DataExtractionRules]
-        android:allowBackup="false"
-                             ~~~~~
+/home/runner/work/call-notes/call-notes/app/src/main/AndroidManifest.xml:31: Warning: The attribute android:dataExtractionRules only applies for Android 12 and higher; since minSdkVersion is API 29 you should also set android:fullBackupContent [DataExtractionRules]
+        android:dataExtractionRules="@xml/data_extraction_rules"
+                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    Explanation for issues of type "DataExtractionRules":
    Before Android 12, the attributes android:allowBackup and
@@ -194,17 +155,6 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
    Many resources, such as TypedArrays, VelocityTrackers, etc., should be
    recycled (with a recycle() call) after use. This lint check looks for
    missing recycle() calls.
-
-/home/runner/work/call-notes/call-notes/app/src/main/res/mipmap-anydpi-v26: Warning: This folder configuration (v26) is unnecessary; minSdkVersion is 29. Merge all the resources in this folder into mipmap-anydpi. [ObsoleteSdkInt]
-
-   Explanation for issues of type "ObsoleteSdkInt":
-   This check flags version checks that are not necessary, because the
-   minSdkVersion (or surrounding known API level) is already at least as high
-   as the version checked for.
-
-   Similarly, it also looks for resources in -vNN folders, such as values-v14
-   where the version qualifier is less than or equal to the minSdkVersion,
-   where the contents should be merged into the best folder.
 
 /home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/PrivacySection.kt:38: Hint: Prefer mutableIntStateOf instead of mutableStateOf [AutoboxingStateCreation from androidx.compose.runtime]
     var audio by remember { mutableStateOf(prefs.audioRetentionDays) }
@@ -252,7 +202,7 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
    you are already using the new API, consider moving the calls to the same
    file or suppressing the warning.
 
-/home/runner/work/call-notes/call-notes/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml:2: Warning: The application adaptive icon is missing a monochrome tag [MonochromeLauncherIcon]
+/home/runner/work/call-notes/call-notes/app/src/main/res/mipmap-anydpi/ic_launcher.xml:2: Warning: The application adaptive icon is missing a monochrome tag [MonochromeLauncherIcon]
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
 ^
 
@@ -271,81 +221,24 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
 /home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/inference/ModelManager.kt:132: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
         val request = DownloadManager.Request(Uri.parse(spec.downloadUrl))
                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:12: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("recording_enabled", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:17: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("record_voip", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:25: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("auto_speaker_v2", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:30: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("pause_battery_saver", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:35: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putString("transcribe_speed", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:43: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:52: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
         sp.edit().putLong("speed_audio_$preset", a + audioMs).putLong("speed_work_$preset", w + workMs).apply()
         ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:49: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("only_while_charging", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:57: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:61: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
         sp.edit().putLong("energy_milli_$preset", e + (percent * 1000).toLong())
         ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:64: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putInt("audio_retention_days", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:69: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putInt("call_retention_days", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:74: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("compress_recordings", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:79: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("encrypt_data", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:84: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("data_key_lost", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:89: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("app_lock", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:94: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("task_reminders", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:99: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("auto_transcribe", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:104: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putBoolean("wifi_only", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:109: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putString("download_model_id", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:114: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putString("last_processing", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:123: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:76: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
         set(value) { sp.edit().putString("processing_stage", value).commit() }
                      ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:130: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        sp.edit()
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:114: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
+    fun setModelFor(role: ModelRole, id: String) = sp.edit().putString(modelKey(role), id).apply()
+                                                   ~~~~~~~~~
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:133: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
+        sp.edit().apply { RESETTABLE.forEach(::remove) }.apply()
         ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:147: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        else sp.edit().putString("model_${role.name.lowercase()}", id).apply()
-             ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:153: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putString("model_id", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:158: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putString("download_queue", value).apply()
-                     ~~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:163: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
-        set(value) = sp.edit().putLong("download_id", value).apply()
-                     ~~~~~~~~~
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/util/Prefs.kt:150: Warning: Use the KTX extension function SharedPreferences.edit instead? [UseKtx]
+        override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) = sp.edit().put(value).apply()
+                                                                                 ~~~~~~~~~
 /home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/SetupChecks.kt:59: Warning: Use the KTX extension function String.toUri instead? [UseKtx]
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
                                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -419,4 +312,4 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
    declarations outside of the TOML file and suggests moving them (and in the
    IDE, provides a quickfix to performing the operation automatically).
 
-2 errors, 61 warnings, 2 hints
+0 errors, 40 warnings, 2 hints
