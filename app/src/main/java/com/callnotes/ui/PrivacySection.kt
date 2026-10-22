@@ -97,30 +97,8 @@ internal fun daysLabel(days: Int) = when (days) {
 }
 
 @Composable
-private fun Choice(title: String, body: String, options: List<Int>, value: Int, onChoose: (Int) -> Unit) {
-    Column(Modifier.padding(top = 12.dp, bottom = 10.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 18.dp))
-        Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp))
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            options.forEach { d ->
-                FilterChip(
-                    selected = value == d,
-                    onClick = { if (value != d) onChoose(d) },
-                    label = { Text(daysLabel(d)) },
-                    shape = MaterialTheme.shapes.small,
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                )
-            }
-        }
-    }
-}
+private fun Choice(title: String, body: String, options: List<Int>, value: Int, onChoose: (Int) -> Unit) =
+    ChipChoice(title, body, options, value, ::daysLabel, onChoose = onChoose)
 
 /** App lock switch. Turning it on or off asks for the phone's lock first. */
 @Composable

@@ -101,18 +101,23 @@ abstract class CallDao {
 
     // --- Analysis (summary + tasks) ---
 
-    /** Newest transcribed call with words that hasn't been analysed yet. */
+    /**
+     * Newest transcribed call with words that hasn't been analysed yet and isn't longer
+     * than [maxMs] (the automatic-processing limit; 0 = none).
+     */
     @Query(
         "SELECT * FROM calls WHERE status = 'transcribed' AND analysisStatus IS NULL " +
+            "AND (:maxMs = 0 OR endedAt - startedAt <= :maxMs) " +
             "AND EXISTS (SELECT 1 FROM segments WHERE segments.callId = calls.id) ORDER BY startedAt DESC LIMIT 1"
     )
-    abstract suspend fun nextUnanalyzed(): CallEntity?
+    abstract suspend fun nextUnanalyzed(maxMs: Long): CallEntity?
 
     @Query(
         "SELECT COUNT(*) FROM calls WHERE status = 'transcribed' AND analysisStatus IS NULL " +
+            "AND (:maxMs = 0 OR endedAt - startedAt <= :maxMs) " +
             "AND EXISTS (SELECT 1 FROM segments WHERE segments.callId = calls.id)"
     )
-    abstract suspend fun unanalyzedCount(): Int
+    abstract suspend fun unanalyzedCount(maxMs: Long): Int
 
     @Query("UPDATE calls SET analysisStatus = :status, analysisError = :error WHERE id = :id")
     abstract suspend fun setAnalysisStatus(id: Long, status: String?, error: String?)
@@ -215,12 +220,18 @@ abstract class CallDao {
     @Query("UPDATE segments SET speaker = :speaker WHERE id = :id")
     abstract suspend fun setSegmentSpeaker(id: Long, speaker: Int)
 
-    /** Newest recording still waiting for transcription. */
-    @Query("SELECT * FROM calls WHERE status = 'recorded' AND filePath IS NOT NULL ORDER BY startedAt DESC LIMIT 1")
-    abstract suspend fun nextPending(): CallEntity?
+    /** Newest recording waiting for automatic transcription (not longer than [maxMs]; 0 = no limit). */
+    @Query(
+        "SELECT * FROM calls WHERE status = 'recorded' AND filePath IS NOT NULL " +
+            "AND (:maxMs = 0 OR endedAt - startedAt <= :maxMs) ORDER BY startedAt DESC LIMIT 1"
+    )
+    abstract suspend fun nextPending(maxMs: Long): CallEntity?
 
-    @Query("SELECT COUNT(*) FROM calls WHERE status = 'recorded' AND filePath IS NOT NULL")
-    abstract suspend fun pendingCount(): Int
+    @Query(
+        "SELECT COUNT(*) FROM calls WHERE status = 'recorded' AND filePath IS NOT NULL " +
+            "AND (:maxMs = 0 OR endedAt - startedAt <= :maxMs)"
+    )
+    abstract suspend fun pendingCount(maxMs: Long): Int
 
     @Query("UPDATE calls SET status = :status, transcriptModel = :model, error = :error WHERE id = :id")
     abstract suspend fun setStatus(id: Long, status: String, model: String?, error: String?)

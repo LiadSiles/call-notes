@@ -201,7 +201,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         current.recorder?.stop()
         // Start transcription while still in the foreground state (background FGS starts
         // can be refused); it waits a few seconds for this call to be saved.
-        if (prefs.autoTranscribe && current.recorder != null) {
+        if (prefs.autoTranscribe && current.recorder != null && !prefs.tooLongForAuto(endedAt - current.startedAt)) {
             TranscriptionService.start(this, afterCall = true)
         }
         RecordingService.stop(this)

@@ -94,7 +94,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             dao.get(id)?.takeIf { it.status == CallStatus.TRANSCRIBED }?.let { return it }
         }
         if (com.callnotes.util.Energy.waitingForCharger(host)) return null
-        return if (Prefs(host).autoTranscribe) dao.nextUnanalyzed() else null
+        val prefs = Prefs(host)
+        return if (prefs.autoTranscribe) dao.nextUnanalyzed(prefs.autoMaxMs) else null
     }
 
     /**

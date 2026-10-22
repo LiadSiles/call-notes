@@ -68,7 +68,12 @@ fun CallsScreen(
     val prefs = remember { com.callnotes.util.Prefs(context) }
     val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
     var autoOn by remember(noteVersion, resumeTick) { mutableStateOf(prefs.autoTranscribe) }
-    val waiting = items.count { it.call.status == com.callnotes.data.CallStatus.RECORDED }
+    val limitMinutes = remember(noteVersion, resumeTick) { prefs.autoMaxMinutes }
+    /** Over the length limit: transcribed and summarised only by hand. */
+    val manualOnly: (com.callnotes.data.CallEntity) -> Boolean = { c ->
+        limitMinutes > 0 && c.endedAt - c.startedAt > limitMinutes * 60_000L
+    }
+    val waiting = items.count { it.call.status == com.callnotes.data.CallStatus.RECORDED && !manualOnly(it.call) }
     val saverPaused = remember(resumeTick, noteVersion) { com.callnotes.util.BatterySaver.paused(context) }
     val waitingCharger = remember(resumeTick, noteVersion) { com.callnotes.util.Energy.waitingForCharger(context) }
     val ready = setup.requiredOk && service.connected && service.monitoring
@@ -227,7 +232,7 @@ fun CallsScreen(
                         CardGroup {
                             calls.forEachIndexed { i, entry ->
                                 if (i > 0) RowDivider(inset = true)
-                                CallRow(entry, processing, onClick = { onOpen(entry.call.id) })
+                                CallRow(entry, processing, manualOnly = manualOnly(entry.call), onClick = { onOpen(entry.call.id) })
                             }
                         }
                     }
@@ -262,10 +267,10 @@ internal fun CallsHeader(status: Pair<String, Tone>, canSearch: Boolean, onSearc
 }
 
 @Composable
-internal fun CallRow(item: CallListItem, processing: ProcessingStatus.State, onClick: () -> Unit) {
+internal fun CallRow(item: CallListItem, processing: ProcessingStatus.State, manualOnly: Boolean = false, onClick: () -> Unit) {
     val call = item.call
     val live = processing.callId == call.id
-    val status = statusOf(call, if (live) processing.progress else null, if (live) processing.progressMax else null)
+    val status = statusOf(call, if (live) processing.progress else null, if (live) processing.progressMax else null, manualOnly)
     Surface(
         color = androidx.compose.ui.graphics.Color.Transparent,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),

@@ -35,8 +35,18 @@ fun TranscriptionSwitches(prefs: Prefs) {
     val lastRun = remember(noteVersion) { prefs.lastProcessing }
     var showLog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    var maxMinutes by remember(noteVersion) { mutableStateOf(prefs.autoMaxMinutes) }
     CardGroup {
         SwitchRow("תמלול וסיכום אוטומטיים", "כל הקלטה מעובדת ברקע בסיומה.", auto) { auto = it; prefs.autoTranscribe = it }
+        RowDivider(inset = false)
+        ChipChoice(
+            title = "רק לשיחות של עד",
+            body = "שיחה ארוכה יותר נשמרת ומחכה ללחיצה על \"תמלל\". שיחות קצרות ממשיכות כרגיל.",
+            options = Prefs.AUTO_MAX_CHOICES,
+            value = maxMinutes,
+            label = { if (it == 0) "ללא הגבלה" else "$it דק׳" },
+            enabled = auto,
+        ) { maxMinutes = it; prefs.autoMaxMinutes = it; ProcessingStatus.touch() }
         RowDivider(inset = false)
         InfoRow("יומן עיבוד", lastRun?.let { "הרצה אחרונה: $it" } ?: "העיבוד עוד לא רץ.", onClick = { showLog = true }) {
             Icon(androidx.compose.material.icons.Icons.AutoMirrored.Filled.KeyboardArrowRight, null,

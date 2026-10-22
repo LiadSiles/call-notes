@@ -93,7 +93,16 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 }
                 val t = transcriber!!
                 when (runItem { process(call, t) }) {
-                    true -> { done++; host.wakeSummary() }
+                    true -> {
+                        done++
+                        // A long call the user transcribed by hand: summarise it too (the
+                        // automatic summary skips calls over the length limit).
+                        val prefs = Prefs(host)
+                        if (requested && prefs.autoTranscribe && prefs.tooLongForAuto(call.endedAt - call.startedAt)) {
+                            ProcessingStatus.requestAnalysis(call.id)
+                        }
+                        host.wakeSummary()
+                    }
                     false -> failed++
                     null -> log("call ${call.id}: " + if (cancelled.remove(call.id)) "cancelled by the user" else "paused, a manual request goes first")
                 }
@@ -121,7 +130,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         }
         // Only-while-charging: the user's own request above still runs; the queue waits.
         if (com.callnotes.util.Energy.waitingForCharger(host)) return null
-        return dao.nextPending()?.let { it to false }
+        return dao.nextPending(Prefs(host).autoMaxMs)?.let { it to false }
     }
 
     private suspend fun load(spec: ModelSpec, file: File, call: CallEntity): Transcriber? {

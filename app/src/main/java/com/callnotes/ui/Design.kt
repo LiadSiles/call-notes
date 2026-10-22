@@ -2,6 +2,7 @@ package com.callnotes.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -253,6 +254,48 @@ fun HeroCard(
                 if (onClick != null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = fg.copy(alpha = 0.6f))
             }
             footer()
+        }
+    }
+}
+
+/**
+ * A setting with a few fixed values, shown as a scrollable row of chips under a title.
+ * [label] names each value; [enabled] false greys the row out.
+ */
+@Composable
+fun <T> ChipChoice(
+    title: String,
+    body: String?,
+    options: List<T>,
+    value: T,
+    label: (T) -> String,
+    enabled: Boolean = true,
+    onChoose: (T) -> Unit,
+) {
+    Column(Modifier.padding(top = 12.dp, bottom = 10.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 18.dp),
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+        if (body != null) {
+            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp))
+        }
+        Row(
+            Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 14.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            options.forEach { option ->
+                androidx.compose.material3.FilterChip(
+                    selected = value == option,
+                    enabled = enabled,
+                    onClick = { if (value != option) onChoose(option) },
+                    label = { Text(label(option)) },
+                    shape = MaterialTheme.shapes.small,
+                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                )
+            }
         }
     }
 }

@@ -123,6 +123,10 @@ fun CallDetailScreen(
 
     val c = call ?: return
     val transcribed = c.status == CallStatus.TRANSCRIBED && c.id !in requested
+    /** Over the length limit: transcribed and summarised only when the user asks. */
+    val limitMinutes = remember(noteVersion) { com.callnotes.util.Prefs(context).autoMaxMinutes }
+    val manualOnly = remember(noteVersion, c.id) { com.callnotes.util.Prefs(context).tooLongForAuto(c.endedAt - c.startedAt) }
+    val autoForThis = remember(noteVersion) { com.callnotes.util.Prefs(context).autoTranscribe } && !manualOnly
     // Items before the first transcript line: header, player, summary, "תמלול", transcript state.
     val segmentStart = 1 + (if (c.filePath != null || c.audioDeletedAt != null) 1 else 0) + (if (transcribed) 1 else 0) + 2
     val showLine: (Int) -> Unit = { idx ->
@@ -213,7 +217,7 @@ fun CallDetailScreen(
                     c, tasks, summaryState,
                     queued = c.id in analysisRequested,
                     modelInstalled = modelsSnap.active(com.callnotes.inference.ModelRole.ANALYZE) != null,
-                    autoOn = remember(noteVersion) { com.callnotes.util.Prefs(context).autoTranscribe },
+                    autoOn = autoForThis,
                     onSummarise = {
                         scope.launch(Dispatchers.IO) {
                             dao.clearAnalysis(c.id)
@@ -232,6 +236,7 @@ fun CallDetailScreen(
 
             item {
                 TranscriptState(c, processing, queued = c.id in requested, lastRun = lastRun,
+                    manualOnlyMinutes = if (manualOnly) limitMinutes else null,
                     onStart = startTranscription, onCancel = cancelTranscription, onShowLog = { showLog = true })
             }
 
@@ -393,6 +398,8 @@ private fun TranscriptState(
     processing: ProcessingStatus.State,
     queued: Boolean,
     lastRun: String?,
+    /** Set when the call is over the automatic length limit (the limit, in minutes). */
+    manualOnlyMinutes: Int?,
     onStart: () -> Unit,
     onCancel: () -> Unit,
     onShowLog: () -> Unit,
@@ -469,10 +476,17 @@ private fun TranscriptState(
         queued -> Progress("מתחיל תמלול…", null, null)
         c.status == CallStatus.TRANSCRIBED -> Unit
         c.status == CallStatus.RECORDED -> Panel {
-            Text("ההקלטה ממתינה לתמלול.", style = MaterialTheme.typography.bodyMedium)
             Text(
-                if (busyElsewhere) "כרגע מתומללת שיחה אחרת. אפשר להקדים את זו:"
-                else "התמלול רץ ברקע כשמותקן מודל. אפשר להתחיל אותו עכשיו:",
+                if (manualOnlyMinutes != null) "השיחה ארוכה מ-$manualOnlyMinutes דקות, ולכן לא תתומלל אוטומטית."
+                else "ההקלטה ממתינה לתמלול.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                when {
+                    manualOnlyMinutes != null -> "כך הוגדר בהגדרות ← תמלול. אפשר לתמלל ולסכם אותה עכשיו:"
+                    busyElsewhere -> "כרגע מתומללת שיחה אחרת. אפשר להקדים את זו:"
+                    else -> "התמלול רץ ברקע כשמותקן מודל. אפשר להתחיל אותו עכשיו:"
+                },
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
             )
             FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) { Text("תמלל עכשיו") }

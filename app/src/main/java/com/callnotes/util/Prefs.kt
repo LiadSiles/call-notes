@@ -34,6 +34,18 @@ class Prefs(context: Context) {
     /** Transcribe and summarise each recording automatically once the models are ready. */
     var autoTranscribe by bool(KEY_AUTO, true)
 
+    /**
+     * Calls longer than this many minutes are not transcribed or summarised automatically
+     * (the user starts them by hand); 0 = no limit.
+     */
+    var autoMaxMinutes by int(KEY_AUTO_MAX, 0)
+
+    /** [autoMaxMinutes] in ms for queries; 0 = no limit. */
+    val autoMaxMs: Long get() = autoMaxMinutes * 60_000L
+
+    /** True if [durationMs] is over the automatic-processing limit. */
+    fun tooLongForAuto(durationMs: Long): Boolean = autoMaxMinutes > 0 && durationMs > autoMaxMs
+
     /** Whisper preset name: ACCURATE / BALANCED / FAST (see WhisperSpeed). */
     var transcribeSpeed by string("transcribe_speed", "ACCURATE")
 
@@ -150,22 +162,26 @@ class Prefs(context: Context) {
         override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) = sp.edit().put(value).apply()
     }
 
-    private companion object {
-        const val KEY_RECORDING = "recording_enabled"
-        const val KEY_VOIP = "record_voip"
-        const val KEY_SPEAKER = "auto_speaker_v2"
-        const val KEY_AUTO = "auto_transcribe"
-        const val KEY_SAVER = "pause_battery_saver"
-        const val KEY_CHARGING = "only_while_charging"
-        const val KEY_REMINDERS = "task_reminders"
-        const val KEY_AUDIO_DAYS = "audio_retention_days"
-        const val KEY_CALL_DAYS = "call_retention_days"
-        const val KEY_WIFI = "wifi_only"
+    companion object {
+        private const val KEY_RECORDING = "recording_enabled"
+        private const val KEY_VOIP = "record_voip"
+        private const val KEY_SPEAKER = "auto_speaker_v2"
+        private const val KEY_AUTO = "auto_transcribe"
+        private const val KEY_SAVER = "pause_battery_saver"
+        private const val KEY_CHARGING = "only_while_charging"
+        private const val KEY_REMINDERS = "task_reminders"
+        private const val KEY_AUDIO_DAYS = "audio_retention_days"
+        private const val KEY_CALL_DAYS = "call_retention_days"
+        private const val KEY_WIFI = "wifi_only"
+        private const val KEY_AUTO_MAX = "auto_max_minutes"
 
         /** What "restore defaults" resets. */
-        val RESETTABLE = listOf(
+        private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
-            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_AUDIO_DAYS, KEY_CALL_DAYS,
+            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
         )
+
+        /** Choices for [autoMaxMinutes] in settings; 0 = no limit. */
+        val AUTO_MAX_CHOICES = listOf(0, 5, 10, 15, 30, 60)
     }
 }

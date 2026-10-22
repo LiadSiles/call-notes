@@ -86,6 +86,15 @@ class ScreenshotTest {
         }
     }
 
+    @Test fun settingsProcessing() = shot("settings_processing") {
+        val prefs = Prefs(LocalContext.current).apply { autoMaxMinutes = 30 }
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
+            item { SubPageBar("תמלול", onBack = {}) }
+            item { GroupLabel("עיבוד") }
+            item { TranscriptionSwitches(prefs) }
+        }
+    }
+
     private fun call(
         id: Long, name: String?, minutesAgo: Long, dur: Long,
         status: String = CallStatus.TRANSCRIBED, kind: String = CallKind.CELLULAR,

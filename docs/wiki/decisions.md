@@ -3,6 +3,21 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-22 — Length limit for automatic processing (0.11.0)
+Owner: let the user choose a call length above which nothing is transcribed or
+summarised automatically; shorter calls keep going automatically. `Prefs.autoMaxMinutes`
+(0 = no limit) filters the automatic queues in SQL (`nextPending`, `nextUnanalyzed`,
+their counts) and the after-call start; manual requests ignore it. A long call the user
+transcribes by hand is queued for its summary right after (otherwise it would sit
+"transcribed, not summarised" because the automatic summary skips it too).
+
+Also recorded here (owner's question): battery saver turning on mid-run, with "pause in
+battery saver" on, stops both workers at once; the call being transcribed goes back to
+the queue (or keeps its previous transcript) and restarts from the beginning later, a
+summary in progress is redone later, a model-copy preparation is discarded; a call being
+recorded is recorded to its end. With the setting off nothing changes (Android may slow
+the CPU). Turning saver off resumes automatically.
+
 ### 2026-10-22 — Code review: what changed and what was kept on purpose (0.10.1)
 Owner asked for a senior-level review: readable, documented, no unused code, faster
 where possible, no change to anything in use.

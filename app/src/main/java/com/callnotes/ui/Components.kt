@@ -138,11 +138,14 @@ fun kindLabel(call: CallEntity): String = when {
     else -> "יוצאת"
 }
 
-/** Status pill text and tone for a call; null when there's nothing worth showing. */
-fun statusOf(call: CallEntity, progress: Int? = null, progressMax: Int? = null): Pair<String, Tone>? =
+/**
+ * Status pill text and tone for a call; null when there's nothing worth showing.
+ * [manualOnly]: the call is over the automatic-processing length limit.
+ */
+fun statusOf(call: CallEntity, progress: Int? = null, progressMax: Int? = null, manualOnly: Boolean = false): Pair<String, Tone>? =
     when (call.status) {
         CallStatus.RECORD_FAILED -> "ההקלטה נכשלה" to Tone.Bad
-        CallStatus.RECORDED -> "ממתין לתמלול" to Tone.Neutral
+        CallStatus.RECORDED -> (if (manualOnly) "שיחה ארוכה — לתמלול ידני" else "ממתין לתמלול") to Tone.Neutral
         CallStatus.TRANSCRIBING ->
             (if (progressMax != null && progressMax > 0) "מתמלל ${progress!! * 100 / progressMax}%" else "מתמלל…") to Tone.Busy
         CallStatus.TRANSCRIBE_FAILED -> "התמלול נכשל" to Tone.Bad

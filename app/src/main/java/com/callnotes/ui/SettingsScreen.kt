@@ -116,7 +116,9 @@ private fun SettingsHub(contentPadding: PaddingValues, resumeTick: Int, onOpen: 
                 "פעילה", "כולל שיחות אינטרנט".takeIf { prefs.recordVoip }, "רמקול אוטומטי".takeIf { prefs.autoSpeaker },
             ).joinToString(" · "),
             transcription = if (transcribe == null) "לא הותקן מודל" else listOf(
-                transcribe.displayName, WhisperSpeed.current(prefs).label, if (prefs.autoTranscribe) "אוטומטי" else "ידני",
+                transcribe.displayName, WhisperSpeed.current(prefs).label,
+                if (!prefs.autoTranscribe) "ידני"
+                else if (prefs.autoMaxMinutes > 0) "אוטומטי עד ${prefs.autoMaxMinutes} דק׳" else "אוטומטי",
             ).joinToString(" · "),
             speakers = if (VoiceProfile.exists(context)) "דגימת הקול שלך שמורה" else "בלי דגימת קול",
             summaries = listOfNotNull(analyze?.displayName ?: "לא הותקן מודל", "תזכורות".takeIf { prefs.taskReminders })
