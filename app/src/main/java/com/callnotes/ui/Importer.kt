@@ -18,22 +18,25 @@ object Importer {
         val resolver = context.contentResolver
         val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
             ?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: "קובץ אודיו"
-        val ext = name.substringAfterLast('.', "audio").take(5)
+        // Only letters and digits from the original extension (it names a file we create).
+        val ext = name.substringAfterLast('.', "audio").filter { it.isLetterOrDigit() }.take(5).ifEmpty { "audio" }
         val now = System.currentTimeMillis()
         val dir = File(context.filesDir, "recordings").apply { mkdirs() }
         val file = File(dir, "import_$now.$ext")
-        resolver.openInputStream(uri)!!.use { input -> file.outputStream().use { input.copyTo(it) } }
-
-        val durationMs = try {
-            MediaMetadataRetriever().run {
-                setDataSource(file.absolutePath)
-                val d = extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                release()
-                d
-            }
+        try {
+            val input = resolver.openInputStream(uri) ?: error("cannot open $uri")
+            input.use { i -> file.outputStream().use { i.copyTo(it) } }
         } catch (e: Exception) {
-            0L
+            file.delete() // no half-copied file left behind
+            throw e
         }
+
+        val durationMs = runCatching {
+            MediaMetadataRetriever().use { r ->
+                r.setDataSource(file.absolutePath)
+                r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            }
+        }.getOrDefault(0L)
 
         val entity = CallEntity(
             startedAt = now,

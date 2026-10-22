@@ -6,7 +6,13 @@ import com.callnotes.data.CallListItem
 import com.callnotes.inference.ModelManager
 import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.TranscriptionService
+import com.callnotes.security.DataProtection
+import com.callnotes.util.BatterySaver
+import com.callnotes.util.Energy
 import com.callnotes.util.Notifications
+import com.callnotes.util.Prefs
+import com.callnotes.util.Retention
+import com.callnotes.util.TaskReminders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,6 +21,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/**
+ * Process-wide objects (database, model manager, the warm call list) and start-up work:
+ * notification channels, recovery of a run that died, reminders and retention, and the
+ * battery-saver / charger watchers that pause or resume processing.
+ */
 class CallNotesApp : Application() {
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -35,25 +46,24 @@ class CallNotesApp : Application() {
         super.onCreate()
         // The restart helper's own process must not touch the database or schedule anything.
         if (getProcessName().endsWith(":restart")) return
-        com.callnotes.security.DataProtection.clearCache(this)
+        DataProtection.clearCache(this)
         Notifications.createChannels(this)
         recoverDeadRun()
-        com.callnotes.util.TaskReminders.reschedule(this)
-        com.callnotes.util.Retention.scheduleDaily(this)
+        TaskReminders.reschedule(this)
+        Retention.scheduleDaily(this)
         appScope.launch {
-            com.callnotes.util.Retention.run(this@CallNotesApp)
-            com.callnotes.security.DataProtection.applyToAll(this@CallNotesApp)
+            Retention.run(this@CallNotesApp)
+            DataProtection.applyToAll(this@CallNotesApp)
+        }
+        val prefs = Prefs(this)
+        // Only-while-charging: plugging in picks up the queue (unplugging lets the current call finish).
+        Energy.watchCharger(this) { plugged ->
+            if (plugged && prefs.autoTranscribe && prefs.onlyWhileCharging) TranscriptionService.start(this)
         }
         // Battery saver on → pause processing; off → pick up what's queued.
-        // Only-while-charging: plugging in picks up the queue (unplugging lets the current item finish).
-        com.callnotes.util.Energy.watchCharger(this) { plugged ->
-            if (plugged && com.callnotes.util.Prefs(this).autoTranscribe && com.callnotes.util.Prefs(this).onlyWhileCharging) {
-                TranscriptionService.start(this)
-            }
-        }
-        com.callnotes.util.BatterySaver.watch(this) { paused ->
+        BatterySaver.watch(this) { paused ->
             if (paused) TranscriptionService.pauseForBatterySaver(this)
-            else if (com.callnotes.util.Prefs(this).autoTranscribe) TranscriptionService.start(this)
+            else if (prefs.autoTranscribe) TranscriptionService.start(this)
         }
     }
 

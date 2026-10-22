@@ -42,10 +42,11 @@ fun ModelSection(models: ModelManager, prefs: Prefs, role: ModelRole, onReady: (
     var askDelete by remember { mutableStateOf<ModelSpec?>(null) }
     var wifiOnly by remember { mutableStateOf(prefs.wifiOnly) }
 
-    // Poll the download while one runs; otherwise refresh occasionally.
+    // Poll the download while one runs; otherwise refresh occasionally. Off the main
+    // thread: refresh() queries DownloadManager and stats the model files.
     LaunchedEffect(Unit) {
         while (true) {
-            models.refresh()
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { models.refresh() }
             delay(if (models.state.value.download is ModelManager.Download.Running) 1_000 else 5_000)
         }
     }

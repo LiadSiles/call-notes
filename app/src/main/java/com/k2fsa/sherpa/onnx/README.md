@@ -5,6 +5,9 @@ The package name and field names must stay as they are: the native library
 (`libsherpa-onnx-jni.so`, fetched by `scripts/fetch-sherpa-onnx.sh`) looks them up by name.
 When upgrading, copy these files from the same tag as the native libraries.
 
-Do not call `processWithCallback` from Kotlin 2 code: its JNI looks up
-`invoke(IIJ)Ljava/lang/Integer;` on the callback's class, which invokedynamic lambdas
-don't have, and ART aborts the process. Use `process` (see `SpeakerDiarizer`).
+The app uses only `SpeakerEmbeddingExtractor` (through `inference/speakers/VoiceEmbedder`).
+`OfflineSpeakerDiarization.kt` has been unused since 0.5.3 (sherpa's diarization pipeline
+calls `exit(-1)` on edge cases); it is kept so this folder stays a verbatim copy of the
+release, which keeps upgrades a plain copy and rules out any native lookup of a missing
+class. Do not start using it again. (Also: `processWithCallback` crashes from Kotlin 2 —
+its JNI looks up `invoke(IIJ)Ljava/lang/Integer;`, which invokedynamic lambdas lack.)

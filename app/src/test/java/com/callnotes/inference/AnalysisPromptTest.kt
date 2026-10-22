@@ -61,7 +61,7 @@ class AnalysisPromptTest {
 
     @Test fun storedJsonRoundTripsAndOldFormatLoads() {
         val a = CallAnalysis("כותרת", "סיכום", listOf(CallAnalysis.Point("א", listOf(1, 2), false)),
-            listOf(CallAnalysis.Point("ב", listOf(3))), emptyList(), listOf(CallAnalysis.Point("ג")), "he", false)
+            listOf(CallAnalysis.Point("ב", listOf(3))), emptyList(), listOf(CallAnalysis.Point("ג")), false)
         assertEquals(a, AnalysisPrompt.fromJson(AnalysisPrompt.toJson(a)))
         val old = AnalysisPrompt.fromJson("""{"title":"t","summary":"s","key_points":["x"],"decisions":[],"follow_ups":[]}""")!!
         assertEquals(listOf(CallAnalysis.Point("x")), old.keyPoints)
