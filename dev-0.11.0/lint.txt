@@ -94,7 +94,7 @@ roborazzi = "1.43.0"
 /home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/Components.kt:61: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
 fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier) {
                                                   ~~~~~~~~
-/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/Design.kt:53: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
+/home/runner/work/call-notes/call-notes/app/src/main/java/com/callnotes/ui/Design.kt:52: Warning: Modifier parameter should be the first optional parameter [ModifierParameter from androidx.compose.ui]
     modifier: Modifier = Modifier,
     ~~~~~~~~
 
