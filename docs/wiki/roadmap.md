@@ -30,7 +30,7 @@ _Last updated: 2026-10-22_
 | 0.6.1 | Items/tasks without cited lines are located by text (`SourceFinder`); visible "הצג בשיחה ›" cue; tasks screen opens the call at that line | ✅ built, awaiting device test |
 | 0.7.0 | Tasks: due-date reminder (09:00, inexact alarm, re-planned at boot/update/clock change); "add to calendar" → Google Calendar's prefilled new-event screen; a task repeated in a later call is linked to the first (shown once, not re-announced, ticked together, "not the same task" undo); Whisper speed presets (accurate f16 / balanced q8_0 / fast q5_0 + greedy) with on-device quantization and measured speed per preset; DB v8 | ✅ built (CI green), awaiting device test |
 | 0.8.0 | Privacy: user-chosen retention (recordings of transcribed calls / whole calls without open tasks; off by default; confirm before deleting existing), app lock (biometric / PIN after 30 s away; FLAG_SECURE; notification text hidden on the lock screen), search (transcripts, summaries, tasks, names → opens the call at the line), opt-in AAC compression (48 kbps, verified before the WAV is removed); DB v9 | ✅ built (CI green), awaiting device test |
-| 0.9 | Optional extra encryption: SQLCipher database + encrypted recordings (Keystore-wrapped key) | planned |
+| 0.9.0 | Optional extra encryption (off by default): SQLCipher database (converted at next start; restart button when idle) + recordings sealed with AES-256-CTR after transcription (decrypted on the fly for playback); Keystore-wrapped data key; reversible; lost key → DB set aside with a notice | ✅ built, awaiting device test (restart + accessibility rebind untested) |
 | later | Model swapping UI: reprocess, comparison screen | |
 | next | Path B adapters: Samsung, OnePlus/Oppo/Realme, Vivo | |
 | beta | Closed beta (5–10 users), end-to-end test call in setup | |
@@ -50,8 +50,7 @@ _Last updated: 2026-10-22_
 
 1. Field-test fixes from the logs above.
 2. ~~Tasks: reminders, Google Calendar, duplicates~~ (0.7.0). ~~Speed presets~~ (0.7.0).
-3. 0.8 privacy: retention chosen by the owner, app lock, search, compression; 0.9 optional
-   extra encryption (database + recordings).
+3. ~~0.8 privacy~~ (0.8.0), ~~optional extra encryption~~ (0.9.0).
 4. Before more speed work: owner compares presets on real calls (settings show the
    measured speed of each; re-transcribe a call to compare text).
 5. Other phones: Path B (OEM dialer recordings) for devices where the accessibility

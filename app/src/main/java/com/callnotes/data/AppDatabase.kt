@@ -99,11 +99,14 @@ abstract class AppDatabase : RoomDatabase() {
             val builder = Room.databaseBuilder(context, AppDatabase::class.java, NAME)
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             when (com.callnotes.security.DataProtection.prepareDatabase(context, context.getDatabasePath(NAME))) {
-                com.callnotes.security.DataProtection.Db.ENCRYPTED -> builder.openHelperFactory(
+                com.callnotes.security.DataProtection.Db.ENCRYPTED -> {
+                    com.callnotes.security.DbCrypt.loadLibrary()
+                    builder.openHelperFactory(
                     net.zetetic.database.sqlcipher.SupportOpenHelperFactory(
                         com.callnotes.security.KeyVault.sqlKey(context)
                     )
                 )
+                }
                 com.callnotes.security.DataProtection.Db.PLAIN -> Unit
             }
             return builder.build()

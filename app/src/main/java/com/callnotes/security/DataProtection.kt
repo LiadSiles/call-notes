@@ -48,7 +48,10 @@ object DataProtection {
             }
         }
         if (!want) return Db.PLAIN
-        val key = String(KeyVault.sqlKey(context), Charsets.US_ASCII)
+        val key = runCatching { String(KeyVault.sqlKey(context), Charsets.US_ASCII) }.getOrElse { e ->
+            ProcessingLog.write(context, "no data key (${e.javaClass.simpleName}); database stays plain")
+            return Db.PLAIN
+        }
         if (!db.exists()) return Db.ENCRYPTED // Room creates it encrypted
         return runCatching { DbCrypt.encrypt(db, key); Db.ENCRYPTED }.getOrElse { e ->
             ProcessingLog.write(context, "database encrypt FAILED, staying plain: ${e.javaClass.simpleName}")

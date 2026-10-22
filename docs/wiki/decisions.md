@@ -3,6 +3,23 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-22 — Extra encryption is opt-in and reversible (0.9.0)
+Android's file-based encryption already protects app storage at rest with the lock
+screen; app-level encryption adds protection for a copied data folder, a rooted phone or
+a forensic image of an unlocked one — at the cost of losing everything if the Keystore key
+is ever wiped. So it's a switch, off by default, with that risk stated in the confirmation.
+Design: one random 256-bit data key, stored only wrapped (AES-GCM) by a non-exportable
+Android Keystore key (`security/KeyVault`). Database: SQLCipher with the raw key
+(`x'…'`, no PBKDF2 delay), converted with `sqlcipher_export` before Room opens it, so a
+change takes effect at the next app start (settings offer a restart through a tiny
+`:restart`-process activity, enabled only when nothing records or processes). Recordings:
+"CNE1" + IV + AES-256-CTR, sealed after transcription (and compression), so a call in
+progress or waiting for transcription is still a plain file in private storage; CTR lets
+`MediaDataSource` decrypt any position for the player; transcription and sharing use a
+temporary plain copy in `cache/plain|share`, cleared at app start. A database that won't
+open with the key is renamed `*.unreadable-<time>`, sealed recordings deleted, the user
+told — rather than a crash loop.
+
 ### 2026-10-22 — Retention is the owner's choice, off by default (0.8.0)
 Owner: "auto delete will be determined by the user". Two independent settings: recordings
 of transcribed calls after N days (text stays), whole calls after N days. Nothing is

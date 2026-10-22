@@ -43,7 +43,15 @@ Off by default. Settings → פרטיות: recordings of transcribed calls after
 days (`calls.filePath` → null, `calls.audioDeletedAt` set — DB v9; text kept), whole calls
 after 30/90/180/365/730 days (skips calls with an open task). `util/Retention.kt`.
 
-## Planned
+## Extra encryption (0.9.0, opt-in)
 
-- 0.9: optional extra encryption — SQLCipher database and encrypted recordings with a
-  Keystore-wrapped key.
+| What | Where |
+|---|---|
+| Wrapped data key (12-byte IV + AES-GCM of 32 bytes) | `files/keys/data.key`; wrapping key = Keystore alias `callnotes_master` |
+| Encrypted database | `databases/callnotes.db` (SQLCipher 4, raw key); `.convert` while converting |
+| Sealed recordings | `files/recordings/call_<millis>.<wav|m4a>.enc` ("CNE1" + IV + AES-256-CTR) |
+| Temporary plain copies | `cache/plain/` (transcription), `cache/share/` (sharing); cleared at start |
+
+Not encrypted by the app (but inside Android's private, FBE-encrypted storage): the
+recording while the call runs and until it's transcribed, `cache/convert_<id>.wav` during
+transcription, the processing log (no content), the voice fingerprint, settings.
