@@ -252,6 +252,8 @@ internal fun SettingsSection(prefs: Prefs) {
     var autoSpeaker by remember { mutableStateOf(prefs.autoSpeaker) }
     var voip by remember { mutableStateOf(prefs.recordVoip) }
     var batterySaver by remember { mutableStateOf(prefs.pauseInBatterySaver) }
+    var reminders by remember { mutableStateOf(prefs.taskReminders) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
 
     Panel {
         Column {
@@ -280,6 +282,12 @@ internal fun SettingsSection(prefs: Prefs) {
                     "שיחה שכבר מוקלטת ממשיכה עד סופה; העבודה שבתור ממשיכה כשהחיסכון נכבה.",
                 batterySaver,
             ) { batterySaver = it; prefs.pauseInBatterySaver = it }
+            HorizontalDivider()
+            ToggleRow(
+                "תזכורת ביום היעד",
+                "התראה בבוקר (בסביבות ${com.callnotes.util.TaskReminders.HOUR}:00) של היום שבו משימה פתוחה צריכה להתבצע.",
+                reminders,
+            ) { reminders = it; prefs.taskReminders = it; com.callnotes.util.TaskReminders.reschedule(ctx) }
         }
     }
 }

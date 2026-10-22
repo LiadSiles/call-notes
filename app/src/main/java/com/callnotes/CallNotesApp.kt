@@ -35,6 +35,7 @@ class CallNotesApp : Application() {
         super.onCreate()
         Notifications.createChannels(this)
         recoverDeadRun()
+        com.callnotes.util.TaskReminders.reschedule(this)
         // Battery saver on → pause processing; off → pick up what's queued.
         com.callnotes.util.BatterySaver.watch(this) { paused ->
             if (paused) TranscriptionService.pauseForBatterySaver(this)

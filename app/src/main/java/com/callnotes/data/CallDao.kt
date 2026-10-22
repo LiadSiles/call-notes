@@ -66,7 +66,24 @@ abstract class CallDao {
     abstract suspend fun insertTasks(tasks: List<TaskEntity>)
 
     @Query("DELETE FROM tasks WHERE callId = :callId")
-    abstract suspend fun deleteTasks(callId: Long)
+    abstract suspend fun deleteTaskRows(callId: Long)
+
+    /** Repeats in other calls of this call's tasks stand on their own again. */
+    @Query("UPDATE tasks SET duplicateOf = NULL WHERE duplicateOf IN (SELECT id FROM tasks WHERE callId = :callId)")
+    abstract suspend fun releaseRepeatsOf(callId: Long)
+
+    @Transaction
+    open suspend fun deleteTasks(callId: Long) {
+        releaseRepeatsOf(callId)
+        deleteTaskRows(callId)
+    }
+
+    /** Tasks in other calls marked as repeating one of this call's tasks, with that task's title. */
+    @Query(
+        "SELECT d.id AS id, o.title AS originalTitle FROM tasks d JOIN tasks o ON d.duplicateOf = o.id " +
+            "WHERE o.callId = :callId"
+    )
+    abstract suspend fun repeatsOf(callId: Long): List<RepeatLink>
 
     @Transaction
     open suspend fun replaceAnalysis(callId: Long, json: String, title: String?, model: String, tasks: List<TaskEntity>) {
@@ -78,8 +95,48 @@ abstract class CallDao {
     @Query("SELECT * FROM tasks WHERE callId = :callId ORDER BY idx")
     abstract fun observeTasks(callId: Long): Flow<List<TaskEntity>>
 
-    @Query("UPDATE tasks SET done = :done WHERE id = :id")
+    /**
+     * Ticks a task and the same task found in other calls (its duplicates, or the task it
+     * duplicates), so one real-world task is done in one tap.
+     */
+    @Query(
+        "UPDATE tasks SET done = :done WHERE id = :id OR duplicateOf = :id " +
+            "OR id = (SELECT duplicateOf FROM tasks WHERE id = :id) " +
+            "OR duplicateOf = (SELECT duplicateOf FROM tasks WHERE id = :id AND duplicateOf IS NOT NULL)"
+    )
     abstract suspend fun setTaskDone(id: Long, done: Boolean)
+
+    @Query("SELECT * FROM tasks WHERE id = :id")
+    abstract suspend fun task(id: Long): TaskEntity?
+
+    /** The next task whose due-date reminder hasn't been shown. */
+    @Query(
+        "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND dueDate IS NOT NULL " +
+            "AND remindedAt IS NULL ORDER BY dueDate LIMIT 1"
+    )
+    abstract suspend fun nextReminder(): TaskEntity?
+
+    /** Tasks due on or before [today] (yyyy-MM-dd) that haven't been reminded yet. */
+    @Query(
+        "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND dueDate IS NOT NULL " +
+            "AND dueDate <= :today AND remindedAt IS NULL"
+    )
+    abstract suspend fun dueUnreminded(today: String): List<TaskEntity>
+
+    @Query("UPDATE tasks SET remindedAt = :at WHERE id IN (:ids)")
+    abstract suspend fun markReminded(ids: List<Long>, at: Long)
+
+    /** Open, original tasks from other calls since [since], to spot repeats. */
+    @Query(
+        "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND callId != :callId AND createdAt >= :since"
+    )
+    abstract suspend fun openTasksOtherCalls(callId: Long, since: Long): List<TaskEntity>
+
+    @Query("UPDATE tasks SET duplicateOf = NULL WHERE id = :id")
+    abstract suspend fun clearDuplicate(id: Long)
+
+    @Query("UPDATE tasks SET duplicateOf = :of WHERE id = :id")
+    abstract suspend fun setDuplicate(id: Long, of: Long)
 
     @Query("SELECT * FROM tasks WHERE callId = :callId ORDER BY idx")
     abstract suspend fun tasksOf(callId: Long): List<TaskEntity>
@@ -94,7 +151,7 @@ abstract class CallDao {
     )
     abstract fun observeAllTasks(): Flow<List<TaskListItem>>
 
-    @Query("SELECT COUNT(*) FROM tasks WHERE done = 0")
+    @Query("SELECT COUNT(*) FROM tasks WHERE done = 0 AND duplicateOf IS NULL")
     abstract fun observeOpenTaskCount(): Flow<Int>
 
     @Query("UPDATE segments SET speaker = :speaker WHERE id = :id")

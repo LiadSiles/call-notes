@@ -213,7 +213,7 @@ fun CallDetailScreen(
                         }
                     },
                     onCancel = cancelTranscription,
-                    onTaskDone = { t, done -> scope.launch(Dispatchers.IO) { dao.setTaskDone(t.id, done) } },
+                    onTaskDone = { t, done -> scope.launch(Dispatchers.IO) { com.callnotes.util.TaskActions.setDone(context, t, done) } },
                     onShowLine = showLine,
                     speakersEdited = speakersEdited,
                     lineTexts = segments.map { it.text },

@@ -103,7 +103,8 @@ fun SummarySection(
                     val target = remember(t.id, lineTexts.size) {
                         t.firstSegment ?: SourceFinder.bestLine(t.quote ?: t.title, lineTexts)
                     }
-                    TaskRow(t, ownerLabel(c, t.owner), target?.let { line -> { onShowLine(line) } }) { onTaskDone(t, it) }
+                    TaskRow(t, ownerLabel(c, t.owner), com.callnotes.util.Notifications.callLabel(c),
+                        target?.let { line -> { onShowLine(line) } }) { onTaskDone(t, it) }
                 }
             }
             Points("להמשך", analysis.followUps, lineTexts, onShowLine)
@@ -176,7 +177,7 @@ private fun ShowInCall() {
 }
 
 @Composable
-private fun TaskRow(t: TaskEntity, owner: String?, onOpen: (() -> Unit)?, onDone: (Boolean) -> Unit) {
+private fun TaskRow(t: TaskEntity, owner: String?, callLabel: String, onOpen: (() -> Unit)?, onDone: (Boolean) -> Unit) {
     val cs = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.Top, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
         Checkbox(checked = t.done, onCheckedChange = onDone)
@@ -206,6 +207,8 @@ private fun TaskRow(t: TaskEntity, owner: String?, onOpen: (() -> Unit)?, onDone
                     Pill("לא בטוח", Tone.Bad)
                 }
             }
+            if (t.duplicateOf != null) Pill("חוזרת על משימה משיחה קודמת", Tone.Busy, Modifier.padding(top = 6.dp))
+            TaskExtras(t, callLabel)
         }
     }
     Spacer(Modifier.size(2.dp))

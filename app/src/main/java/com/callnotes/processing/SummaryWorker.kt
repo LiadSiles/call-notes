@@ -9,6 +9,7 @@ import com.callnotes.inference.AnalysisPrompt
 import com.callnotes.inference.CallContext
 import com.callnotes.inference.GemmaAnalyzer
 import com.callnotes.inference.ModelRole
+import com.callnotes.inference.TaskMatcher
 import com.callnotes.processing.TranscriptionService.Companion.describe
 import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
@@ -182,16 +183,25 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                     certain = t.certain, createdAt = now)
             }
             // Re-summarising shouldn't announce tasks the user has already seen (or ticked off).
-            val before = dao.tasksOf(call.id)
-            val knownTitles = before.map { TranscriptMergerKey.of(it.title) }.toSet()
-            val doneBefore = before.filter { it.done }.map { TranscriptMergerKey.of(it.title) }.toSet()
-            val kept = tasks.map { if (TranscriptMergerKey.of(it.title) in doneBefore) it.copy(done = true) else it }
+            val before = dao.tasksOf(call.id).associateBy { TranscriptMergerKey.of(it.title) }
+            val kept = tasks.map { t ->
+                val old = before[TranscriptMergerKey.of(t.title)] ?: return@map t
+                t.copy(done = old.done, remindedAt = old.remindedAt.takeIf { old.dueDate == t.dueDate })
+            }
+            val laterRepeats = dao.repeatsOf(call.id) // re-summary: keep later calls pointing here
             dao.replaceAnalysis(call.id, AnalysisPrompt.toJson(result), result.title.ifBlank { null }, analyzer.modelId, kept)
-            val fresh = dao.tasksOf(call.id).filter { TranscriptMergerKey.of(it.title) !in knownTitles && !it.done }
+            val saved = dao.tasksOf(call.id)
+            laterRepeats.forEach { r ->
+                saved.firstOrNull { TranscriptMergerKey.of(it.title) == TranscriptMergerKey.of(r.originalTitle) }
+                    ?.let { dao.setDuplicate(r.id, it.id) }
+            }
+            val repeats = linkRepeats(call, saved)
+            val fresh = saved.filter { TranscriptMergerKey.of(it.title) !in before && !it.done && it.id !in repeats }
             fresh.forEach { Notifications.newTask(host, it, label(call)) }
+            com.callnotes.util.TaskReminders.plan(host)
             log("call ${call.id}: summary done in ${secs(started)} · ${answer.length} chars out · " +
                 "${result.keyPoints.size} points (${result.keyPoints.count { !it.certain }} unsure), " +
-                "${tasks.size} tasks (${tasks.count { !it.certain }} unsure, ${fresh.size} new)")
+                "${tasks.size} tasks (${tasks.count { !it.certain }} unsure, ${fresh.size} new, ${repeats.size} repeats)")
             true
         } catch (e: Throwable) {
             if (e is CancellationException || call.id in cancelled) throw (e as? CancellationException ?: CancellationException("cancelled"))
@@ -199,6 +209,30 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             dao.setAnalysisStatus(call.id, AnalysisStatus.FAILED, "${e.javaClass.simpleName}: ${e.message ?: ""}".take(300))
             false
         }
+    }
+
+    /**
+     * Marks tasks that repeat an open task from an earlier call (last 60 days) as its
+     * duplicate: shown once in the tasks screen, not announced again, ticked together.
+     * Returns the ids marked.
+     */
+    private suspend fun linkRepeats(call: CallEntity, saved: List<TaskEntity>): Set<Long> {
+        val since = call.startedAt - 60L * 86_400_000L
+        val open = dao.openTasksOtherCalls(call.id, since).filter { it.createdAt <= System.currentTimeMillis() }
+        if (open.isEmpty()) return emptySet()
+        val candidates = open.map { TaskMatcher.Candidate(it.title, it.owner, it.dueDate) }
+        val marked = mutableSetOf<Long>()
+        for (t in saved) {
+            if (t.done) continue
+            val i = TaskMatcher.findOriginal(TaskMatcher.Candidate(t.title, t.owner, t.dueDate), candidates) ?: continue
+            val original = open[i]
+            // Only an earlier call's task can be the original, so two calls never point at each other.
+            val originalCall = dao.get(original.callId) ?: continue
+            if (originalCall.startedAt > call.startedAt) continue
+            dao.setDuplicate(t.id, original.id)
+            marked += t.id
+        }
+        return marked
     }
 
     private companion object {

@@ -20,6 +20,8 @@
     <!-- Install-time (no prompt): foreground service for transcription after a call. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <!-- Install-time (no prompt): re-plans task due-date reminders after a restart. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Install-time (no prompt): lets the app show the battery-exemption dialog. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -62,6 +64,17 @@
             android:name=".processing.TranscriptionService"
             android:exported="false"
             android:foregroundServiceType="dataSync|mediaProcessing" />
+
+        <receiver
+            android:name=".util.TaskReminders$Receiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Optional GPU acceleration for LiteRT-LM (CPU is used today). -->
         <uses-native-library android:name="libOpenCL.so" android:required="false" />

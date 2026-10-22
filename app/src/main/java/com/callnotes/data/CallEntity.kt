@@ -114,6 +114,10 @@ data class TaskEntity(
     /** False = the summariser wasn't sure, or the app couldn't verify it (DB v7). */
     val certain: Boolean = true,
     val createdAt: Long = 0,
+    /** When its due-date reminder was shown, or null (DB v8). */
+    val remindedAt: Long? = null,
+    /** An open task from an earlier call that this one repeats, or null (DB v8). */
+    val duplicateOf: Long? = null,
 ) {
     /** First source line as a segment index (0-based), or null. */
     val firstSegment: Int? get() = lines?.split(',')?.firstNotNullOfOrNull { it.trim().toIntOrNull() }?.minus(1)
@@ -128,6 +132,9 @@ data class TaskListItem(
     val callKind: String,
     val callIncoming: Boolean,
 )
+
+/** A task that repeats another call's task, and the title of the one it repeats. */
+data class RepeatLink(val id: Long, val originalTitle: String)
 
 /** One stretch of transcript with its position in the recording (DB v4). */
 @Entity(tableName = "segments", indices = [Index("callId")])

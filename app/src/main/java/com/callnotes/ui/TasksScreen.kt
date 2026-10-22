@@ -62,14 +62,29 @@ fun TasksScreen(
     var showDone by rememberSaveable { mutableStateOf(false) }
     var highlight by remember { mutableStateOf<Long?>(null) }
 
-    val tasks = all.orEmpty()
+    // A task said again in a later call is shown once, under the first call it came up in.
+    val everything = all.orEmpty()
+    val ids = remember(everything) { everything.map { it.task.id }.toSet() }
+    val repeats = remember(everything) {
+        everything.filter { it.task.duplicateOf != null && it.task.duplicateOf in ids }.groupBy { it.task.duplicateOf!! }
+    }
+    val tasks = everything.filter { it.task.duplicateOf == null || it.task.duplicateOf !in ids }
     val open = tasks.filter { !it.task.done }
     val done = tasks.filter { it.task.done }
+    val tick: (TaskListItem, Boolean) -> Unit = { t, v ->
+        scope.launch(Dispatchers.IO) { com.callnotes.util.TaskActions.setDone(context, t.task, v) }
+    }
+    val unlink: (TaskListItem) -> Unit = { t ->
+        scope.launch(Dispatchers.IO) { com.callnotes.util.TaskActions.unlinkDuplicate(context, t.task) }
+    }
+    val openItem: (TaskListItem) -> Unit = { t -> onOpenCall(t.task.callId, t.task.firstSegment, t.task.quote ?: t.task.title) }
 
     // From a "new task" notification: scroll to it and highlight it for a moment.
     LaunchedEffect(focusTaskId, all) {
-        val id = focusTaskId ?: return@LaunchedEffect
+        val asked = focusTaskId ?: return@LaunchedEffect
         if (all == null) return@LaunchedEffect
+        // A repeat is shown inside the card of the task it repeats.
+        val id = everything.firstOrNull { it.task.id == asked }?.task?.duplicateOf?.takeIf { it in ids } ?: asked
         val inOpen = open.indexOfFirst { it.task.id == id }
         val index = if (inOpen >= 0) 1 + inOpen else {
             showDone = true
@@ -102,9 +117,7 @@ fun TasksScreen(
             )
         }
         items(open, key = { it.task.id }) { t ->
-            TaskCard(t, highlight == t.task.id,
-                onDone = { v -> scope.launch(Dispatchers.IO) { dao.setTaskDone(t.task.id, v) } },
-                onOpen = { onOpenCall(t.task.callId, t.task.firstSegment, t.task.quote ?: t.task.title) })
+            TaskCard(t, repeats[t.task.id].orEmpty(), highlight == t.task.id, onDone = { tick(t, it) }, onOpen = openItem, onUnlink = unlink)
         }
         if (done.isNotEmpty()) item {
             TextButton(onClick = { showDone = !showDone }, modifier = Modifier.padding(top = 8.dp)) {
@@ -112,22 +125,27 @@ fun TasksScreen(
             }
         }
         if (showDone) items(done, key = { it.task.id }) { t ->
-            TaskCard(t, highlight == t.task.id,
-                onDone = { v -> scope.launch(Dispatchers.IO) { dao.setTaskDone(t.task.id, v) } },
-                onOpen = { onOpenCall(t.task.callId, t.task.firstSegment, t.task.quote ?: t.task.title) })
+            TaskCard(t, repeats[t.task.id].orEmpty(), highlight == t.task.id, onDone = { tick(t, it) }, onOpen = openItem, onUnlink = unlink)
         }
     }
 }
 
 @Composable
-private fun TaskCard(item: TaskListItem, highlighted: Boolean, onDone: (Boolean) -> Unit, onOpen: () -> Unit) {
+private fun TaskCard(
+    item: TaskListItem,
+    repeats: List<TaskListItem>,
+    highlighted: Boolean,
+    onDone: (Boolean) -> Unit,
+    onOpen: (TaskListItem) -> Unit,
+    onUnlink: (TaskListItem) -> Unit,
+) {
     val cs = MaterialTheme.colorScheme
     val t = item.task
     val bg by animateColorAsState(if (highlighted) cs.tertiaryContainer else cs.surfaceContainer, label = "task")
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = bg,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable(onClick = onOpen),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onOpen(item) },
     ) {
         Row(Modifier.padding(end = 14.dp, top = 4.dp, bottom = 10.dp), verticalAlignment = Alignment.Top) {
             Checkbox(checked = t.done, onCheckedChange = onDone)
@@ -138,11 +156,7 @@ private fun TaskCard(item: TaskListItem, highlighted: Boolean, onDone: (Boolean)
                     textDecoration = if (t.done) TextDecoration.LineThrough else null,
                     color = if (t.done) cs.onSurfaceVariant else cs.onSurface,
                 )
-                val who = item.callContactName ?: item.callNumber ?: when (item.callKind) {
-                    CallKind.VOIP -> "שיחת אינטרנט"
-                    CallKind.IMPORT -> "קובץ מיובא"
-                    else -> if (item.callIncoming) "שיחה נכנסת" else "שיחה יוצאת"
-                }
+                val who = who(item)
                 val owner = when (t.owner) {
                     "me" -> "באחריותי"
                     "other" -> "באחריות ${item.callContactName ?: "הצד השני"}"
@@ -151,10 +165,34 @@ private fun TaskCard(item: TaskListItem, highlighted: Boolean, onDone: (Boolean)
                 val meta = listOfNotNull(owner, dueLabel(t.dueDate, t.duePhrase), "$who · ${formatDateTime(item.callStartedAt)}")
                 Text(meta.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                 if (!t.certain) Pill("לא בטוח", Tone.Bad, Modifier.padding(top = 6.dp))
+                // Where else it came up: tap opens that call at the line.
+                repeats.forEach { r ->
+                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "עלתה שוב: ${who(r)} · ${formatDateTime(r.callStartedAt)} ›",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.primary,
+                            modifier = Modifier.weight(1f).clickable { onOpen(r) },
+                        )
+                        Text(
+                            "לא אותה משימה",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cs.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 8.dp).clickable { onUnlink(r) },
+                        )
+                    }
+                }
+                TaskExtras(t, "$who · ${formatDateTime(item.callStartedAt)}")
             }
             Spacer(Modifier.width(4.dp))
         }
     }
+}
+
+private fun who(item: TaskListItem) = item.callContactName ?: item.callNumber ?: when (item.callKind) {
+    CallKind.VOIP -> "שיחת אינטרנט"
+    CallKind.IMPORT -> "קובץ מיובא"
+    else -> if (item.callIncoming) "שיחה נכנסת" else "שיחה יוצאת"
 }
 
 /** "עד 22.10 (מחר)", overdue marked. */

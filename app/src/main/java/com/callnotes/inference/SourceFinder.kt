@@ -29,11 +29,11 @@ object SourceFinder {
         return best.takeIf { it >= 0 && bestScore >= MIN_SCORE }
     }
 
-    private fun contentWords(text: String): List<String> =
+    internal fun contentWords(text: String): List<String> =
         TranscriptMerger.normalizeText(text).split(' ').filter { it.length >= 2 && it !in STOP }.distinct()
 
     /** The word as written and without a one-letter prefix (ו ה ב ל מ ש כ), for longer words. */
-    private fun forms(w: String): List<String> =
+    internal fun forms(w: String): List<String> =
         if (w.length >= 4 && w[0] in PREFIXES) listOf(w, w.drop(1)) else listOf(w)
 
     private const val PREFIXES = "והבלמשכ"

@@ -100,14 +100,8 @@ object Notifications {
             runCatching { java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM")) }.getOrNull()
         }
         val text = listOfNotNull(callLabel, due?.let { "עד $it" }, if (!task.certain) "לא בטוח" else null).joinToString(" · ")
-        val open = PendingIntent.getActivity(
-            context, (20_000 + task.id).toInt(),
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                .putExtra(EXTRA_OPEN_TASK, task.id),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        post(context, (20_000 + task.id).toInt(),
+        val open = openTask(context, task.id)
+        post(context, taskNotificationId(task.id),
             NotificationCompat.Builder(context, CHANNEL_TASKS)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle("משימה חדשה: ${task.title}")
@@ -118,6 +112,36 @@ object Notifications {
                 .setGroup("tasks")
                 .setCategory(NotificationCompat.CATEGORY_REMINDER))
     }
+
+    /** A task is due today (or was due while the phone was off). Tap opens it. */
+    fun taskDue(context: Context, task: com.callnotes.data.TaskEntity, callLabel: String?) {
+        val late = task.dueDate?.let { runCatching { java.time.LocalDate.parse(it).isBefore(java.time.LocalDate.now()) }.getOrNull() } == true
+        val text = listOfNotNull(if (late) "עבר המועד" else "להיום", callLabel).joinToString(" · ")
+        post(context, taskNotificationId(task.id),
+            NotificationCompat.Builder(context, CHANNEL_TASKS)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("תזכורת: ${task.title}")
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(task.title + "\n" + text))
+                .setContentIntent(openTask(context, task.id))
+                .setAutoCancel(true)
+                .setGroup("tasks")
+                .setCategory(NotificationCompat.CATEGORY_REMINDER))
+    }
+
+    /** Removes the new-task / reminder notification of a task (it was ticked done). */
+    fun cancelTask(context: Context, taskId: Long) =
+        NotificationManagerCompat.from(context).cancel(taskNotificationId(taskId))
+
+    private fun taskNotificationId(taskId: Long) = (20_000 + taskId).toInt()
+
+    private fun openTask(context: Context, taskId: Long): PendingIntent = PendingIntent.getActivity(
+        context, taskNotificationId(taskId),
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(EXTRA_OPEN_TASK, taskId),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     const val EXTRA_OPEN_TASK = "open_task_id"
     const val ACTION_CANCEL = "com.callnotes.action.CANCEL_CALL"
