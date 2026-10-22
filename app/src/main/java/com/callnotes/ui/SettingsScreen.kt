@@ -83,6 +83,10 @@ fun SettingsScreen(contentPadding: PaddingValues, resumeTick: Int, onModelReady:
             )
         }
         item { key(resetKey) { ModelSection(app.models, prefs, ModelRole.ANALYZE) } }
+        item { SectionHeader("פרטיות") }
+        item { key(resetKey) { RetentionSection(prefs) } }
+        item { LockSection(prefs) }
+        item { key(resetKey) { CompressionSection(prefs) } }
         item { SectionHeader("כללי") }
         item { key(resetKey) { SettingsSection(prefs) } }
         run {

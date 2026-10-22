@@ -1,7 +1,6 @@
 package com.callnotes.ui
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -52,7 +51,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) openFrom(intent)
@@ -61,10 +60,23 @@ class MainActivity : ComponentActivity() {
             CallNotesTheme {
                 // Hebrew-first: right-to-left whatever the system language.
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    val locked by AppLock.locked.collectAsState()
+                    // AppRoot stays composed underneath, so unlocking returns to the same screen.
                     AppRoot()
+                    if (locked) LockScreen(this@MainActivity)
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AppLock.onStart(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        AppLock.onStop()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -219,6 +231,9 @@ private fun AppRoot() {
                             onOpen = { openCallId = it },
                             onOpenSettings = { tab = Tab.Settings },
                             onImport = { importLauncher.launch(arrayOf("audio/*")) },
+                            onOpenAt = { callId, segment, text ->
+                                openFocus = segment; openFocusText = text; openCallId = callId
+                            },
                         )
                         Tab.Tasks -> TasksScreen(
                             contentPadding = padding,

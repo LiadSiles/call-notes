@@ -70,7 +70,10 @@ object TaskReminders {
             val pending = goAsync()
             val app = context.applicationContext
             scope.launch {
-                try { plan(app) } finally { pending.finish() }
+                try {
+                    plan(app)
+                    Retention.run(app)
+                } finally { pending.finish() }
             }
         }
     }

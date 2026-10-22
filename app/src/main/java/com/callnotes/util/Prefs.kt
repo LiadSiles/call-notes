@@ -43,6 +43,26 @@ class Prefs(context: Context) {
         sp.edit().putLong("speed_audio_$preset", a + audioMs).putLong("speed_work_$preset", w + workMs).apply()
     }
 
+    /** Delete recordings of transcribed calls after this many days; 0 = never. */
+    var audioRetentionDays: Int
+        get() = sp.getInt("audio_retention_days", 0)
+        set(value) = sp.edit().putInt("audio_retention_days", value).apply()
+
+    /** Delete whole calls (without open tasks) after this many days; 0 = never. */
+    var callRetentionDays: Int
+        get() = sp.getInt("call_retention_days", 0)
+        set(value) = sp.edit().putInt("call_retention_days", value).apply()
+
+    /** Re-encode recordings as AAC after transcription (~8× smaller). Off by default. */
+    var compressRecordings: Boolean
+        get() = sp.getBoolean("compress_recordings", false)
+        set(value) = sp.edit().putBoolean("compress_recordings", value).apply()
+
+    /** Ask for biometrics / the phone's PIN to open the app (see ui/AppLock). */
+    var appLock: Boolean
+        get() = sp.getBoolean("app_lock", false)
+        set(value) = sp.edit().putBoolean("app_lock", value).apply()
+
     /** A notification on the morning a task is due. */
     var taskReminders: Boolean
         get() = sp.getBoolean("task_reminders", true)
@@ -85,6 +105,7 @@ class Prefs(context: Context) {
         sp.edit()
             .remove("recording_enabled").remove("record_voip").remove("auto_speaker_v2")
             .remove("auto_transcribe").remove("wifi_only").remove("pause_battery_saver").remove("task_reminders")
+            .remove("audio_retention_days").remove("call_retention_days")
             .apply()
     }
 

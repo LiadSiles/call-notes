@@ -85,6 +85,8 @@ data class CallEntity(
     val summaryTitle: String? = null,
     val analysisModel: String? = null,
     val analysisError: String? = null,
+    /** When the recording was deleted by the retention setting (DB v9); the text stays. */
+    val audioDeletedAt: Long? = null,
 )
 
 object AnalysisStatus {
@@ -131,6 +133,18 @@ data class TaskListItem(
     val callNumber: String?,
     val callKind: String,
     val callIncoming: Boolean,
+)
+
+/** One search match: a transcript line (segmentIdx set) or the call itself (summary, name, task). */
+data class SearchHit(
+    val callId: Long,
+    val segmentIdx: Int?,
+    val text: String,
+    val startedAt: Long,
+    val contactName: String?,
+    val number: String?,
+    val kind: String,
+    val incoming: Boolean,
 )
 
 /** A task that repeats another call's task, and the title of the one it repeats. */

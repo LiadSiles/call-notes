@@ -15,6 +15,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -49,6 +52,8 @@ fun CallsScreen(
     onOpen: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onImport: () -> Unit,
+    /** Opens a call at a transcript line (from search). */
+    onOpenAt: (callId: Long, segment: Int?, text: String?) -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as CallNotesApp
@@ -65,6 +70,15 @@ fun CallsScreen(
     val waiting = items.count { it.call.status == com.callnotes.data.CallStatus.RECORDED }
     val saverPaused = remember(resumeTick, noteVersion) { com.callnotes.util.BatterySaver.paused(context) }
     val ready = setup.requiredOk && service.connected && service.monitoring
+    var searching by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var hits by remember { mutableStateOf<List<com.callnotes.data.SearchHit>?>(null) }
+    androidx.compose.runtime.LaunchedEffect(query, searching) {
+        if (!searching) return@LaunchedEffect
+        kotlinx.coroutines.delay(250) // typing
+        hits = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Search.run(app.database.calls(), query) }
+    }
+    androidx.activity.compose.BackHandler(enabled = searching) { searching = false; query = "" }
 
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         LazyColumn(
@@ -72,9 +86,33 @@ fun CallsScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (searching) {
+                item {
+                    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+                    androidx.compose.runtime.LaunchedEffect(Unit) { focus.requestFocus() }
+                    androidx.compose.material3.OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        placeholder = { Text("חיפוש בשיחות") },
+                        leadingIcon = { Icon(Icons.Filled.Search, null) },
+                        trailingIcon = {
+                            androidx.compose.material3.IconButton(onClick = { searching = false; query = "" }) {
+                                Icon(Icons.Filled.Close, "סגירת החיפוש")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp).focusRequester(focus),
+                    )
+                }
+                searchResults(query, hits, onOpenAt)
+                return@LazyColumn
+            }
             item {
                 Row(Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("שיחות", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+                    if (items.isNotEmpty()) androidx.compose.material3.IconButton(onClick = { searching = true; hits = null }) {
+                        Icon(Icons.Filled.Search, "חיפוש")
+                    }
                     when {
                         service.recordingNow -> Pill("מקליט עכשיו", Tone.Busy)
                         ready -> Pill("ההקלטה פעילה", Tone.Good)
@@ -181,7 +219,7 @@ fun CallsScreen(
             }
         }
 
-        ExtendedFloatingActionButton(
+        if (!searching) ExtendedFloatingActionButton(
             onClick = onImport,
             icon = { Icon(Icons.Filled.Add, null) },
             text = { Text("ייבוא אודיו") },

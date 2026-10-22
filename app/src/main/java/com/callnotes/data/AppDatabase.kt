@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 // Encryption (SQLCipher) is planned for 0.8; the prototype keeps plain Room.
-@Database(entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class], version = 8, exportSchema = false)
+@Database(entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class], version = 9, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun calls(): CallDao
@@ -29,6 +29,13 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /** 0.3: transcripts. */
+        /** Calls: when retention deleted the recording. */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE calls ADD COLUMN audioDeletedAt INTEGER")
+            }
+        }
+
         /** Tasks: reminders and duplicates across calls. */
         private val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -88,7 +95,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "callnotes.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .build()
     }
 }

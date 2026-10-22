@@ -38,6 +38,55 @@ abstract class CallDao {
         deleteCall(id)
     }
 
+    // --- Search (plain substring: also finds words with Hebrew prefixes, e.g. "מחיר" in "המחיר") ---
+
+    @Query(
+        "SELECT segments.callId AS callId, segments.idx AS segmentIdx, segments.text AS text, calls.startedAt AS startedAt, " +
+            "calls.contactName AS contactName, calls.number AS number, calls.kind AS kind, calls.incoming AS incoming " +
+            "FROM segments JOIN calls ON calls.id = segments.callId " +
+            "WHERE segments.text LIKE '%' || :q || '%' ESCAPE '\\' ORDER BY calls.startedAt DESC, segments.idx LIMIT 300"
+    )
+    abstract suspend fun searchLines(q: String): List<SearchHit>
+
+    @Query(
+        "SELECT calls.id AS callId, NULL AS segmentIdx, " +
+            "COALESCE((SELECT title FROM tasks WHERE tasks.callId = calls.id AND tasks.title LIKE '%' || :q || '%' ESCAPE '\\' LIMIT 1), " +
+            "calls.summaryTitle, calls.contactName, calls.number, '') AS text, " +
+            "calls.startedAt AS startedAt, calls.contactName AS contactName, calls.number AS number, " +
+            "calls.kind AS kind, calls.incoming AS incoming FROM calls " +
+            "WHERE calls.contactName LIKE '%' || :q || '%' ESCAPE '\\' OR calls.number LIKE '%' || :q || '%' ESCAPE '\\' " +
+            "OR calls.analysisJson LIKE '%' || :q || '%' ESCAPE '\\' " +
+            "OR EXISTS (SELECT 1 FROM tasks WHERE tasks.callId = calls.id AND tasks.title LIKE '%' || :q || '%' ESCAPE '\\') " +
+            "ORDER BY calls.startedAt DESC LIMIT 100"
+    )
+    abstract suspend fun searchCalls(q: String): List<SearchHit>
+
+    // --- Retention ---
+
+    @Query("UPDATE calls SET filePath = :path WHERE id = :id")
+    abstract suspend fun setFilePath(id: Long, path: String)
+
+    /** Transcribed calls whose recording is still an uncompressed WAV. */
+    @Query("SELECT * FROM calls WHERE status = 'transcribed' AND filePath LIKE '%.wav' ORDER BY startedAt DESC LIMIT :limit")
+    abstract suspend fun uncompressed(limit: Int): List<CallEntity>
+
+    /** Transcribed (or failed-to-record) calls older than [before] that still have a recording. */
+    @Query(
+        "SELECT * FROM calls WHERE filePath IS NOT NULL AND startedAt < :before " +
+            "AND status IN ('transcribed', 'record_failed')"
+    )
+    abstract suspend fun audioToExpire(before: Long): List<CallEntity>
+
+    @Query("UPDATE calls SET filePath = NULL, audioDeletedAt = :at WHERE id = :id")
+    abstract suspend fun markAudioDeleted(id: Long, at: Long)
+
+    /** Calls older than [before] that aren't being transcribed and have no open task. */
+    @Query(
+        "SELECT * FROM calls WHERE startedAt < :before AND status != 'transcribing' " +
+            "AND NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.callId = calls.id AND tasks.done = 0)"
+    )
+    abstract suspend fun callsToExpire(before: Long): List<CallEntity>
+
     // --- Analysis (summary + tasks) ---
 
     /** Newest transcribed call with words that hasn't been analysed yet. */

@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -101,6 +102,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             }
             if (done + failed > 0) TranscriptionService.note(host, if (failed == 0) "תומללו $done" else "תומללו $done, נכשלו $failed")
             step("end · transcribed $done, failed $failed")
+            compressBacklog()
         } finally {
             transcriber?.close(); transcriber = null; speed = null
             embedder?.close(); embedder = null; embedderTried = false
@@ -154,6 +156,35 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 "טעינת המודל נכשלה: ${e.javaClass.simpleName} ${e.message ?: ""}".take(300))
             TranscriptionService.note(host, "טעינת מודל התמלול נכשלה: ${e.javaClass.simpleName}")
             null
+        }
+    }
+
+    /**
+     * With compression on: the call's WAV becomes an AAC .m4a once the transcript is saved.
+     * Any failure keeps the WAV.
+     */
+    private suspend fun compress(callId: Long) {
+        if (!Prefs(host).compressRecordings) return
+        val call = dao.get(callId) ?: return
+        val wav = call.filePath?.let(::File)?.takeIf { it.extension.equals("wav", true) && it.isFile } ?: return
+        val started = System.currentTimeMillis()
+        val wavBytes = wav.length()
+        val m4a = File(wav.parentFile, wav.nameWithoutExtension + ".m4a")
+        val out = withContext(Dispatchers.IO) { com.callnotes.audio.AudioCompressor.compress(wav, m4a) }
+        if (out == null) { log("call $callId: compression failed, WAV kept"); return }
+        withContext(NonCancellable) {
+            dao.setFilePath(callId, out.absolutePath)
+            wav.delete()
+        }
+        log("call $callId: compressed in ${secs(started)}: ${"%.1f".format(wavBytes / 1e6)} → ${"%.1f".format(out.length() / 1e6)} MB")
+    }
+
+    /** Older WAVs, a few per run, while the service is up anyway. */
+    private suspend fun compressBacklog() {
+        if (!Prefs(host).compressRecordings) return
+        for (c in dao.uncompressed(5)) {
+            if (!currentCoroutineContext().isActive || ProcessingStatus.firstRequested() != null) return
+            compress(c.id)
         }
     }
 
@@ -241,6 +272,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             log("call ${call.id}: done in ${secs(started)} ($audioSec s audio), ${rows.size} segments, " +
                 "${transcript.words.size} words, ${rows.sumOf { it.text.length }} chars · recording " +
                 if (after == before) "unchanged (sha256 $after)" else "CHANGED! $before → $after")
+            compress(call.id)
             return true
         } catch (e: Throwable) {
             if (e is CancellationException || call.id in cancelled) {

@@ -123,7 +123,7 @@ fun CallDetailScreen(
     val c = call ?: return
     val transcribed = c.status == CallStatus.TRANSCRIBED && c.id !in requested
     // Items before the first transcript line: header, player, summary, "תמלול", transcript state.
-    val segmentStart = 1 + (if (c.filePath != null) 1 else 0) + (if (transcribed) 1 else 0) + 2
+    val segmentStart = 1 + (if (c.filePath != null || c.audioDeletedAt != null) 1 else 0) + (if (transcribed) 1 else 0) + 2
     val showLine: (Int) -> Unit = { idx ->
         if (idx in segments.indices) {
             highlight = idx
@@ -198,6 +198,13 @@ fun CallDetailScreen(
             if (path != null) item {
                 Spacer(Modifier.size(8.dp))
                 PlayerPanel(c.id, path, player)
+            } else if (c.audioDeletedAt != null) item {
+                Text(
+                    "ההקלטה נמחקה ב-${formatDateTime(c.audioDeletedAt)} לפי הגדרת השמירה. התמלול והסיכום נשמרו.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
             }
 
             if (transcribed) item {

@@ -75,6 +75,7 @@ object Notifications {
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setProgress(if (total > 0) total else 0, if (total > 0) done else 0, total <= 0)
+        hideOnLockScreen(context, b, CHANNEL_RECORDING, if (id == ID_SUMMARY) "מסכם שיחה" else "מתמלל שיחה")
         if (callId != null) b.addAction(0, "ביטול", serviceAction(context, ACTION_CANCEL, id * 10 + 1, callId))
         b.addAction(0, "עצירת הכל", serviceAction(context, com.callnotes.processing.TranscriptionService.ACTION_STOP, id * 10 + 2, null))
         return b.build()
@@ -103,6 +104,7 @@ object Notifications {
         val open = openTask(context, task.id)
         post(context, taskNotificationId(task.id),
             NotificationCompat.Builder(context, CHANNEL_TASKS)
+                .also { hideOnLockScreen(context, it, CHANNEL_TASKS, "משימה חדשה") }
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle("משימה חדשה: ${task.title}")
                 .setContentText(text)
@@ -119,6 +121,7 @@ object Notifications {
         val text = listOfNotNull(if (late) "עבר המועד" else "להיום", callLabel).joinToString(" · ")
         post(context, taskNotificationId(task.id),
             NotificationCompat.Builder(context, CHANNEL_TASKS)
+                .also { hideOnLockScreen(context, it, CHANNEL_TASKS, "תזכורת למשימה") }
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle("תזכורת: ${task.title}")
                 .setContentText(text)
@@ -142,6 +145,18 @@ object Notifications {
             .putExtra(EXTRA_OPEN_TASK, taskId),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
+
+    /** With the app lock on, the lock screen shows only [publicTitle], not names or tasks. */
+    private fun hideOnLockScreen(context: Context, b: NotificationCompat.Builder, channel: String, publicTitle: String) {
+        if (!Prefs(context).appLock) return
+        b.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(context, channel)
+                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                    .setContentTitle(publicTitle)
+                    .build()
+            )
+    }
 
     const val EXTRA_OPEN_TASK = "open_task_id"
     const val ACTION_CANCEL = "com.callnotes.action.CANCEL_CALL"
