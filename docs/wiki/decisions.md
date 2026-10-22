@@ -3,6 +3,32 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-22 — Retention is the owner's choice, off by default (0.8.0)
+Owner: "auto delete will be determined by the user". Two independent settings: recordings
+of transcribed calls after N days (text stays), whole calls after N days. Nothing is
+deleted until chosen; picking a period that already covers existing items shows the
+count and asks first. Calls with an open task are kept (deleting them would silently drop
+a to-do). Untranscribed recordings are never deleted by the recordings rule. Runs daily
+(inexact alarm), at app start and on change.
+
+### 2026-10-22 — App lock is optional and covers what others can see (0.8.0)
+Off by default. On: BiometricPrompt (weak biometric or the phone's PIN/pattern) when the
+app opens or returns after 30 s, `FLAG_SECURE` (no screenshots, blank recents preview),
+and task / processing notifications become `VISIBILITY_PRIVATE` with a generic public
+version. Recording and processing are unaffected. Turning it on or off asks for the lock
+first. New install-time permissions, no prompts: `USE_BIOMETRIC` (from androidx.biometric),
+and `RECEIVE_BOOT_COMPLETED` (0.7.0, re-plans task reminders).
+
+### 2026-10-22 — Search is a plain substring match (0.8.0)
+Hebrew attaches prefixes (ו ה ב ל מ ש כ) to words, so FTS tokens miss "מחיר" in "המחיר";
+a `LIKE '%q%'` over a few thousand transcript lines is instant and finds both. FTS can
+come later if libraries grow large.
+
+### 2026-10-22 — Compression is opt-in (0.8.0)
+The owner once reported recordings sounding worse after transcription (a bug, fixed), so
+lossy re-encoding is never applied silently: AAC 48 kbps mono, only after the transcript
+is saved, the WAV removed only after the .m4a's duration matches.
+
 ### 2026-10-22 — Calendar = Google Calendar, through its own editor (0.7.0)
 Owner chose Google Calendar. The app opens Calendar's prefilled "new event" screen
 (`ACTION_INSERT`, package `com.google.android.calendar`, any calendar app as fallback)

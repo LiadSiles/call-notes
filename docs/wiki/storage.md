@@ -12,6 +12,7 @@ nothing is written to shared storage.
 | What | Path (under the app dir) | Written by | Size |
 |---|---|---|---|
 | Call recordings | `files/recordings/call_<startMillis>.wav` | `WavRecorder` | ~1.9 MB/min (16 kHz mono PCM16) |
+| Compressed recordings (opt-in, after transcription) | `files/recordings/call_<startMillis>.m4a` | `AudioCompressor` | ~0.36 MB/min (AAC 48 kbps) |
 | Call metadata | `databases/callnotes.db` (+ `-wal`, `-shm`) | Room | small |
 | Imported audio | `files/recordings/import_<millis>.<ext>` | `Importer` | as imported |
 | Transcripts (with speaker per line) | `databases/callnotes.db`, table `segments` | `TranscriptionService` | small |
@@ -36,7 +37,13 @@ read grant for that one file.
 
 Network: the only network use is the model download (DownloadManager, Hugging Face).
 
+## Retention (0.8.0)
+
+Off by default. Settings → פרטיות: recordings of transcribed calls after 1/7/30/90/365
+days (`calls.filePath` → null, `calls.audioDeletedAt` set — DB v9; text kept), whole calls
+after 30/90/180/365/730 days (skips calls with an open task). `util/Retention.kt`.
+
 ## Planned
 
-- 0.8: SQLCipher encryption, retention policy (default: audio 30 days, text kept),
-  compressed audio.
+- 0.9: optional extra encryption — SQLCipher database and encrypted recordings with a
+  Keystore-wrapped key.
