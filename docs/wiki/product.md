@@ -11,7 +11,7 @@ and suggested tasks with due dates — all produced locally.
 ## Scope
 
 **In (1.0):** Android 10+; cellular calls; internet calls (WhatsApp etc., experimental); Hebrew and English; fully on-device
-processing; tasks inside the app plus reminders and export to the device calendar.
+processing; tasks inside the app (from calls, or added by voice or typing) plus pop-up reminders with snooze and export to the device calendar.
 
 **Out (1.0):** iPhone (no API to call audio); cloud processing;
 speaker diarization beyond "me / the other side".

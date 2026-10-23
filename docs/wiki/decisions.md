@@ -3,6 +3,36 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-23 — Tasks by voice and by hand; reminders at the set time (0.14.0)
+Owner: add tasks with a record button (Gemma 4 writes the task), add by typing, edit
+existing tasks, and make reminders pop up at the task's time with a snooze.
+- Voice: Whisper first, then Gemma reads the text (`TaskPrompt`). Rejected for now: giving
+  Gemma the audio directly — the Hebrew-tuned Whisper is far more accurate on Hebrew, and
+  the LiteRT-LM path in use is text only. The note runs through the existing two workers
+  (one model of each kind in memory, the same memory/thermal/battery-saver rules) and
+  goes ahead of everything: an automatic call in progress is paused and requeued, like a
+  manual request. Not held back by the automatic switches or "only while charging" (the
+  user asked for it). The audio lives in `files/memos/` only until transcribed (seconds),
+  so it is not sealed even with extra encryption on — same rule as a call waiting for
+  transcription. A note stays in `voice_memos` (shown at the top of the task list) until
+  its task exists, so it survives the app being closed; "no task found" keeps the text so
+  the user can write the task from it. Recording stops at two minutes or when the app
+  leaves the screen (no background mic).
+- Tasks without a call use `callId = 0` (no call has id 0) rather than a nullable column:
+  SQLite can't relax NOT NULL without rebuilding the table; the task list LEFT JOINs.
+- Edited call tasks are flagged; a new summary of that call keeps them and drops its own
+  version of them (same title or same quote) instead of overwriting the user's edit.
+  Deleting a call task: a later re-summary may bring it back (said in the confirm dialog).
+- Reminders: time of day `dueTime` (else 09:00 on the date). Heads-up needs a
+  high-importance channel, so reminders got their own channel ("תזכורות למשימות"); new
+  tasks stay on the quieter one. Done / Snooze go to a non-exported receiver. One alarm
+  for the next reminder; exact (`setExactAndAllowWhileIdle`) when `SCHEDULE_EXACT_ALARM` is
+  granted — user-grantable and revocable in "Alarms & reminders", unlike `USE_EXACT_ALARM`
+  (install-time, can't be revoked; rejected for the minimal/revocable-permissions rule).
+  Without it reminders stay inexact (may be minutes late) and settings says so.
+  Snooze sets `snoozedUntil`; ticking done clears it; changing date/time re-arms.
+- Call summaries now also return `due_time` when a clock time was said.
+
 ### 2026-10-23 — "Only while charging" per step, and what unplugging does (0.13.0)
 Owner: separate "transcribe automatically while charging" and "summarise automatically
 while charging", with every edge case covered. `Prefs.transcribeOnlyCharging` /
