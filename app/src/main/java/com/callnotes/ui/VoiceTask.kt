@@ -143,7 +143,7 @@ internal fun VoiceTaskBody(elapsed: Long, level: Float) {
             }
         }
         Text(
-            "${clock(elapsed)} / ${clock(VoiceMemos.MAX_MS)}",
+            "${clock(elapsed)} מתוך ${clock(VoiceMemos.MAX_MS)}",
             style = MaterialTheme.typography.titleMedium,
         )
         LinearProgressIndicator(
