@@ -122,11 +122,11 @@ private fun LengthLimit(prefs: Prefs) {
                 value = minutes.coerceAtMost(Prefs.AUTO_MAX_SLIDER).toFloat(),
                 onValueChange = { v ->
                     // Live feedback while dragging; saved when the finger lifts.
-                    minutes = v.toInt(); typed = minutes.toString()
+                    minutes = kotlin.math.round(v).toInt(); typed = minutes.toString()
                 },
                 onValueChangeFinished = { set(minutes) },
+                // Continuous track (120 tick marks would be clutter), rounded to whole minutes.
                 valueRange = Prefs.AUTO_MAX_MIN.toFloat()..Prefs.AUTO_MAX_SLIDER.toFloat(),
-                steps = Prefs.AUTO_MAX_SLIDER - Prefs.AUTO_MAX_MIN - 1, // one stop per minute
             )
             Row {
                 Text("דקה", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
