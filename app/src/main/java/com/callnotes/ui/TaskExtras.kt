@@ -36,7 +36,7 @@ internal fun TaskExtras(t: TaskEntity, callLabel: String?) {
     var editing by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { editing = true }, contentPadding = pad, modifier = Modifier.height(36.dp)) {
-            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Edit, null,
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Create, null,
                 modifier = Modifier.padding(end = 6.dp).size(16.dp))
             Text("עריכה", style = MaterialTheme.typography.labelLarge)
         }
