@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -184,19 +185,20 @@ class ScreenshotTest {
         }
     }
 
-    @OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
-    @Test fun taskEditor() {
-        val task = TaskEntity(id = 5, callId = 1, idx = 0, title = "לשלוח לדני את הצעת המחיר", owner = "me",
-            dueDate = java.time.LocalDate.now().plusDays(1).toString(), duePhrase = "מחר", quote = "אשלח לך מחר", dueTime = "17:00")
-        compose.setContent {
-            CallNotesTheme {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
-                    TaskEditorDialog(task, onDismiss = {})
-                }
+    @Test fun taskEditor() = shot("task_editor") {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.large,
+            modifier = Modifier.padding(24.dp)) {
+            Column(Modifier.padding(24.dp)) {
+                Text("עריכת משימה", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 16.dp))
+                TaskEditorFields(
+                    "לשלוח לדני את הצעת המחיר", {},
+                    java.time.LocalDate.now().plusDays(1), {},
+                    java.time.LocalTime.of(17, 0), {},
+                    owner = "me", onOwner = {},
+                    voiceText = null, onPickDate = {}, onPickTime = {},
+                )
             }
         }
-        com.github.takahirom.roborazzi.captureScreenRoboImage("build/screenshots/task_editor.png")
     }
 
     @Test fun voiceTask() = shot("voice_task") {

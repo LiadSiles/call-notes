@@ -58,7 +58,7 @@ import java.time.format.DateTimeFormatter
  * the morning hour when only a day is set. A call's task also has who it is for. Delete
  * asks first. Nothing is saved until "שמירה".
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TaskEditorDialog(
     task: TaskEntity?,
@@ -92,56 +92,15 @@ fun TaskEditorDialog(
             }
         },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it.take(300) },
-                    label = { Text("מה צריך לעשות") },
-                    minLines = 2,
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Label("מתי")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Choice("ללא", date == null) { date = null; time = null }
-                    Choice("היום", date == today) { date = today }
-                    Choice("מחר", date == today.plusDays(1)) { date = today.plusDays(1) }
-                    val other = date != null && date != today && date != today.plusDays(1)
-                    Choice(if (other) date!!.format(DAY) else "תאריך…", other, icon = true) { pickDate = true }
-                }
-                Label("שעה")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Choice(time?.format(HOUR_MIN) ?: "בחירת שעה", time != null) { pickTime = true }
-                    if (time != null) IconButton(onClick = { time = null }) { Icon(Icons.Filled.Close, "בלי שעה", Modifier.size(18.dp)) }
-                }
-                Text(
-                    when {
-                        date == null -> "בלי תאריך אין תזכורת."
-                        time == null -> "תזכורת ב-${com.callnotes.util.TaskReminders.HOUR}:00 ביום הזה."
-                        else -> "תזכורת קופצת ב-${time!!.format(HOUR_MIN)}."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                if (fromCall) {
-                    Label("באחריות")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Choice("שלי", owner == "me") { owner = "me" }
-                        Choice("הצד השני", owner == "other") { owner = "other" }
-                        Choice("לא ידוע", owner == "unknown") { owner = "unknown" }
-                    }
-                }
-                if (task?.source == TaskSource.VOICE && !task.quote.isNullOrBlank()) {
-                    Text(
-                        "מה שהוקלט: \"${task.quote}\"",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
-                }
-            }
+            TaskEditorFields(
+                title, { title = it.take(300) },
+                date, { date = it; if (it == null) time = null },
+                time, { time = it },
+                owner = owner.takeIf { fromCall }, onOwner = { owner = it },
+                voiceText = task?.quote?.takeIf { task.source == TaskSource.VOICE } ?: voiceText,
+                onPickDate = { pickDate = true },
+                onPickTime = { pickTime = true },
+            )
         },
         confirmButton = {
             TextButton(
@@ -224,6 +183,78 @@ fun TaskEditorDialog(
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("ביטול") } },
         )
+    }
+}
+
+/**
+ * The editor's fields (stateless, so they can be rendered on their own): title, day chips,
+ * time, the reminder this gives, and who it is for ([owner] null = not asked).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun TaskEditorFields(
+    title: String,
+    onTitle: (String) -> Unit,
+    date: LocalDate?,
+    onDate: (LocalDate?) -> Unit,
+    time: LocalTime?,
+    onTime: (LocalTime?) -> Unit,
+    owner: String?,
+    onOwner: (String) -> Unit,
+    voiceText: String?,
+    onPickDate: () -> Unit,
+    onPickTime: () -> Unit,
+) {
+    val today = LocalDate.now()
+    Column(Modifier.verticalScroll(rememberScrollState())) {
+        OutlinedTextField(
+            value = title,
+            onValueChange = onTitle,
+            label = { Text("מה צריך לעשות") },
+            minLines = 2,
+            maxLines = 4,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Label("מתי")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Choice("ללא", date == null) { onDate(null) }
+            Choice("היום", date == today) { onDate(today) }
+            Choice("מחר", date == today.plusDays(1)) { onDate(today.plusDays(1)) }
+            val other = date != null && date != today && date != today.plusDays(1)
+            Choice(if (other) date!!.format(DAY) else "תאריך…", other, icon = true, onClick = onPickDate)
+        }
+        Label("שעה")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Choice(time?.format(HOUR_MIN) ?: "בחירת שעה", time != null, onClick = onPickTime)
+            if (time != null) IconButton(onClick = { onTime(null) }) { Icon(Icons.Filled.Close, "בלי שעה", Modifier.size(18.dp)) }
+        }
+        Text(
+            when {
+                date == null -> "בלי תאריך אין תזכורת."
+                time == null -> "תזכורת ב-${com.callnotes.util.TaskReminders.HOUR}:00 ביום הזה."
+                else -> "תזכורת קופצת ב-${time.format(HOUR_MIN)}."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (owner != null) {
+            Label("באחריות")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Choice("שלי", owner == "me") { onOwner("me") }
+                Choice("הצד השני", owner == "other") { onOwner("other") }
+                Choice("לא ידוע", owner == "unknown") { onOwner("unknown") }
+            }
+        }
+        if (!voiceText.isNullOrBlank()) {
+            Text(
+                "מה שהוקלט: \"$voiceText\"",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
     }
 }
 
