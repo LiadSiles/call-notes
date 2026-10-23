@@ -23,11 +23,12 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Summary + tasks with Gemma 4 on the device (LiteRT-LM, CPU, text only). Reads the
- * speaker-labelled transcript; answers in JSON (parsed by [AnalysisPrompt]). Greedy
- * decoding and thinking off: this is extraction, not creative writing.
+ * Summary + tasks with Gemma 4 on the device (LiteRT-LM, CPU, text only). Answers in JSON
+ * (prompts and checks in [CallSummarizer]). Greedy decoding and thinking off: this is
+ * extraction, not creative writing. A [conversation] keeps its history on the native side,
+ * so follow-up questions about a transcript don't make the model read it again.
  *
- * Streams the answer (progress = characters written) so a cancel stops generation at
+ * Streams each answer (progress = characters written) so a cancel stops generation at
  * once through `Conversation.cancelProcess()` instead of waiting for the full answer.
  */
 class GemmaAnalyzer(
@@ -53,7 +54,7 @@ class GemmaAnalyzer(
         ).also { it.initialize() }
     }
 
-    override suspend fun ask(prompt: String, onChars: (Int) -> Unit): String = withContext(Dispatchers.IO) {
+    override suspend fun <T> conversation(block: suspend (Analyzer.Chat) -> T): T = withContext(Dispatchers.IO) {
         load()
         val config = ConversationConfig(
             samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
@@ -61,34 +62,46 @@ class GemmaAnalyzer(
             thinkingConfig = ThinkingConfig(enableThinking = false),
         )
         val conversation = engine!!.createConversation(config)
-        val finished = CompletableDeferred<Unit>()
+        /** The answer being written now, if any. */
+        var writing: CompletableDeferred<Unit>? = null
         try {
             active = conversation
-            suspendCancellableCoroutine { cont ->
-                val text = StringBuilder()
-                conversation.sendMessageAsync(Contents.of(Content.Text(prompt)), object : MessageCallback {
-                    override fun onMessage(message: Message) {
-                        text.append(message.toString())
-                        onChars(text.length)
-                    }
-                    override fun onDone() {
-                        finished.complete(Unit)
-                        if (cont.isActive) cont.resume(text.toString().trim())
-                    }
-                    override fun onError(throwable: Throwable) {
-                        finished.complete(Unit)
-                        if (cont.isActive) cont.resumeWithException(throwable)
-                    }
-                })
-                cont.invokeOnCancellation { runCatching { conversation.cancelProcess() } }
-            }
+            block(object : Analyzer.Chat {
+                override suspend fun ask(prompt: String, onChars: (Int) -> Unit): String {
+                    val finished = CompletableDeferred<Unit>()
+                    writing = finished
+                    return send(conversation, prompt, onChars, finished)
+                }
+            })
         } finally {
             active = null
             // Never close a conversation the native side is still writing into.
-            withContext(NonCancellable) { withTimeoutOrNull(15_000) { finished.await() } }
-            if (finished.isCompleted) runCatching { conversation.close() }
+            val last = writing
+            withContext(NonCancellable) { last?.let { withTimeoutOrNull(15_000) { it.await() } } }
+            if (last == null || last.isCompleted) runCatching { conversation.close() }
         }
     }
+
+    /** One question in [conversation]; [finished] completes when the native side is done. */
+    private suspend fun send(conversation: Conversation, prompt: String, onChars: (Int) -> Unit, finished: CompletableDeferred<Unit>): String =
+        suspendCancellableCoroutine { cont ->
+            val text = StringBuilder()
+            conversation.sendMessageAsync(Contents.of(Content.Text(prompt)), object : MessageCallback {
+                override fun onMessage(message: Message) {
+                    text.append(message.toString())
+                    onChars(text.length)
+                }
+                override fun onDone() {
+                    finished.complete(Unit)
+                    if (cont.isActive) cont.resume(text.toString().trim())
+                }
+                override fun onError(throwable: Throwable) {
+                    finished.complete(Unit)
+                    if (cont.isActive) cont.resumeWithException(throwable)
+                }
+            })
+            cont.invokeOnCancellation { runCatching { conversation.cancelProcess() } }
+        }
 
     /** Stops the current answer now: generation ends at the next token. */
     override fun abort() {

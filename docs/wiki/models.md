@@ -146,8 +146,10 @@ The log line says which method ran and why (levels, gap, shares, voice-sample sc
 
 | Piece | Where |
 |---|---|
-| Prompt (call date + weekday, who is who, transcript ≤ 12k chars keeping start+end, JSON schema, rules) and tolerant JSON parsing, due-date validation (call date −1 day … +2 years) | `inference/AnalysisPrompt.kt` (+ tests, real org.json in tests) |
-| Model call: LiteRT-LM `Engine` text only (no audio backend), CPU, `maxNumTokens` 8192, greedy, thinking off, ≤ 1536 output tokens; streamed with `sendMessageAsync` (chunks are deltas; cancel → `onError(CancellationException)`), `abort()` = `cancelProcess()`; a conversation is closed only after the native side reported done | `inference/GemmaAnalyzer.kt` |
+| Shared prompt context (call date + weekday, direction, who is who, 15-day Hebrew calendar, part k of n, globally numbered lines), the one-question "quick" prompt, tolerant JSON parsing, due-date validation (call date −1 day … +2 years) | `inference/AnalysisPrompt.kt` (+ tests, real org.json in tests) |
+| "Precise" prompts (3 questions in one conversation) and the merge prompt for long calls | `inference/SummaryPrompts.kt` |
+| Order of steps: split long calls (≤ 9k chars in one piece, else ~6k-char parts, 2 lines overlap), per part quick or precise, merge rounds (≤ 10k-char prompts), in-call task de-duplication, date-word check | `inference/CallSummarizer.kt`, `DueWords.kt` (+ tests with a fake analyzer) |
+| Model call: LiteRT-LM `Engine` text only (no audio backend), CPU, `maxNumTokens` 8192 (whole conversation), greedy, thinking off, ≤ 1536 output tokens per answer; `Analyzer.conversation` keeps one `Conversation` open for several questions (history stays native-side, the transcript is prefilled once); streamed with `sendMessageAsync` (chunks are deltas; cancel → `onError(CancellationException)`), `abort()` = `cancelProcess()`; a conversation is closed only after the native side reported done | `inference/GemmaAnalyzer.kt` |
 | Worker running in parallel with transcription: requested calls, then (auto on) newest unanalysed; waits for the next transcript while transcription runs | `processing/SummaryWorker.kt` |
 | Storage: `calls.analysisStatus/analysisJson/summaryTitle/analysisModel/analysisError`, `tasks` table (DB v6) | `data/` |
 
@@ -168,6 +170,13 @@ The log line says which method ran and why (levels, gap, shares, voice-sample sc
 - The model's answer is call content: the log records only sizes, counts and timings.
 - Speaker labels in the prompt: "אני" / contact name when the owner is known, else
   "דובר 1/2" and the prompt says ownership is unknown.
+- 0.15: no part of a call is cut any more (until 0.14 the middle of a > 12k-char transcript
+  was dropped). "Precise" mode (default): Q1 summary/points/decisions/follow-ups/title
+  (title last), Q2 commitments with the quote first and a worked Hebrew example, Q3 review
+  (remove / merge / fix; an unusable review answer keeps Q2's list). Merge answers refer to
+  items by id (P1, D1, F1) so source lines carry over; items the answer leaves out are
+  added back. `DueWords`: היום/מחר/מחרתיים/בעוד שבוע override the model's date; a weekday
+  accepts its next two occurrences, anything else → next occurrence, marked unsure.
 
 ## Default: Gemma 4, one model for both roles (0.3 — superseded for transcription)
 

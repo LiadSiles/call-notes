@@ -68,6 +68,7 @@ fun SummarySection(
                     when {
                         processing.phase == Phase.LOADING_ANALYZER && running -> "טוען את מודל הסיכום…"
                         processing.phase == Phase.WAITING_MEMORY && running -> "ממתין לזיכרון פנוי — התמלול רץ במקביל…"
+                        running && processing.progressMax > 1 -> "מסכם · חלק ${processing.progress} מתוך ${processing.progressMax}…"
                         running -> "מסכם את השיחה…"
                         else -> "ממתין לסיכום…"
                     },

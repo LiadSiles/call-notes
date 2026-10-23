@@ -3,6 +3,27 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-23 — Precise summaries in three questions; whole call, never cut (0.15.0)
+Owner: split the summary into focused steps for better tasks, and take the whole call
+into account — no information lost.
+- Three questions in one LiteRT-LM conversation (`Analyzer.conversation`), not three
+  separate prompts: the transcript is prefilled once, follow-ups cost only their answers.
+  Expected cost ~+30–50 % time vs one question (to be measured on the device; the log has
+  per-step times). Order: summary first (the model "understands" the call before hunting
+  tasks), then commitments with the quote as the first field (grounding before wording),
+  then a self-review that may only remove, merge or fix. "Quick" (one question) stays as
+  a setting.
+- Long calls: parts of ~6k chars with a 2-line overlap instead of cutting the middle
+  (≤ 9k chars stays one piece — fits 8192 tokens with three questions and answers). Notes
+  are merged by the model in rounds; the merge refers to items by id so their source lines
+  survive, and anything it leaves out is re-added — the merge can shorten, never drop.
+  Tasks are merged in code, strictly (same title; all words of one in the other; or mostly
+  the same words plus a shared line) — "…לדני" vs "…לספק" stay two. Rejected: a bigger
+  context window instead of parts — more memory next to Whisper, and small models lose
+  the middle of long inputs anyway.
+- Dates: a 15-day calendar with Hebrew day names in the prompt (look up, don't compute)
+  and `DueWords` checks the result against the words said.
+
 ### 2026-10-23 — Tasks by voice and by hand; reminders at the set time (0.14.0)
 Owner: add tasks with a record button (Gemma 4 writes the task), add by typing, edit
 existing tasks, and make reminders pop up at the task's time with a snooze.

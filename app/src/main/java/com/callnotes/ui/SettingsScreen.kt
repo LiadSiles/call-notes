@@ -122,6 +122,7 @@ private fun SettingsHub(contentPadding: PaddingValues, resumeTick: Int, onOpen: 
             speakers = if (VoiceProfile.exists(context)) "דגימת הקול שלך שמורה" else "בלי דגימת קול",
             summaries = listOfNotNull(
                 analyze?.displayName ?: "לא הותקן מודל",
+                if (prefs.preciseSummary) "מדויק" else "מהיר",
                 autoLabel(prefs.autoSummarize, prefs.autoMaxMinutes),
                 "תזכורות".takeIf { prefs.taskReminders },
             ).joinToString(" · "),
@@ -248,6 +249,8 @@ private fun SettingsSubPage(
                 item { GroupLabel("מודל") }
                 item { ModelSection(app.models, prefs, ModelRole.ANALYZE) }
                 item { Note("מודל שפה שקורא את השיחה הכתובה ומכין כותרת, סיכום ומשימות — על הטלפון, אחרי התמלול.") }
+                item { GroupLabel("איכות") }
+                item { key(resetKey) { SummaryModeSettings(prefs) } }
                 item { GroupLabel("אוטומטי") }
                 item { key(resetKey) { AutoSummarySettings(prefs) } }
                 item { GroupLabel("משימות") }

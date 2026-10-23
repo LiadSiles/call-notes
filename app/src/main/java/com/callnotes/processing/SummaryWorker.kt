@@ -3,6 +3,7 @@ package com.callnotes.processing
 import android.app.ActivityManager
 import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.CallEntity
+import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
 import com.callnotes.data.TaskEntity
 import com.callnotes.inference.AnalysisPrompt
@@ -257,29 +258,42 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 }
                 AnalysisPrompt.Line(who, s.text)
             }
-            val prompt = AnalysisPrompt.build(
-                lines, CallContext(call.startedAt, call.incoming, call.contactName),
+            val precise = Prefs(host).preciseSummary
+            step("call ${call.id}: summarising ${if (precise) "precisely (3 questions per part)" else "quickly"} · " +
+                "${lines.size} lines, ${lines.sumOf { it.text.length }} chars")
+            var lastShown = 0L
+            var stage = "קורא את השיחה…"
+            val summarizer = com.callnotes.inference.CallSummarizer(analyzer, precise, object : com.callnotes.inference.CallSummarizer.Listener {
+                override fun step(step: com.callnotes.inference.CallSummarizer.Step, part: Int, parts: Int) {
+                    val of = if (parts > 1) " · חלק $part מתוך $parts" else ""
+                    stage = when (step) {
+                        com.callnotes.inference.CallSummarizer.Step.NOTES -> "מסכם$of"
+                        com.callnotes.inference.CallSummarizer.Step.TASKS -> "מחלץ משימות$of"
+                        com.callnotes.inference.CallSummarizer.Step.REVIEW -> "בודק את המשימות$of"
+                        com.callnotes.inference.CallSummarizer.Step.MERGE -> "מאחד את חלקי השיחה" + if (parts > 1) " ($part/$parts)" else ""
+                    }
+                    if (call.id !in cancelled) {
+                        // Parts of the call as progress; merging is one last step.
+                        val merging = step == com.callnotes.inference.CallSummarizer.Step.MERGE
+                        publish(ProcessingStatus.State(true, call.id, if (merging) 0 else part, if (merging) 0 else parts, Phase.ANALYZING))
+                        host.showWork(this@SummaryWorker, title, stage, callId = call.id)
+                    }
+                }
+                override fun chars(written: Int) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastShown > 1_000 && call.id !in cancelled) {
+                        lastShown = now
+                        host.showWork(this@SummaryWorker, title, "$stage · $written תווים", callId = call.id)
+                    }
+                }
+                override fun log(text: String) = this@SummaryWorker.log("call ${call.id}: $text")
+            })
+            val result = summarizer.summarize(
+                lines, CallContext(call.startedAt, call.incoming, call.contactName, directionKnown = call.kind != CallKind.VOIP),
                 ownerLabel = if (known) "אני" else null, otherLabel = if (known) other else null,
                 zone = ZoneId.systemDefault(),
             )
-            step("call ${call.id}: summarising (${prompt.length} chars in)")
-            var lastShown = 0L
-            val answer = analyzer.ask(prompt) { chars ->
-                val now = System.currentTimeMillis()
-                if (now - lastShown > 1_000 && call.id !in cancelled) {
-                    lastShown = now
-                    host.showWork(this, title, "כותב סיכום… $chars תווים", callId = call.id)
-                }
-            }
             if (call.id in cancelled) throw CancellationException("cancelled")
-            val callDate = Instant.ofEpochMilli(call.startedAt).atZone(ZoneId.systemDefault()).toLocalDate()
-            val result = try {
-                AnalysisPrompt.parse(answer, callDate, segments.map { it.text })
-            } catch (e: Exception) {
-                // The answer is call content: log only its size, never the text.
-                log("call ${call.id}: summary answer not valid JSON (${answer.length} chars): ${e.javaClass.simpleName}")
-                throw e
-            }
             val now = System.currentTimeMillis()
             val tasks = result.tasks.mapIndexed { i, t ->
                 TaskEntity(callId = call.id, idx = i, title = t.title, owner = t.owner, dueDate = t.dueDate,
@@ -310,7 +324,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             com.callnotes.util.TaskReminders.plan(host)
             val used = com.callnotes.util.Energy.percentUsed(battery, com.callnotes.util.Energy.read(host))
             dao.setAnalyzeCost(call.id, used, System.currentTimeMillis() - started)
-            log("call ${call.id}: summary done in ${secs(started)} · ${answer.length} chars out · " +
+            log("call ${call.id}: summary done in ${secs(started)} · ${summarizer.charsOut} chars out · " +
                 "${result.keyPoints.size} points (${result.keyPoints.count { !it.certain }} unsure), " +
                 "${tasks.size} tasks (${tasks.count { !it.certain }} unsure, ${fresh.size} new, ${repeats.size} repeats) · battery " +
                 (used?.let { "%.2f%%".format(it) } ?: "not measured"))

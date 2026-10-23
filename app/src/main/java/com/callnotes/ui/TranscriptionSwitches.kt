@@ -67,6 +67,27 @@ fun AutoTranscribeSettings(prefs: Prefs) {
     if (showLog) TraceDialog(ProcessingLog.file(context), onDismiss = { showLog = false }, title = "יומן עיבוד")
 }
 
+/**
+ * How summaries are made: "precise" (three questions per call — about, commitments, review)
+ * or "quick" (one). Either way the whole call is read; long calls in parts.
+ */
+@Composable
+fun SummaryModeSettings(prefs: Prefs) {
+    var precise by remember { mutableStateOf(prefs.preciseSummary) }
+    CardGroup {
+        ChipChoice(
+            "אופן הסיכום",
+            if (precise) "שלושה שלבים: על מה דובר, חילוץ כל ההתחייבויות עם ציטוט, ובדיקה חוזרת שלהן. מדויק יותר, לוקח יותר זמן."
+            else "שאלה אחת לכל הסיכום והמשימות. מהיר יותר, פחות מדויק במשימות.",
+            listOf(true, false),
+            precise,
+            label = { if (it) "מדויק" else "מהיר" },
+        ) { precise = it; prefs.preciseSummary = it }
+    }
+    Note("כל השיחה נלקחת בחשבון: שיחה ארוכה מחולקת לחלקים, כל חלק מסוכם, והחלקים מאוחדים לסיכום אחד בלי לאבד פרטים. " +
+        "שינוי חל על הסיכומים הבאים; שיחה שכבר סוכמה אפשר לסכם מחדש במסך שלה.")
+}
+
 /** Summaries page: automatic switch; the length limit is shown, set on the transcription page. */
 @Composable
 fun AutoSummarySettings(prefs: Prefs) {

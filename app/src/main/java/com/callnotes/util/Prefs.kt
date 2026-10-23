@@ -111,6 +111,12 @@ class Prefs(context: Context) {
         @android.annotation.SuppressLint("ApplySharedPref") // must be on disk before a crash
         set(value) { sp.edit().putString("processing_stage", value).commit() }
 
+    /**
+     * "Precise" summaries: three questions per call (or per part of a long call) — what it
+     * was about, the commitments, a review of them. Off = one question ("quick").
+     */
+    var preciseSummary by bool(KEY_PRECISE, true)
+
     // ---- Tasks -------------------------------------------------------------------------
 
     /** A pop-up notification when a task is due (its time, or the morning of its date). */
@@ -201,6 +207,7 @@ class Prefs(context: Context) {
         private const val KEY_S_CHARGING = "summarize_only_charging"
         private const val KEY_REMINDERS = "task_reminders"
         private const val KEY_SNOOZE = "snooze_minutes"
+        private const val KEY_PRECISE = "precise_summary"
         private const val KEY_AUDIO_DAYS = "audio_retention_days"
         private const val KEY_CALL_DAYS = "call_retention_days"
         private const val KEY_WIFI = "wifi_only"
@@ -210,7 +217,7 @@ class Prefs(context: Context) {
         /** What "restore defaults" resets. */
         private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
-            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
+            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
             KEY_AUTO_SUMMARY, KEY_T_CHARGING, KEY_S_CHARGING,
         )
 

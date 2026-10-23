@@ -207,7 +207,7 @@ fun CallsScreen(
                             Phase.LOADING -> "טוען את מודל התמלול"
                             Phase.PREPARING_MODEL -> "מכין גרסה מהירה של המודל · ${if (st.progressMax > 0) st.progress * 100 / st.progressMax else 0}%"
                             Phase.LOADING_ANALYZER -> "טוען את מודל הסיכום"
-                            Phase.ANALYZING -> "מסכם"
+                            Phase.ANALYZING -> if (st.progressMax > 1) "מסכם · חלק ${st.progress} מתוך ${st.progressMax}" else "מסכם"
                             Phase.WAITING_MEMORY -> "ממתין לזיכרון כדי לסכם"
                             Phase.WAITING_THERMAL -> "הטלפון חם — ממתין שיתקרר"
                             Phase.MEMO_TRANSCRIBING -> "מתמלל הקלטת משימה"

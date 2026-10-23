@@ -23,27 +23,27 @@ object AnalysisPrompt {
     /** One line of the conversation as the model sees it. */
     data class Line(val speaker: String, val text: String)
 
-    /** Keep prompts bounded on a phone: longer calls keep their start and end. */
-    const val MAX_TRANSCRIPT_CHARS = 12_000
-
-    fun build(lines: List<Line>, call: CallContext, ownerLabel: String?, otherLabel: String?, zone: ZoneId): String {
-        val time = Instant.ofEpochMilli(call.startedAt).atZone(zone)
-        val date = time.toLocalDate()
-        val who = if (ownerLabel != null && otherLabel != null)
-            "The phone's owner appears as \"$ownerLabel\". The other side appears as \"$otherLabel\"."
-        else
-            "Speakers appear as \"דובר 1\" and \"דובר 2\"; it is not known which one is the phone's owner."
+    /**
+     * The one-question prompt ("quick" summary mode) for the whole call, or for one part of
+     * a long call ([firstLine] = number of its first line in the whole call; [part] of
+     * [parts]). Long calls are split by [CallSummarizer]; nothing is cut out.
+     */
+    fun build(
+        lines: List<Line>,
+        call: CallContext,
+        ownerLabel: String?,
+        otherLabel: String?,
+        zone: ZoneId,
+        firstLine: Int = 1,
+        part: Int = 1,
+        parts: Int = 1,
+    ): String {
+        val date = Instant.ofEpochMilli(call.startedAt).atZone(zone).toLocalDate()
         return buildString {
             appendLine("You read the transcript of a phone call and return a single JSON object. Write every text value in Hebrew.")
             appendLine("Accuracy matters more than completeness: a short correct answer is better than a long one with guesses.")
             appendLine()
-            appendLine("Call details:")
-            appendLine("- Date: $date (${date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.ENGLISH)}), time ${time.format(DateTimeFormatter.ofPattern("HH:mm"))}")
-            call.contactName?.let { appendLine("- Other side's name in the phone's contacts: $it") }
-            appendLine("- $who")
-            appendLine()
-            appendLine("Transcript, one numbered line per utterance (automatic speech recognition — it can mishear words):")
-            appendLine(transcript(lines))
+            append(context(lines, call, ownerLabel, otherLabel, zone, firstLine, part, parts))
             appendLine()
             appendLine("Return only JSON, no markdown, with exactly these keys:")
             appendLine("{\"title\": \"up to 8 words\", \"summary\": \"2-4 sentences\", \"summary_certain\": true, " +
@@ -60,23 +60,75 @@ object AnalysisPrompt {
             appendLine("- \"summary_certain\": false if large parts of the transcript are unintelligible.")
             appendLine("- Only tasks that were actually requested, promised or agreed in the call. \"me\" = the phone's owner. " +
                 "\"quote\" must be copied word for word from the cited line.")
-            appendLine("- \"due\": compute from the call date (for example \"מחר\" is ${date.plusDays(1)}). null if no time was mentioned.")
+            appendLine("- \"due\": take the day from the calendar (\"מחר\" is ${date.plusDays(1)}). null if no day was mentioned.")
             appendLine("- \"due_time\": 24-hour time only when a clock time was said (\"בחמש\" in the afternoon is 17:00), else null.")
             appendLine("- Do not invent facts that are not in the transcript. Empty lists are fine.")
             appendLine("- If the transcript has no meaningful content, return empty strings and empty lists.")
-            appendLine("- Hebrew acronyms and abbreviations (נתב״ג, צה״ל, ת״א) must use the Hebrew gershayim ״ or geresh ׳, " +
-                "never the ASCII double quote \", which would break the JSON.")
+            appendLine(ACRONYMS)
         }
     }
 
-    private fun transcript(lines: List<Line>): String {
-        val numbered = lines.mapIndexed { i, l -> "[${i + 1}] " + if (l.speaker.isEmpty()) l.text else "${l.speaker}: ${l.text}" }
-        val all = numbered.joinToString("\n")
-        if (all.length <= MAX_TRANSCRIPT_CHARS) return all
-        val head = all.take(MAX_TRANSCRIPT_CHARS * 2 / 3).substringBeforeLast('\n')
-        val tail = all.takeLast(MAX_TRANSCRIPT_CHARS / 3).substringAfter('\n')
-        return "$head\n[… החלק האמצעי של השיחה הושמט …]\n$tail"
+    /** The rule that keeps Hebrew acronyms from breaking the JSON. */
+    internal const val ACRONYMS = "- Hebrew acronyms and abbreviations (נתב״ג, צה״ל, ת״א) must use the Hebrew gershayim ״ or geresh ׳, " +
+        "never the ASCII double quote \", which would break the JSON."
+
+    /**
+     * What every summary prompt starts with: the call's details, a calendar for dates said
+     * in it, which part of the call this is (for long calls), and the numbered transcript.
+     */
+    internal fun context(
+        lines: List<Line>,
+        call: CallContext,
+        ownerLabel: String?,
+        otherLabel: String?,
+        zone: ZoneId,
+        firstLine: Int,
+        part: Int,
+        parts: Int,
+    ): String = buildString {
+        val time = Instant.ofEpochMilli(call.startedAt).atZone(zone)
+        val date = time.toLocalDate()
+        appendLine("Call details:")
+        appendLine("- Date: $date (${date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.ENGLISH)}), time ${time.format(DateTimeFormatter.ofPattern("HH:mm"))}")
+        appendLine("- " + when {
+            !call.directionKnown -> "Internet call: it is not known who called whom."
+            call.incoming -> "Incoming call: the other side called the phone's owner."
+            else -> "Outgoing call: the phone's owner made the call."
+        })
+        call.contactName?.let { appendLine("- Other side's name in the phone's contacts: $it") }
+        appendLine("- " + if (ownerLabel != null && otherLabel != null)
+            "The phone's owner appears as \"$ownerLabel\". The other side appears as \"$otherLabel\"."
+        else
+            "Speakers appear as \"דובר 1\" and \"דובר 2\"; it is not known which one is the phone's owner.")
+        appendLine()
+        appendLine("Calendar — use it for every day mentioned in the call instead of calculating dates:")
+        appendLine(calendar(date))
+        appendLine()
+        if (parts > 1) {
+            appendLine("This is part $part of $parts of a long call: lines $firstLine–${firstLine + lines.size - 1}. " +
+                "The other parts are read separately; answer only about the lines below.")
+        }
+        appendLine("Transcript, one numbered line per utterance (automatic speech recognition — it can mishear words):")
+        appendLine(numbered(lines, firstLine))
     }
+
+    /** The two weeks from the call's day, with Hebrew day names ("2026-10-22 חמישי (מחר)"). */
+    fun calendar(date: LocalDate): String = (0 until 15).joinToString("\n") { i ->
+        val d = date.plusDays(i.toLong())
+        "$d ${HEBREW_DAYS[d.dayOfWeek.value % 7]}" + when (i) {
+            0 -> " (היום)"
+            1 -> " (מחר)"
+            2 -> " (מחרתיים)"
+            else -> ""
+        }
+    }
+
+    /** Hebrew day names, Sunday first (index = [java.time.DayOfWeek.getValue] % 7). */
+    val HEBREW_DAYS = listOf("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
+
+    private fun numbered(lines: List<Line>, firstLine: Int): String =
+        lines.mapIndexed { i, l -> "[${firstLine + i}] " + if (l.speaker.isEmpty()) l.text else "${l.speaker}: ${l.text}" }
+            .joinToString("\n")
 
     /**
      * Parses and checks the model's answer. [lineTexts] are the transcript lines (same

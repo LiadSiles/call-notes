@@ -31,7 +31,7 @@ interface Transcriber : AutoCloseable {
     ): Transcript
 }
 
-/** A language model that answers a prompt (the summary prompt from [AnalysisPrompt]). */
+/** A language model that answers prompts (the summary prompts are built by [CallSummarizer]). */
 interface Analyzer : AutoCloseable {
     val modelId: String
 
@@ -39,7 +39,19 @@ interface Analyzer : AutoCloseable {
     suspend fun load() {}
 
     /** The model's full answer; [onChars] reports how much has been written so far. */
-    suspend fun ask(prompt: String, onChars: (Int) -> Unit = {}): String
+    suspend fun ask(prompt: String, onChars: (Int) -> Unit = {}): String = conversation { it.ask(prompt, onChars) }
+
+    /**
+     * Several questions in one conversation: each answer sees the earlier questions and
+     * answers. The model keeps what it has read, so a long transcript sent in the first
+     * message is read once, not once per question.
+     */
+    suspend fun <T> conversation(block: suspend (Chat) -> T): T
+
+    /** One open conversation (see [conversation]). */
+    interface Chat {
+        suspend fun ask(prompt: String, onChars: (Int) -> Unit = {}): String
+    }
 
     /** Stops the current answer as soon as the engine allows (any thread). */
     fun abort() {}
@@ -60,6 +72,8 @@ data class CallContext(
     val startedAt: Long,
     val incoming: Boolean,
     val contactName: String?,
+    /** False for internet calls: the app can't tell who called whom. */
+    val directionKnown: Boolean = true,
 )
 
 /** What the summariser extracted from a call (JSON from the model, checked in code). */
