@@ -47,6 +47,9 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
     override val tag = "transcribe"
     @Volatile var delayFirst = false
     @Volatile private var currentRequested = false
+
+    /** The call being worked on now was asked for by the user (not picked automatically). */
+    val currentIsManual: Boolean get() = currentRequested
     @Volatile private var transcriber: Transcriber? = null
     private var embedder: VoiceEmbedder? = null
     private var embedderTried = false
@@ -128,13 +131,10 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             val call = dao.get(id)
             if (call != null && call.filePath != null && call.status == CallStatus.RECORDED) return call to true
         }
-        // Only-while-charging: the user's own request above still runs; the queue waits.
-        if (com.callnotes.util.Energy.waitingForCharger(host)) return null
-        val prefs = Prefs(host)
         // The service also runs for a manual request or for summaries: with automatic
-        // transcription off, only requested calls are transcribed.
-        if (!prefs.autoTranscribe) return null
-        return dao.nextPending(prefs.autoMaxMs)?.let { it to false }
+        // transcription off, or waiting for the charger, only requested calls are transcribed.
+        if (!com.callnotes.util.Energy.autoTranscribeAllowed(host)) return null
+        return dao.nextPending(Prefs(host).autoMaxMs)?.let { it to false }
     }
 
     private suspend fun load(spec: ModelSpec, file: File, call: CallEntity): Transcriber? {

@@ -34,6 +34,11 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
 
     override val tag = "summary"
     @Volatile private var analyzer: Analyzer? = null
+    @Volatile private var currentRequested = false
+
+    /** The call being summarised now was asked for by the user (not picked automatically). */
+    val currentIsManual: Boolean get() = currentRequested
+
     /** Poked when a transcription finishes or a summary is requested. */
     val wake = Channel<Unit>(Channel.CONFLATED)
 
@@ -46,7 +51,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         var failed = 0
         try {
             while (true) {
-                val call = next()
+                val (call, requested) = next() ?: (null to false)
                 if (call == null) {
                     // More transcripts may still come: wait for one rather than unloading Gemma.
                     if (host.transcribe.running) {
@@ -59,6 +64,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 }
                 waitWhileHot()
                 begin(call)
+                currentRequested = requested
                 if (analyzer == null) {
                     waitForMemory(call)
                     analyzer = load(spec, file, call) ?: break
@@ -86,16 +92,17 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         }
     }
 
-    private suspend fun next(): CallEntity? {
+    /** The next call to summarise and whether the user asked for it; null if none may run now. */
+    private suspend fun next(): Pair<CallEntity, Boolean>? {
         if (com.callnotes.util.BatterySaver.paused(host)) return null
         while (true) {
             val id = ProcessingStatus.firstAnalysisRequested() ?: break
             ProcessingStatus.unrequestAnalysis(id)
-            dao.get(id)?.takeIf { it.status == CallStatus.TRANSCRIBED }?.let { return it }
+            dao.get(id)?.takeIf { it.status == CallStatus.TRANSCRIBED }?.let { return it to true }
         }
-        if (com.callnotes.util.Energy.waitingForCharger(host)) return null
-        val prefs = Prefs(host)
-        return if (prefs.autoSummarize) dao.nextUnanalyzed(prefs.autoMaxMs) else null
+        // Automatic summaries: switched on, and not waiting for the charger.
+        if (!com.callnotes.util.Energy.autoSummaryAllowed(host)) return null
+        return dao.nextUnanalyzed(Prefs(host).autoMaxMs)?.let { it to false }
     }
 
     /**

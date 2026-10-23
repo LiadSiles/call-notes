@@ -75,7 +75,16 @@ fun CallsScreen(
     }
     val waiting = items.count { it.call.status == com.callnotes.data.CallStatus.RECORDED && !manualOnly(it.call) }
     val saverPaused = remember(resumeTick, noteVersion) { com.callnotes.util.BatterySaver.paused(context) }
-    val waitingCharger = remember(resumeTick, noteVersion) { com.callnotes.util.Energy.waitingForCharger(context) }
+    // Automatic steps held back until the phone is plugged in, and how much waits for each.
+    val transcribeWaits = remember(resumeTick, noteVersion, processing.running) {
+        prefs.autoTranscribe && com.callnotes.util.Energy.transcribeWaitsForCharger(context)
+    }
+    val summaryWaits = remember(resumeTick, noteVersion, summaryState.running) {
+        prefs.autoSummarize && com.callnotes.util.Energy.summaryWaitsForCharger(context)
+    }
+    val unsummarised = items.count {
+        it.call.status == com.callnotes.data.CallStatus.TRANSCRIBED && it.call.analysisStatus == null && !manualOnly(it.call)
+    }
     val ready = setup.requiredOk && service.connected && service.monitoring
     var searching by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
@@ -142,11 +151,17 @@ fun CallsScreen(
                     warn = true,
                 )
             }
-            if (waitingCharger && !saverPaused && waiting > 0 && !processing.running) item {
+            val chargerLines = listOfNotNull(
+                (if (waiting == 1) "הקלטה אחת תתומלל" else "$waiting הקלטות יתומללו")
+                    .takeIf { transcribeWaits && waiting > 0 && !processing.running },
+                (if (unsummarised == 1) "שיחה אחת תסוכם" else "$unsummarised שיחות יסוכמו")
+                    .takeIf { summaryWaits && unsummarised > 0 && !summaryState.running },
+            )
+            if (chargerLines.isNotEmpty() && !saverPaused) item {
                 Banner(
                     title = "ממתין לטעינה",
-                    body = (if (waiting == 1) "הקלטה אחת ממתינה" else "$waiting הקלטות ממתינות") +
-                        " — יתומללו ויסוכמו כשהטלפון יחובר למטען. אפשר לתמלל שיחה מסוימת עכשיו מתוך השיחה עצמה.",
+                    body = chargerLines.joinToString(", ") + " כשהטלפון יחובר למטען. " +
+                        "אפשר לתמלל או לסכם שיחה מסוימת עכשיו מתוך השיחה עצמה.",
                     action = "להגדרות",
                     onAction = onOpenSettings,
                 )

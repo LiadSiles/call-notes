@@ -251,6 +251,32 @@ class TranscriptionService : Service() {
             }
         }
 
+        /**
+         * The charger was unplugged (and stayed unplugged — see CallNotesApp's debounce):
+         * a worker set to "only while charging" stops at once unless it's on a call the
+         * user asked for. Its call goes back to the queue (an earlier transcript stays) and
+         * restarts from the beginning when the phone is plugged in again; a model copy in
+         * preparation is discarded. Requested calls still queued run after it stops.
+         */
+        fun pauseForCharger(context: Context) {
+            val prefs = Prefs(context)
+            Handler(Looper.getMainLooper()).post {
+                val svc = instance ?: return@post
+                var paused = false
+                if (prefs.transcribeOnlyCharging && svc.transcribe.running && !svc.transcribe.currentIsManual) {
+                    ProcessingLog.write(context, "charger unplugged: automatic transcription paused")
+                    svc.transcribe.stopNow()
+                    paused = true
+                }
+                if (prefs.summarizeOnlyCharging && svc.summary.running && !svc.summary.currentIsManual) {
+                    ProcessingLog.write(context, "charger unplugged: automatic summaries paused")
+                    svc.summary.stopNow()
+                    paused = true
+                }
+                if (paused) note(context, "המטען נותק — העיבוד האוטומטי ימשיך כשהטלפון יחובר שוב")
+            }
+        }
+
         /** Battery saver turned on (and the user chose to pause): stop now, keep the queue. */
         fun pauseForBatterySaver(context: Context) {
             ProcessingStatus.set(ProcessingStatus.State())
@@ -284,9 +310,13 @@ class TranscriptionService : Service() {
                 note(context, "מושהה — מצב חיסכון בסוללה פעיל")
                 return false
             }
-            // Only-while-charging: automatic starts wait for the charger; explicit requests run.
-            if (callId == null && analyseId == null && com.callnotes.util.Energy.waitingForCharger(context)) {
-                note(context, "ממתין לטעינה — העיבוד יתחיל כשהטלפון יחובר למטען")
+            // Automatic start: only if some automatic step may run now (switched on, and
+            // not waiting for the charger). Explicit requests always run.
+            if (callId == null && analyseId == null &&
+                !com.callnotes.util.Energy.autoTranscribeAllowed(context) && !com.callnotes.util.Energy.autoSummaryAllowed(context)
+            ) {
+                val prefs = Prefs(context)
+                if (prefs.anyAuto) note(context, "ממתין לטעינה — העיבוד יתחיל כשהטלפון יחובר למטען")
                 return false
             }
             val canTranscribe = app.models.readyModel() != null

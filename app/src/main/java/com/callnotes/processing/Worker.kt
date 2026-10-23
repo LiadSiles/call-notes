@@ -75,13 +75,22 @@ abstract class Worker(protected val host: TranscriptionService, val notification
     /** Stops the current call's job without marking it cancelled (it returns to the queue). */
     protected fun cancelItem() { item?.cancel() }
 
-    /** Runs [block] for one call; null if it was cancelled (the worker carries on). */
+    /**
+     * Runs [block] for one call; null if it was cancelled (the worker carries on). The call
+     * runs as its own job so cancelling one call doesn't stop the worker; if the worker
+     * itself is stopped (stop all, battery saver, charger unplugged) the call is stopped too.
+     */
     protected suspend fun runItem(block: suspend () -> Boolean): Boolean? {
+        // Stopped while the model was loading: don't start the call at all.
+        currentCoroutineContext().ensureActive()
         val work = host.scope.async { block() }
         item = work
         return try {
             work.await()
         } catch (e: CancellationException) {
+            // The call was cancelled, or the worker was stopped while waiting for it: make
+            // sure the call stops as well (it runs outside the worker's job).
+            if (work.isActive) { abortNative(); work.cancel() }
             currentCoroutineContext().ensureActive() // the whole worker is stopping
             null
         } finally {

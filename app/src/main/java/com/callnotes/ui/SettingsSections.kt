@@ -268,23 +268,21 @@ internal fun RecordingSettings(prefs: Prefs) {
     Note("ברמקול אוטומטי כל שיחה עוברת לרמקול; הוא לא פועל כשמחוברות אוזניות. בשיחות אינטרנט ייתכן שבחלק מהמכשירים הצד השני לא יישמע.")
 }
 
-/** Battery switches: pause in battery saver, process only while charging. */
+/** Battery switches: transcription / summaries only while charging, pause in battery saver. */
 @Composable
 internal fun BatterySettings(prefs: Prefs) {
     var batterySaver by remember { mutableStateOf(prefs.pauseInBatterySaver) }
-    var charging by remember { mutableStateOf(prefs.onlyWhileCharging) }
-    val ctx = androidx.compose.ui.platform.LocalContext.current
     CardGroup {
-        SwitchRow("עיבוד רק בזמן טעינה", "ההקלטה כרגילה; התמלול והסיכום מחכים למטען.", charging) {
-            charging = it; prefs.onlyWhileCharging = it
-            if (!it && prefs.anyAuto) com.callnotes.processing.TranscriptionService.start(ctx)
-        }
+        OnlyWhileChargingRow(prefs, ProcessingStep.TRANSCRIBE)
+        RowDivider(inset = false)
+        OnlyWhileChargingRow(prefs, ProcessingStep.SUMMARY)
         RowDivider(inset = false)
         SwitchRow("השהיה בחיסכון סוללה", "בזמן חיסכון סוללה לא מקליטים ולא מעבדים.", batterySaver) {
             batterySaver = it; prefs.pauseInBatterySaver = it
         }
     }
-    Note("לחיצה ידנית על \"תמלל\" או \"סכם\" עובדת גם בלי מטען. שיחה שכבר מוקלטת ממשיכה עד סופה, ועבודה שבתור ממשיכה כשהמגבלה מוסרת.")
+    Note("ההקלטה עצמה לא תלויה במטען. ניתוק המטען עוצר תמלול או סיכום אוטומטי אחרי 15 שניות (ניתוק רגעי לא עוצר); " +
+        "השיחה חוזרת לתור ומעובדת מההתחלה כשהטלפון מחובר שוב. מה שביקשת ידנית — \"תמלל\" או \"סכם\" — ממשיך גם בלי מטען.")
     Note("כמה סוללה כל פעולה צרכה מופיע ב\"פרטים טכניים\" של כל שיחה, וכמה צורכת כל מהירות תמלול — בעמוד התמלול.")
 }
 

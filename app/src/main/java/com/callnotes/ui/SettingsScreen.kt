@@ -126,7 +126,9 @@ private fun SettingsHub(contentPadding: PaddingValues, resumeTick: Int, onOpen: 
                 "תזכורות".takeIf { prefs.taskReminders },
             ).joinToString(" · "),
             battery = listOfNotNull(
-                "רק בטעינה".takeIf { prefs.onlyWhileCharging }, "נעצר בחיסכון סוללה".takeIf { prefs.pauseInBatterySaver },
+                "תמלול בטעינה".takeIf { prefs.autoTranscribe && prefs.transcribeOnlyCharging },
+                "סיכום בטעינה".takeIf { prefs.autoSummarize && prefs.summarizeOnlyCharging },
+                "נעצר בחיסכון סוללה".takeIf { prefs.pauseInBatterySaver },
             ).joinToString(" · ").ifEmpty { "ללא הגבלה" },
             privacy = listOfNotNull(
                 "נעילה".takeIf { prefs.appLock },

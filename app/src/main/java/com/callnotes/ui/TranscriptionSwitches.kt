@@ -54,6 +54,8 @@ fun AutoTranscribeSettings(prefs: Prefs) {
             if (it) TranscriptionService.start(context)
         }
         RowDivider(inset = false)
+        OnlyWhileChargingRow(prefs, ProcessingStep.TRANSCRIBE, enabled = auto)
+        RowDivider(inset = false)
         LengthLimit(prefs)
     }
     GroupLabel("יומן")
@@ -77,6 +79,8 @@ fun AutoSummarySettings(prefs: Prefs) {
             auto = it; prefs.autoSummarize = it
             if (it) TranscriptionService.start(context)
         }
+        RowDivider(inset = false)
+        OnlyWhileChargingRow(prefs, ProcessingStep.SUMMARY, enabled = auto)
     }
     Note(
         (if (limit > 0) "חל רק על שיחות של עד $limit דקות (מוגדר בעמוד התמלול). " else "") +
@@ -148,5 +152,31 @@ private fun LengthLimit(prefs: Prefs) {
             shape = MaterialTheme.shapes.small,
             modifier = Modifier.width(104.dp),
         )
+    }
+}
+
+/** The two automatic steps that can each wait for the charger. */
+enum class ProcessingStep { TRANSCRIBE, SUMMARY }
+
+/**
+ * "Only while charging" for one step. Turning it on while unplugged pauses that step's
+ * automatic work in progress (manual requests continue); turning it off resumes the queue.
+ */
+@Composable
+fun OnlyWhileChargingRow(prefs: Prefs, step: ProcessingStep, enabled: Boolean = true) {
+    val context = LocalContext.current
+    val transcribe = step == ProcessingStep.TRANSCRIBE
+    var on by remember { mutableStateOf(if (transcribe) prefs.transcribeOnlyCharging else prefs.summarizeOnlyCharging) }
+    SwitchRow(
+        if (transcribe) "תמלול רק בזמן טעינה" else "סיכום רק בזמן טעינה",
+        if (transcribe) "התמלול האוטומטי מחכה למטען (למשל ללילה)." else "הסיכום האוטומטי מחכה למטען (למשל ללילה).",
+        on,
+        enabled = enabled,
+    ) {
+        on = it
+        if (transcribe) prefs.transcribeOnlyCharging = it else prefs.summarizeOnlyCharging = it
+        ProcessingStatus.touch()
+        if (it && !com.callnotes.util.Energy.pluggedIn(context)) TranscriptionService.pauseForCharger(context)
+        else TranscriptionService.start(context)
     }
 }

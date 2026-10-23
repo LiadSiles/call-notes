@@ -3,6 +3,26 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-23 — "Only while charging" per step, and what unplugging does (0.13.0)
+Owner: separate "transcribe automatically while charging" and "summarise automatically
+while charging", with every edge case covered. `Prefs.transcribeOnlyCharging` /
+`summarizeOnlyCharging` default to the old shared switch. Rules:
+- Gate: `Energy.autoTranscribeAllowed` / `autoSummaryAllowed` (step on, and plugged in if
+  it must be) decide what the workers pick automatically and whether an automatic start
+  of the service happens at all. Manual requests ignore both.
+- Unplugged: after a 15 s grace (`CallNotesApp.UNPLUG_GRACE_MS` — loose cable, wireless pad,
+  quick replug), `TranscriptionService.pauseForCharger` stops each worker whose step is
+  charging-only, unless its current call was requested by the user. Stopped transcription
+  → the call returns to the queue (an earlier transcript stays) and restarts from the
+  beginning later; stopped summary → redone later, old summary/tasks kept; a model copy
+  in preparation → discarded. Requested calls still queued run after the stop. Chosen
+  over "finish the current call": a long call could otherwise run 30+ min on battery.
+- Plugged in: the queue starts at once; also checked at app start (booted on the charger).
+- Turning the switch on while unplugged pauses that step now; turning it off resumes.
+- Found while testing the paths: if a worker was stopped while its model was loading,
+  `runItem` still started the call outside the worker's job and waited for it to finish
+  (stop-all had the same hole). It now refuses to start and cancels a running call.
+
 ### 2026-10-23 — Separate automatic switches; one stage label per call (0.12.0)
 Owner: each call must say clearly whether it was summarised, transcribed or nothing yet;
 automatic transcription and automatic summaries are separate settings on their own pages;

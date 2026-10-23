@@ -56,10 +56,7 @@ class CallNotesApp : Application() {
             DataProtection.applyToAll(this@CallNotesApp)
         }
         val prefs = Prefs(this)
-        // Only-while-charging: plugging in picks up the queue (unplugging lets the current call finish).
-        Energy.watchCharger(this) { plugged ->
-            if (plugged && prefs.anyAuto && prefs.onlyWhileCharging) TranscriptionService.start(this)
-        }
+        watchCharger(prefs)
         // Battery saver on → pause processing; off → pick up what's queued.
         BatterySaver.watch(this) { paused ->
             if (paused) TranscriptionService.pauseForBatterySaver(this)
@@ -67,9 +64,40 @@ class CallNotesApp : Application() {
         }
     }
 
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val unplugged = Runnable {
+        // Still unplugged after the grace period: pause what is set to "only while charging".
+        if (!Energy.pluggedIn(this)) TranscriptionService.pauseForCharger(this)
+    }
+
+    /**
+     * "Only while charging" (per step): plugging in starts the queue; unplugging pauses it
+     * after [UNPLUG_GRACE_MS], so a loose cable, a wireless pad nudged out of place or a
+     * quick unplug-replug doesn't throw away work in progress. Also checked once at
+     * start-up (the phone may have booted on the charger).
+     */
+    private fun watchCharger(prefs: Prefs) {
+        fun anyWaitsForCharger() = prefs.autoTranscribe && prefs.transcribeOnlyCharging ||
+            prefs.autoSummarize && prefs.summarizeOnlyCharging
+        Energy.watchCharger(this) { plugged ->
+            main.removeCallbacks(unplugged)
+            if (plugged) {
+                if (anyWaitsForCharger()) TranscriptionService.start(this)
+            } else {
+                main.postDelayed(unplugged, UNPLUG_GRACE_MS)
+            }
+        }
+        if (anyWaitsForCharger() && Energy.pluggedIn(this)) TranscriptionService.start(this)
+    }
+
     /** Work that should outlive the screen that started it (e.g. converting recordings). */
     fun launchBackground(block: suspend () -> Unit) {
         appScope.launch { block() }
+    }
+
+    private companion object {
+        /** How long the charger must stay unplugged before automatic work pauses. */
+        const val UNPLUG_GRACE_MS = 15_000L
     }
 
     /**

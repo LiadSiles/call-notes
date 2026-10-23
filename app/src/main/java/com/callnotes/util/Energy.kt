@@ -46,8 +46,20 @@ object Energy {
         return (i?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
     }
 
-    /** "Process only while charging" is on and the phone isn't plugged in. */
-    fun waitingForCharger(context: Context): Boolean = Prefs(context).onlyWhileCharging && !pluggedIn(context)
+    /** Automatic transcription is set to wait for the charger, and the phone isn't plugged in. */
+    fun transcribeWaitsForCharger(context: Context): Boolean =
+        Prefs(context).transcribeOnlyCharging && !pluggedIn(context)
+
+    /** Automatic summaries are set to wait for the charger, and the phone isn't plugged in. */
+    fun summaryWaitsForCharger(context: Context): Boolean =
+        Prefs(context).summarizeOnlyCharging && !pluggedIn(context)
+
+    /**
+     * Automatic work that may run now: each step is on, and not waiting for the charger.
+     * Manual requests don't look at this.
+     */
+    fun autoTranscribeAllowed(context: Context) = Prefs(context).autoTranscribe && !transcribeWaitsForCharger(context)
+    fun autoSummaryAllowed(context: Context) = Prefs(context).autoSummarize && !summaryWaitsForCharger(context)
 
     /** Charger connected / disconnected, for the life of the process. */
     fun watchCharger(context: Context, onChange: (plugged: Boolean) -> Unit) {

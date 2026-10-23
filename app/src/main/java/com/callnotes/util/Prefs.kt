@@ -66,8 +66,18 @@ class Prefs(context: Context) {
     /** Do nothing (record, transcribe, summarise) while the phone's battery saver is on. */
     var pauseInBatterySaver by bool(KEY_SAVER, false)
 
-    /** Transcribe and summarise only while the phone is plugged in. */
-    var onlyWhileCharging by bool(KEY_CHARGING, false)
+    /**
+     * Automatic transcription only while the phone is plugged in (0.13). Until first set
+     * it follows the old single "only while charging" switch (0.9.1–0.12).
+     */
+    var transcribeOnlyCharging: Boolean
+        get() = sp.getBoolean(KEY_T_CHARGING, sp.getBoolean(KEY_CHARGING, false))
+        set(value) = sp.edit().putBoolean(KEY_T_CHARGING, value).apply()
+
+    /** Automatic summaries only while the phone is plugged in (same migration as above). */
+    var summarizeOnlyCharging: Boolean
+        get() = sp.getBoolean(KEY_S_CHARGING, sp.getBoolean(KEY_CHARGING, false))
+        set(value) = sp.edit().putBoolean(KEY_S_CHARGING, value).apply()
 
     /** Measured speed per preset: total call audio and total recognition time, in ms. */
     fun speedStats(preset: String): Pair<Long, Long> =
@@ -182,7 +192,10 @@ class Prefs(context: Context) {
         private const val KEY_SPEAKER = "auto_speaker_v2"
         private const val KEY_AUTO = "auto_transcribe"
         private const val KEY_SAVER = "pause_battery_saver"
+        /** Pre-0.13 shared switch; read only as the default of the two below. */
         private const val KEY_CHARGING = "only_while_charging"
+        private const val KEY_T_CHARGING = "transcribe_only_charging"
+        private const val KEY_S_CHARGING = "summarize_only_charging"
         private const val KEY_REMINDERS = "task_reminders"
         private const val KEY_AUDIO_DAYS = "audio_retention_days"
         private const val KEY_CALL_DAYS = "call_retention_days"
@@ -194,7 +207,7 @@ class Prefs(context: Context) {
         private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
             KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
-            KEY_AUTO_SUMMARY,
+            KEY_AUTO_SUMMARY, KEY_T_CHARGING, KEY_S_CHARGING,
         )
 
         /** Range of the length limit in settings, in minutes. */
