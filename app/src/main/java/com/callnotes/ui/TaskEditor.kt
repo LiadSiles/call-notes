@@ -222,7 +222,7 @@ internal fun TaskEditorFields(
             Choice("היום", date == today) { onDate(today) }
             Choice("מחר", date == today.plusDays(1)) { onDate(today.plusDays(1)) }
             val other = date != null && date != today && date != today.plusDays(1)
-            Choice(if (other) date!!.format(DAY) else "תאריך…", other, icon = true, onClick = onPickDate)
+            Choice(if (other) date.format(DAY) else "תאריך…", other, icon = true, onClick = onPickDate)
         }
         Label("שעה")
         Row(verticalAlignment = Alignment.CenterVertically) {

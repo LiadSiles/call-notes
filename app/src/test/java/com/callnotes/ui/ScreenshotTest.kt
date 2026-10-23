@@ -103,6 +103,17 @@ class ScreenshotTest {
         }
     }
 
+    @Test fun settingsSummaries() = shot("settings_summaries") {
+        val prefs = Prefs(LocalContext.current)
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
+            item { SubPageBar("סיכומים", onBack = {}) }
+            item { GroupLabel("איכות") }
+            item { SummaryModeSettings(prefs) }
+            item { GroupLabel("משימות") }
+            item { ReminderSettings(prefs) }
+        }
+    }
+
     private fun call(
         id: Long, name: String?, minutesAgo: Long, dur: Long,
         status: String = CallStatus.TRANSCRIBED, kind: String = CallKind.CELLULAR, analysis: String? = null,
