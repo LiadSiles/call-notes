@@ -1,2 +1,1 @@
-w: app/src/main/java/com/callnotes/ui/TaskEditor.kt:225:35 Unnecessary non-null assertion (!!) on a non-null receiver of type 'LocalDate'.
 w: ⚠️ Deprecated Gradle Version
