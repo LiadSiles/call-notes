@@ -79,11 +79,13 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
+        visible = true
         AppLock.onStart(this)
     }
 
     override fun onStop() {
         super.onStop()
+        visible = false
         AppLock.onStop()
     }
 
@@ -101,6 +103,10 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     }
 
     companion object {
+        /** The app is on screen (a finished voice task needs no notification then). */
+        @Volatile var visible = false
+            private set
+
         /** Call to open, set from a notification tap; consumed by [AppRoot]. */
         val openRequest = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
         /** Task to show in the tasks screen, from a "new task" notification. */
@@ -144,6 +150,8 @@ private fun AppRoot() {
             if (prefs.autoTranscribe && dao.pendingCount(prefs.autoMaxMs) > 0 || analysable) {
                 TranscriptionService.start(context)
             }
+            // Voice notes interrupted earlier (app closed, battery saver, stop all).
+            com.callnotes.util.VoiceMemos.resume(context)
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {

@@ -7,17 +7,35 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-// Encryption (SQLCipher) is planned for 0.8; the prototype keeps plain Room.
 /**
  * Room database `callnotes.db`. Schema changes are explicit migrations (never destructive);
  * optional SQLCipher encryption is set up in [build] via DataProtection.
  */
-@Database(entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class], version = 10, exportSchema = false)
+@Database(
+    entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class, VoiceMemoEntity::class],
+    version = 11,
+    exportSchema = false,
+)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun calls(): CallDao
 
     companion object {
+        /** Tasks: time of day, snooze, where it came from, edited by hand; voice notes. */
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tasks ADD COLUMN dueTime TEXT")
+                db.execSQL("ALTER TABLE tasks ADD COLUMN snoozedUntil INTEGER")
+                db.execSQL("ALTER TABLE tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'call'")
+                db.execSQL("ALTER TABLE tasks ADD COLUMN edited INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `voice_memos` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, `path` TEXT, `durationMs` INTEGER NOT NULL, " +
+                        "`state` TEXT NOT NULL, `text` TEXT, `error` TEXT)"
+                )
+            }
+        }
+
         /** 0.2.1: internet-call support adds the call kind. */
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -32,7 +50,6 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        /** 0.3: transcripts. */
         /** Calls: battery and time used by transcription and summary. */
         private val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -94,6 +111,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** 0.3: transcripts. */
         private val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE calls ADD COLUMN transcriptModel TEXT")
@@ -111,7 +129,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context): AppDatabase {
             val builder = Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
             when (com.callnotes.security.DataProtection.prepareDatabase(context, context.getDatabasePath(NAME))) {
                 com.callnotes.security.DataProtection.Db.ENCRYPTED -> {
                     com.callnotes.security.DbCrypt.loadLibrary()

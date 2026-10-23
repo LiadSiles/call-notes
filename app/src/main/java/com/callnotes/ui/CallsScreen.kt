@@ -210,6 +210,8 @@ fun CallsScreen(
                             Phase.ANALYZING -> "מסכם"
                             Phase.WAITING_MEMORY -> "ממתין לזיכרון כדי לסכם"
                             Phase.WAITING_THERMAL -> "הטלפון חם — ממתין שיתקרר"
+                            Phase.MEMO_TRANSCRIBING -> "מתמלל הקלטת משימה"
+                            Phase.MEMO_TASK -> "מכין משימה מההקלטה"
                             else -> if (st.progressMax > 0) "מתמלל · ${st.progress * 100 / st.progressMax}%" else "מתמלל"
                         } + (who?.let { " · $it" } ?: "")
                         Text(label, style = MaterialTheme.typography.bodyMedium)

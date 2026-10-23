@@ -17,6 +17,9 @@ object Phase {
     const val LOADING_ANALYZER = "loading_analyzer"
     const val WAITING_MEMORY = "waiting_memory"
     const val ANALYZING = "analyzing"
+    // Voice notes on their way to becoming tasks
+    const val MEMO_TRANSCRIBING = "memo_transcribing"
+    const val MEMO_TASK = "memo_task"
     // Both
     const val WAITING_THERMAL = "waiting_thermal"
 }
@@ -35,6 +38,8 @@ object ProcessingStatus {
         val phase: String = "",
         /** When the current phase started (for "loading the model… 0:24"). */
         val since: Long = System.currentTimeMillis(),
+        /** Voice note being turned into a task now, or null. */
+        val memoId: Long? = null,
     )
 
     private val _state = MutableStateFlow(State())

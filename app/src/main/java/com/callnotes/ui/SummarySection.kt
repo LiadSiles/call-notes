@@ -195,7 +195,7 @@ private fun TaskRow(t: TaskEntity, owner: String?, callLabel: String, onOpen: ((
                 textDecoration = if (t.done) TextDecoration.LineThrough else null,
                 color = if (t.done) cs.onSurfaceVariant else cs.onSurface,
             )
-            val meta = listOfNotNull(owner, dueLabel(t.dueDate, t.duePhrase)).joinToString(" · ")
+            val meta = listOfNotNull(owner, dueLabel(t.dueDate, t.dueTime, t.duePhrase)).joinToString(" · ")
             if (meta.isNotEmpty()) Text(meta, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
             t.quote?.let {
                 Text("\"$it\"", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,

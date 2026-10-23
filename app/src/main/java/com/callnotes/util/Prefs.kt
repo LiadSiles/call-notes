@@ -113,8 +113,11 @@ class Prefs(context: Context) {
 
     // ---- Tasks -------------------------------------------------------------------------
 
-    /** A notification on the morning a task is due. */
+    /** A pop-up notification when a task is due (its time, or the morning of its date). */
     var taskReminders by bool(KEY_REMINDERS, true)
+
+    /** Minutes a reminder's "Snooze" button puts it off by (one of [SNOOZE_CHOICES]). */
+    var snoozeMinutes by int(KEY_SNOOZE, 10)
 
     // ---- Privacy and storage -----------------------------------------------------------
 
@@ -197,6 +200,7 @@ class Prefs(context: Context) {
         private const val KEY_T_CHARGING = "transcribe_only_charging"
         private const val KEY_S_CHARGING = "summarize_only_charging"
         private const val KEY_REMINDERS = "task_reminders"
+        private const val KEY_SNOOZE = "snooze_minutes"
         private const val KEY_AUDIO_DAYS = "audio_retention_days"
         private const val KEY_CALL_DAYS = "call_retention_days"
         private const val KEY_WIFI = "wifi_only"
@@ -206,9 +210,12 @@ class Prefs(context: Context) {
         /** What "restore defaults" resets. */
         private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
-            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
+            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
             KEY_AUTO_SUMMARY, KEY_T_CHARGING, KEY_S_CHARGING,
         )
+
+        /** Snooze lengths offered in settings, in minutes. */
+        val SNOOZE_CHOICES = listOf(5, 10, 15, 30, 60)
 
         /** Range of the length limit in settings, in minutes. */
         const val AUTO_MAX_MIN = 1

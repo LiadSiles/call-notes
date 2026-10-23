@@ -113,10 +113,21 @@ object AnalysisStatus {
     const val SKIPPED = "skipped"
 }
 
-/** A task found in a call (DB v6). */
+/** Where a task came from (DB v11). */
+object TaskSource {
+    /** Found by the summary of a call. */
+    const val CALL = "call"
+    /** Typed in by the user. */
+    const val MANUAL = "manual"
+    /** Said into the record button; Gemma wrote it from the transcript. */
+    const val VOICE = "voice"
+}
+
+/** A task: found in a call (DB v6), or added by the user by typing or by voice (DB v11). */
 @Entity(tableName = "tasks", indices = [Index("callId")])
 data class TaskEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** The call it came from, or [NO_CALL] for a task the user added. */
     val callId: Long,
     val idx: Int,
     val title: String,
@@ -126,6 +137,7 @@ data class TaskEntity(
     val dueDate: String?,
     /** The words used in the call ("עד יום שלישי"), or null. */
     val duePhrase: String?,
+    /** The words it came from: a line of the call, or the whole voice note. */
     val quote: String?,
     val done: Boolean = false,
     /** 1-based transcript lines it came from, comma-separated (DB v7). */
@@ -133,23 +145,69 @@ data class TaskEntity(
     /** False = the summariser wasn't sure, or the app couldn't verify it (DB v7). */
     val certain: Boolean = true,
     val createdAt: Long = 0,
-    /** When its due-date reminder was shown, or null (DB v8). */
+    /** When its reminder was last shown, or null (DB v8). */
     val remindedAt: Long? = null,
     /** An open task from an earlier call that this one repeats, or null (DB v8). */
     val duplicateOf: Long? = null,
+    /** Time of day it is due, "HH:mm", or null = the morning reminder hour (DB v11). */
+    val dueTime: String? = null,
+    /** "Snooze" was tapped on its reminder: show it again at this time (DB v11). */
+    val snoozedUntil: Long? = null,
+    /** [TaskSource] (DB v11). */
+    val source: String = TaskSource.CALL,
+    /** The user changed it by hand: a new summary of its call keeps it as it is (DB v11). */
+    val edited: Boolean = false,
 ) {
     /** First source line as a segment index (0-based), or null. */
     val firstSegment: Int? get() = lines?.split(',')?.firstNotNullOfOrNull { it.trim().toIntOrNull() }?.minus(1)
+
+    /** Added by the user, not found in a call. */
+    val standalone: Boolean get() = callId == NO_CALL
+
+    companion object {
+        /** [callId] of a task the user added (no call has id 0). */
+        const val NO_CALL = 0L
+    }
 }
 
-/** A task with the call it came from, for the tasks screen. */
+/** A task with the call it came from (call fields null for a task the user added). */
 data class TaskListItem(
     @androidx.room.Embedded val task: TaskEntity,
-    val callStartedAt: Long,
+    val callStartedAt: Long?,
     val callContactName: String?,
     val callNumber: String?,
-    val callKind: String,
-    val callIncoming: Boolean,
+    val callKind: String?,
+    val callIncoming: Boolean?,
+)
+
+/** Where a voice note waiting to become a task stands (DB v11). */
+object MemoState {
+    /** Recorded; waiting for transcription. */
+    const val RECORDED = "recorded"
+    /** Transcribed (the audio is already deleted); waiting for Gemma. */
+    const val TRANSCRIBED = "transcribed"
+    /** Gemma found no task in it; the text is kept so the user can write one. */
+    const val NO_TASK = "no_task"
+    const val FAILED = "failed"
+}
+
+/**
+ * A voice note recorded with the "record a task" button, on its way to becoming a task:
+ * audio → Whisper → text → Gemma → task. Removed once the task exists; the audio file is
+ * deleted as soon as it is transcribed (DB v11).
+ */
+@Entity(tableName = "voice_memos")
+data class VoiceMemoEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val createdAt: Long,
+    /** The 16 kHz WAV in app-private storage, or null once transcribed. */
+    val path: String?,
+    val durationMs: Long,
+    /** [MemoState]. */
+    val state: String,
+    /** The transcript, once there is one. */
+    val text: String? = null,
+    val error: String? = null,
 )
 
 /** One search match: a transcript line (segmentIdx set) or the call itself (summary, name, task). */

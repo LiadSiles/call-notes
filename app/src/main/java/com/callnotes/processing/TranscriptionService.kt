@@ -28,7 +28,8 @@ import java.io.File
 
 /**
  * Background processing: two workers at the same time — [TranscribeWorker] (Whisper +
- * speakers) and [SummaryWorker] (Gemma). Each shows its own notification naming the call
+ * speakers) and [SummaryWorker] (Gemma). Voice notes for new tasks pass through both
+ * (Whisper, then Gemma) ahead of the calls. Each shows its own notification naming the call
  * it is working on, with a cancel button, and removes it when done; the service stays in
  * the foreground with whichever is running and stops when both are idle.
  *
@@ -85,6 +86,7 @@ class TranscriptionService : Service() {
             }
         }
         stoppingAll = false
+        if (intent?.getBooleanExtra(EXTRA_MEMO, false) == true) transcribe.onMemo()
         intent?.getLongExtra(EXTRA_CALL_ID, -1L)?.takeIf { it > 0 }?.let { transcribe.onRequest(it) }
         if (intent?.getBooleanExtra(EXTRA_AFTER_CALL, false) == true && !transcribe.running) transcribe.delayFirst = true
         ensure(transcribe)
@@ -116,9 +118,14 @@ class TranscriptionService : Service() {
     private fun onWorkerDone(w: Worker, job: Job) {
         if (w.job === job) w.job = null
         hideWorkNow(w)
-        // A request may have slipped in while the worker was finishing.
-        if (!stoppingAll && w === transcribe && ProcessingStatus.firstRequested() != null) { ensure(transcribe); return }
-        if (!stoppingAll && w === summary && ProcessingStatus.firstAnalysisRequested() != null) { ensure(summary); return }
+        // A request, a voice note or a finished transcript may have slipped in while the
+        // worker was finishing.
+        if (!stoppingAll && w === transcribe && (ProcessingStatus.firstRequested() != null || transcribe.memoWaiting)) {
+            ensure(transcribe); return
+        }
+        if (!stoppingAll && w === summary && (ProcessingStatus.firstAnalysisRequested() != null || summary.wake.tryReceive().isSuccess)) {
+            ensure(summary); return
+        }
         finishIfIdle()
     }
 
@@ -222,6 +229,7 @@ class TranscriptionService : Service() {
     companion object {
         private const val EXTRA_AFTER_CALL = "after_call"
         private const val EXTRA_CALL_ID = "call_id"
+        private const val EXTRA_MEMO = "memo"
         const val ACTION_STOP = "com.callnotes.action.STOP_TRANSCRIPTION"
 
         @Volatile private var instance: TranscriptionService? = null
@@ -274,6 +282,45 @@ class TranscriptionService : Service() {
                     paused = true
                 }
                 if (paused) note(context, "המטען נותק — העיבוד האוטומטי ימשיך כשהטלפון יחובר שוב")
+            }
+        }
+
+        /**
+         * Turns waiting voice notes into tasks now: they go ahead of everything (an
+         * automatic call in progress is paused and requeued). Not held back by the
+         * automatic switches or "only while charging" — the user asked for it — but battery
+         * saver (when set to pause) still applies. [needsTranscription]: a note is waiting
+         * for Whisper (only then is a running automatic call paused for it). Returns false
+         * if it couldn't start.
+         */
+        fun startMemo(context: Context, needsTranscription: Boolean = true): Boolean {
+            val app = context.applicationContext as CallNotesApp
+            if (com.callnotes.util.BatterySaver.paused(context)) {
+                note(context, "מושהה — מצב חיסכון בסוללה פעיל. ההקלטה תהפוך למשימה כשיכבה.")
+                return false
+            }
+            if (app.models.readyModel() == null || app.models.readyModel(ModelRole.ANALYZE) == null) {
+                note(context, "כדי להפוך הקלטה למשימה צריך מודל תמלול ומודל סיכום — הורד אותם בהגדרות")
+                return false
+            }
+            return try {
+                ContextCompat.startForegroundService(context,
+                    Intent(context, TranscriptionService::class.java).putExtra(EXTRA_MEMO, needsTranscription))
+                true
+            } catch (e: Exception) {
+                ProcessingLog.write(context, "service start refused (voice note): ${describe(e)}")
+                note(context, "העיבוד לא הופעל (${e.javaClass.simpleName}). ינסה שוב כשהאפליקציה תיפתח.")
+                false
+            }
+        }
+
+        /** A voice note was deleted: stop working on it if either worker is. */
+        fun cancelMemo(id: Long) {
+            if (ProcessingStatus.state.value.memoId == id) ProcessingStatus.set(ProcessingStatus.State(running = true))
+            if (ProcessingStatus.summary.value.memoId == id) ProcessingStatus.setSummary(ProcessingStatus.State(running = true))
+            Handler(Looper.getMainLooper()).post {
+                instance?.transcribe?.cancelMemo(id)
+                instance?.summary?.cancelMemo(id)
             }
         }
 

@@ -22,6 +22,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
     <!-- Install-time (no prompt): re-plans task due-date reminders after a restart. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Optional, off until the user allows it ("Alarms & reminders"): task reminders on the
+         minute. Without it they still come, possibly a few minutes late. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Install-time (no prompt): lets the app show the battery-exemption dialog. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -84,8 +87,14 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="android.intent.action.TIME_SET" />
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- "Done" / "Snooze" on a task reminder; only our own notifications can reach it. -->
+        <receiver
+            android:name=".util.TaskReminders$ActionReceiver"
+            android:exported="false" />
 
         <!-- Optional GPU acceleration for LiteRT-LM (CPU is used today). -->
         <uses-native-library android:name="libOpenCL.so" android:required="false" />

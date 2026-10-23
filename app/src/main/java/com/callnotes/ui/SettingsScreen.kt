@@ -251,7 +251,7 @@ private fun SettingsSubPage(
                 item { GroupLabel("אוטומטי") }
                 item { key(resetKey) { AutoSummarySettings(prefs) } }
                 item { GroupLabel("משימות") }
-                item { key(resetKey) { ReminderSettings(prefs) } }
+                item { key(resetKey) { ReminderSettings(prefs, resumeTick) } }
             }
             SettingsPage.BATTERY -> {
                 item { GroupLabel("מתי לעבד") }

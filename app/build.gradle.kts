@@ -17,8 +17,8 @@ android {
         applicationId = "com.callnotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 33
-        versionName = "0.13.0"
+        versionCode = 34
+        versionName = "0.14.0"
 
         // LiteRT-LM ships native libraries; phones are arm64. Keeps the APK small.
         ndk { abiFilters += "arm64-v8a" }

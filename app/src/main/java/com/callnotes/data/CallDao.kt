@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -129,7 +130,7 @@ abstract class CallDao {
     abstract suspend fun setAnalysis(id: Long, json: String, title: String?, model: String)
 
     @Insert
-    abstract suspend fun insertTasks(tasks: List<TaskEntity>)
+    abstract suspend fun insertTasks(tasks: List<TaskEntity>): List<Long>
 
     @Query("DELETE FROM tasks WHERE callId = :callId")
     abstract suspend fun deleteTaskRows(callId: Long)
@@ -144,6 +145,15 @@ abstract class CallDao {
         deleteTaskRows(callId)
     }
 
+    @Query("DELETE FROM tasks WHERE callId = :callId AND edited = 0")
+    abstract suspend fun deleteUneditedTaskRows(callId: Long)
+
+    @Query(
+        "UPDATE tasks SET duplicateOf = NULL WHERE duplicateOf IN " +
+            "(SELECT id FROM tasks WHERE callId = :callId AND edited = 0)"
+    )
+    abstract suspend fun releaseRepeatsOfUnedited(callId: Long)
+
     /** Tasks in other calls marked as repeating one of this call's tasks, with that task's title. */
     @Query(
         "SELECT d.id AS id, o.title AS originalTitle FROM tasks d JOIN tasks o ON d.duplicateOf = o.id " +
@@ -153,7 +163,9 @@ abstract class CallDao {
 
     @Transaction
     open suspend fun replaceAnalysis(callId: Long, json: String, title: String?, model: String, tasks: List<TaskEntity>) {
-        deleteTasks(callId)
+        // Tasks the user edited by hand stay as they are; the summary's own are replaced.
+        releaseRepeatsOfUnedited(callId)
+        deleteUneditedTaskRows(callId)
         insertTasks(tasks)
         setAnalysis(callId, json, title, model)
     }
@@ -166,28 +178,87 @@ abstract class CallDao {
      * duplicates), so one real-world task is done in one tap.
      */
     @Query(
-        "UPDATE tasks SET done = :done WHERE id = :id OR duplicateOf = :id " +
+        "UPDATE tasks SET done = :done, snoozedUntil = NULL WHERE id = :id OR duplicateOf = :id " +
             "OR id = (SELECT duplicateOf FROM tasks WHERE id = :id) " +
             "OR duplicateOf = (SELECT duplicateOf FROM tasks WHERE id = :id AND duplicateOf IS NOT NULL)"
     )
     abstract suspend fun setTaskDone(id: Long, done: Boolean)
 
-    /** The next task whose due-date reminder hasn't been shown. */
+    /**
+     * Open tasks with a reminder still to show: dated and not reminded yet, or snoozed.
+     * When each is due is worked out in code (date + time of day in the phone's time zone).
+     */
     @Query(
         "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND dueDate IS NOT NULL " +
-            "AND remindedAt IS NULL ORDER BY dueDate LIMIT 1"
+            "AND (remindedAt IS NULL OR snoozedUntil IS NOT NULL)"
     )
-    abstract suspend fun nextReminder(): TaskEntity?
+    abstract suspend fun reminderCandidates(): List<TaskEntity>
 
-    /** Tasks due on or before [today] (yyyy-MM-dd) that haven't been reminded yet. */
-    @Query(
-        "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND dueDate IS NOT NULL " +
-            "AND dueDate <= :today AND remindedAt IS NULL"
-    )
-    abstract suspend fun dueUnreminded(today: String): List<TaskEntity>
-
-    @Query("UPDATE tasks SET remindedAt = :at WHERE id IN (:ids)")
+    /** Reminder shown: not again unless snoozed (or its date or time is changed). */
+    @Query("UPDATE tasks SET remindedAt = :at, snoozedUntil = NULL WHERE id IN (:ids)")
     abstract suspend fun markReminded(ids: List<Long>, at: Long)
+
+    @Query("UPDATE tasks SET snoozedUntil = :until WHERE id = :id")
+    abstract suspend fun snooze(id: Long, until: Long)
+
+    // --- Tasks the user adds, edits or deletes ---
+
+    @Insert
+    abstract suspend fun insertTask(task: TaskEntity): Long
+
+    @Update
+    abstract suspend fun updateTask(task: TaskEntity)
+
+    @Query("SELECT * FROM tasks WHERE id = :id")
+    abstract suspend fun getTask(id: Long): TaskEntity?
+
+    @Query("UPDATE tasks SET duplicateOf = NULL WHERE duplicateOf = :id")
+    abstract suspend fun releaseRepeatsOfTask(id: Long)
+
+    @Query("DELETE FROM tasks WHERE id = :id")
+    abstract suspend fun deleteTaskRow(id: Long)
+
+    /** Deletes one task; tasks marked as repeating it stand on their own again. */
+    @Transaction
+    open suspend fun deleteTask(id: Long) {
+        releaseRepeatsOfTask(id)
+        deleteTaskRow(id)
+    }
+
+    // --- Voice notes on their way to becoming tasks ---
+
+    @Insert
+    abstract suspend fun insertMemo(memo: VoiceMemoEntity): Long
+
+    @Query("SELECT * FROM voice_memos ORDER BY createdAt")
+    abstract fun observeMemos(): Flow<List<VoiceMemoEntity>>
+
+    @Query("SELECT * FROM voice_memos WHERE id = :id")
+    abstract suspend fun getMemo(id: Long): VoiceMemoEntity?
+
+    /** Oldest voice note in [state] ([MemoState]). */
+    @Query("SELECT * FROM voice_memos WHERE state = :state ORDER BY createdAt LIMIT 1")
+    abstract suspend fun nextMemo(state: String): VoiceMemoEntity?
+
+    @Query("SELECT COUNT(*) FROM voice_memos WHERE state = :state")
+    abstract suspend fun memoCount(state: String): Int
+
+    @Query("UPDATE voice_memos SET state = :state, path = :path, text = :text, error = :error WHERE id = :id")
+    abstract suspend fun setMemo(id: Long, state: String, path: String?, text: String?, error: String?)
+
+    @Query("SELECT COUNT(*) FROM voice_memos WHERE path = :path")
+    abstract suspend fun memoWithPath(path: String): Int
+
+    @Query("DELETE FROM voice_memos WHERE id = :id")
+    abstract suspend fun deleteMemo(id: Long)
+
+    /** The voice note became [tasks]: saved, and the note is gone. Returns the new ids. */
+    @Transaction
+    open suspend fun memoToTasks(memoId: Long, tasks: List<TaskEntity>): List<Long> {
+        val ids = insertTasks(tasks)
+        deleteMemo(memoId)
+        return ids
+    }
 
     /** Open, original tasks from other calls since [since], to spot repeats. */
     @Query(
@@ -204,13 +275,16 @@ abstract class CallDao {
     @Query("SELECT * FROM tasks WHERE callId = :callId ORDER BY idx")
     abstract suspend fun tasksOf(callId: Long): List<TaskEntity>
 
-    /** All tasks with their call: open first, then by due date (none last), newest first. */
+    /**
+     * All tasks with their call (none for tasks the user added): open first, then by due
+     * date and time (none last), newest first.
+     */
     @Query(
         "SELECT tasks.*, calls.startedAt AS callStartedAt, calls.contactName AS callContactName, " +
             "calls.number AS callNumber, calls.kind AS callKind, calls.incoming AS callIncoming " +
-            "FROM tasks JOIN calls ON calls.id = tasks.callId " +
+            "FROM tasks LEFT JOIN calls ON calls.id = tasks.callId " +
             "ORDER BY tasks.done, CASE WHEN tasks.dueDate IS NULL THEN 1 ELSE 0 END, tasks.dueDate, " +
-            "tasks.createdAt DESC, tasks.idx"
+            "COALESCE(tasks.dueTime, '09:00'), tasks.createdAt DESC, tasks.idx"
     )
     abstract fun observeAllTasks(): Flow<List<TaskListItem>>
 

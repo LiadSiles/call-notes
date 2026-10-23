@@ -23,6 +23,9 @@ import com.callnotes.data.CallListItem
 import com.callnotes.data.CallStatus
 import com.callnotes.data.TaskEntity
 import com.callnotes.data.TaskListItem
+import com.callnotes.data.TaskSource
+import com.callnotes.data.MemoState
+import com.callnotes.data.VoiceMemoEntity
 import com.callnotes.processing.ProcessingStatus
 import com.callnotes.ui.theme.CallNotesTheme
 import com.callnotes.util.Prefs
@@ -94,6 +97,8 @@ class ScreenshotTest {
             item { AutoTranscribeSettings(prefs) }
             item { GroupLabel("סיכומים (בעמוד הסיכומים)") }
             item { AutoSummarySettings(prefs) }
+            item { GroupLabel("משימות") }
+            item { ReminderSettings(prefs) }
         }
     }
 
@@ -145,6 +150,58 @@ class ScreenshotTest {
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
             item { PageHeader("משימות", subtitle = "2 פתוחות · מהשיחות שלך") {} }
             items.forEach { t -> item { TaskCard(t, emptyList(), false, {}, {}, {}) } }
+        }
+    }
+
+    private fun standalone(id: Long, title: String, source: String, date: String?, time: String?) = TaskListItem(
+        TaskEntity(id = id, callId = TaskEntity.NO_CALL, idx = 0, title = title, owner = "me", dueDate = date,
+            duePhrase = null, quote = null, dueTime = time, source = source, createdAt = NOW - 600_000),
+        null, null, null, null, null,
+    )
+
+    @Test fun tasksWithAdding() = shot("tasks_add") {
+        val memos = listOf(
+            VoiceMemoEntity(id = 1, createdAt = NOW - 60_000, path = "/m.wav", durationMs = 7_000, state = MemoState.RECORDED),
+            VoiceMemoEntity(id = 2, createdAt = NOW - 120_000, path = null, durationMs = 5_000, state = MemoState.TRANSCRIBED,
+                text = "תזכיר לי מחר בעשר להתקשר לרופא שיניים"),
+            VoiceMemoEntity(id = 3, createdAt = NOW - 900_000, path = null, durationMs = 3_000, state = MemoState.NO_TASK,
+                text = "אה, רגע, לא משנה"),
+        )
+        val transcribing = ProcessingStatus.State(running = true, progress = 30, progressMax = 100,
+            phase = com.callnotes.processing.Phase.MEMO_TRANSCRIBING, memoId = 1)
+        val tomorrow = java.time.LocalDate.now().plusDays(1).toString()
+        val items = listOf(
+            standalone(10, "להתקשר לרופא שיניים", TaskSource.VOICE, tomorrow, "10:00"),
+            standalone(11, "לקנות מתנה לאמא", TaskSource.MANUAL, null, null),
+        )
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+            LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 104.dp)) {
+                item { PageHeader("משימות", subtitle = "2 פתוחות") {} }
+                memos.forEach { m -> item { MemoCard(m, transcribing, ProcessingStatus.State(), {}, {}, {}) } }
+                items.forEach { t -> item { TaskCard(t, emptyList(), false, {}, {}, {}) } }
+            }
+            AddTaskButtons({}, {}, Modifier.align(androidx.compose.ui.Alignment.BottomStart))
+        }
+    }
+
+    @OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
+    @Test fun taskEditor() {
+        val task = TaskEntity(id = 5, callId = 1, idx = 0, title = "לשלוח לדני את הצעת המחיר", owner = "me",
+            dueDate = java.time.LocalDate.now().plusDays(1).toString(), duePhrase = "מחר", quote = "אשלח לך מחר", dueTime = "17:00")
+        compose.setContent {
+            CallNotesTheme {
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {}
+                    TaskEditorDialog(task, onDismiss = {})
+                }
+            }
+        }
+        com.github.takahirom.roborazzi.captureScreenRoboImage("build/screenshots/task_editor.png")
+    }
+
+    @Test fun voiceTask() = shot("voice_task") {
+        Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.padding(24.dp)) {
+            Column(Modifier.padding(24.dp)) { VoiceTaskBody(elapsed = 14_000, level = 0.6f) }
         }
     }
 

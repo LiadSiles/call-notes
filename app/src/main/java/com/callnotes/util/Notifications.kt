@@ -17,15 +17,18 @@ import com.callnotes.ui.MainActivity
 
 /**
  * Every notification the app shows: recording in progress, one per background operation
- * (with Cancel / Stop all), new and due tasks, and problems. Channels: "recording" (quiet,
- * ongoing), "alerts" (problems, speaker prompt), "tasks". With the app lock on, task and
- * processing notifications hide their text on the lock screen.
+ * (with Cancel / Stop all), new tasks, task reminders, and problems. Channels: "recording"
+ * (quiet, ongoing), "alerts" (problems, speaker prompt), "tasks" (new tasks), "reminders"
+ * (pops up on screen, with Done / Snooze). With the app lock on, task and processing
+ * notifications hide their text on the lock screen.
  */
 object Notifications {
 
     private const val CHANNEL_RECORDING = "recording"
     private const val CHANNEL_ALERTS = "alerts"
     private const val CHANNEL_TASKS = "tasks"
+    /** High importance: a reminder pops up over whatever is on screen (heads-up). */
+    private const val CHANNEL_REMINDERS = "reminders"
 
     const val ID_RECORDING = 1
     /** Transcription in progress. */
@@ -45,6 +48,11 @@ object Notifications {
         )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_TASKS, "משימות חדשות", NotificationManager.IMPORTANCE_DEFAULT)
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_REMINDERS, "תזכורות למשימות", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "קופצות בזמן שנקבע למשימה, עם \"בוצע\" ו\"נודניק\"."
+            }
         )
     }
 
@@ -102,30 +110,70 @@ object Notifications {
         val due = task.dueDate?.let {
             runCatching { java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM")) }.getOrNull()
         }
-        val text = listOfNotNull(callLabel, due?.let { "עד $it" }, if (!task.certain) "לא בטוח" else null).joinToString(" · ")
+        val text = listOfNotNull(callLabel, due?.let { "עד $it" + (task.dueTime?.let { t -> " $t" } ?: "") }, if (!task.certain) "לא בטוח" else null).joinToString(" · ")
         postTask(context, task, "משימה חדשה: ${task.title}", text, publicTitle = "משימה חדשה")
     }
 
-    /** A task is due today (or was due while the phone was off). Tap opens it. */
+    /**
+     * A task's reminder: pops up at the time it is due (or was due while the phone was off),
+     * with "Done" and "Snooze" buttons. Tap opens it in the tasks screen.
+     */
     fun taskDue(context: Context, task: com.callnotes.data.TaskEntity, callLabel: String?) {
-        val late = task.dueDate?.let { runCatching { java.time.LocalDate.parse(it).isBefore(java.time.LocalDate.now()) }.getOrNull() } == true
-        val text = listOfNotNull(if (late) "עבר המועד" else "להיום", callLabel).joinToString(" · ")
-        postTask(context, task, "תזכורת: ${task.title}", text, publicTitle = "תזכורת למשימה")
+        val text = listOfNotNull(dueText(task), callLabel).joinToString(" · ")
+        val snooze = Prefs(context).snoozeMinutes
+        val b = taskBuilder(context, CHANNEL_REMINDERS, task, "תזכורת: ${task.title}", text, publicTitle = "תזכורת למשימה")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .addAction(0, "בוצע", taskAction(context, task.id, com.callnotes.util.TaskReminders.ACTION_DONE, 1))
+            .addAction(0, "נודניק · ${snoozeLabel(snooze)}", taskAction(context, task.id, com.callnotes.util.TaskReminders.ACTION_SNOOZE, 2))
+        post(context, taskNotificationId(task.id), b)
     }
+
+    /** "עכשיו · 10:00", "להיום", "עבר המועד · 21.10". */
+    private fun dueText(task: com.callnotes.data.TaskEntity): String {
+        val date = task.dueDate?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+        val today = java.time.LocalDate.now()
+        return when {
+            date == null -> "תזכורת"
+            date.isBefore(today) -> "עבר המועד · ${date.format(java.time.format.DateTimeFormatter.ofPattern("d.M"))}" +
+                (task.dueTime?.let { " $it" } ?: "")
+            task.dueTime != null -> (if (date == today) "היום" else date.format(java.time.format.DateTimeFormatter.ofPattern("d.M"))) +
+                " · ${task.dueTime}"
+            else -> "להיום"
+        }
+    }
+
+    /** "10 דק׳", "שעה". */
+    fun snoozeLabel(minutes: Int): String = when {
+        minutes == 60 -> "שעה"
+        minutes % 60 == 0 -> "${minutes / 60} שעות"
+        else -> "$minutes דק׳"
+    }
+
+    private fun taskAction(context: Context, taskId: Long, action: String, slot: Int): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, (taskId * 4 + slot).toInt(),
+            Intent(context, com.callnotes.util.TaskReminders.ActionReceiver::class.java)
+                .setAction(action)
+                .putExtra(com.callnotes.util.TaskReminders.EXTRA_TASK_ID, taskId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 
     /** One notification per task (new or due — the later replaces the earlier); tap opens it. */
     private fun postTask(context: Context, task: com.callnotes.data.TaskEntity, title: String, text: String, publicTitle: String) =
-        post(context, taskNotificationId(task.id),
-            NotificationCompat.Builder(context, CHANNEL_TASKS)
-                .also { hideOnLockScreen(context, it, CHANNEL_TASKS, publicTitle) }
-                .setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle(title)
-                .setContentText(text)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(task.title + "\n" + text))
-                .setContentIntent(openTask(context, task.id))
-                .setAutoCancel(true)
-                .setGroup("tasks")
-                .setCategory(NotificationCompat.CATEGORY_REMINDER))
+        post(context, taskNotificationId(task.id), taskBuilder(context, CHANNEL_TASKS, task, title, text, publicTitle))
+
+    private fun taskBuilder(
+        context: Context, channel: String, task: com.callnotes.data.TaskEntity, title: String, text: String, publicTitle: String,
+    ) = NotificationCompat.Builder(context, channel)
+        .also { hideOnLockScreen(context, it, channel, publicTitle) }
+        .setSmallIcon(R.drawable.ic_launcher_foreground)
+        .setContentTitle(title)
+        .setContentText(text)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(task.title + "\n" + text))
+        .setContentIntent(openTask(context, task.id))
+        .setAutoCancel(true)
+        .setGroup("tasks")
+        .setCategory(NotificationCompat.CATEGORY_REMINDER)
 
     /** Removes the new-task / reminder notification of a task (it was ticked done). */
     fun cancelTask(context: Context, taskId: Long) =

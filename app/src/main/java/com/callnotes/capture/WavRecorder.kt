@@ -31,6 +31,10 @@ class WavRecorder(
     @Volatile var peakLevel: Int = 0
         private set
 
+    /** Loudest sample of the last read (~a quarter second), for a live level meter. */
+    @Volatile var level: Int = 0
+        private set
+
     /** The system reported it is feeding this recording silence. */
     @Volatile var silenced: Boolean = false
         private set
@@ -153,10 +157,12 @@ class WavRecorder(
                 if (gapMs > 800) trace?.event("read stalled ${gapMs}ms")
                 if (n < 0) { trace?.event("read error $n — recording stopped"); break }
                 if (n == 0) continue
+                var readPeak = 0
                 for (i in 0 until n) {
                     val s = samples[i].toInt()
                     val abs = if (s < 0) -s else s
                     if (abs > peak) peak = abs
+                    if (abs > readPeak) readPeak = abs
                     bytes[2 * i] = (s and 0xFF).toByte()
                     bytes[2 * i + 1] = ((s shr 8) and 0xFF).toByte()
                     secSumSq += s.toDouble() * s
@@ -168,6 +174,7 @@ class WavRecorder(
                     }
                 }
                 peakLevel = peak
+                level = readPeak
                 out.write(bytes, 0, n * 2)
                 dataBytes += n * 2
             }

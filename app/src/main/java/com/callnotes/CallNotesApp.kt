@@ -54,13 +54,17 @@ class CallNotesApp : Application() {
         appScope.launch {
             Retention.run(this@CallNotesApp)
             DataProtection.applyToAll(this@CallNotesApp)
+            com.callnotes.util.VoiceMemos.cleanUp(this@CallNotesApp)
         }
         val prefs = Prefs(this)
         watchCharger(prefs)
         // Battery saver on → pause processing; off → pick up what's queued.
         BatterySaver.watch(this) { paused ->
             if (paused) TranscriptionService.pauseForBatterySaver(this)
-            else if (prefs.anyAuto) TranscriptionService.start(this)
+            else {
+                if (prefs.anyAuto) TranscriptionService.start(this)
+                appScope.launch { com.callnotes.util.VoiceMemos.resume(this@CallNotesApp) }
+            }
         }
     }
 

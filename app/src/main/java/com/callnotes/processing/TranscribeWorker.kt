@@ -38,9 +38,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Transcription queue: manual requests first (a request pauses an automatic call, which
- * goes back to the queue), then the newest recording waiting. Whisper stays loaded for the
- * whole queue. After each call, speakers are separated and the summary worker is woken.
+ * Transcription queue: voice notes for new tasks first, then manual requests (either pauses
+ * an automatic call, which goes back to the queue), then the newest recording waiting.
+ * Whisper stays loaded for the whole queue. After each call, speakers are separated and the
+ * summary worker is woken.
  */
 class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.ID_TRANSCRIBE) {
 
@@ -73,6 +74,21 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         }
     }
 
+    /**
+     * Main thread. A voice note was recorded: the user is waiting for its task, so an
+     * automatic call in progress is paused (back to the queue) and the note goes first.
+     */
+    fun onMemo() {
+        memoWaiting = true
+        if (running && !currentRequested && callId != null) {
+            abortNative()
+            cancelItem()
+        }
+    }
+
+    /** Set when a voice note arrives; cleared each time the queue looks for notes. */
+    @Volatile var memoWaiting = false
+
     override suspend fun loop() {
         val ready = app.models.readyModel() ?: return
         step("start · ${ProcessingLog.deviceLine(host)}")
@@ -83,17 +99,25 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         var failed = 0
         try {
             while (true) {
+                val memo = nextMemo()
+                if (memo != null) {
+                    if (!transcribeMemo(memo, ready.first, ready.second)) break
+                    continue
+                }
                 val (call, requested) = nextCall() ?: break
                 waitWhileHot()
                 begin(call)
                 currentRequested = requested
                 if (transcriber == null) {
-                    transcriber = load(ready.first, ready.second, call) ?: break
+                    transcriber = load(ready.first, ready.second, "מתמלל: ${label(call)}", call.id) { why ->
+                        dao.setStatus(call.id, CallStatus.TRANSCRIBE_FAILED, null, why)
+                    } ?: break
                 }
-                // Cancelled while the model loaded? Skip it.
+                // Cancelled while the model loaded, or a voice note came in meanwhile (it goes first)?
                 if (call.id in cancelled || dao.get(call.id)?.status != CallStatus.RECORDED) {
                     cancelled -= call.id; end(); continue
                 }
+                if (memoWaiting && !requested) { end(); continue }
                 val t = transcriber!!
                 when (runItem { process(call, t) }) {
                     true -> {
@@ -107,7 +131,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                         host.wakeSummary()
                     }
                     false -> failed++
-                    null -> log("call ${call.id}: " + if (cancelled.remove(call.id)) "cancelled by the user" else "paused, a manual request goes first")
+                    null -> log("call ${call.id}: " + if (cancelled.remove(call.id)) "cancelled by the user" else "paused, a manual request or voice note goes first")
                 }
                 end()
             }
@@ -120,6 +144,76 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             modelLoaded = false
             end()
             publish(ProcessingStatus.State())
+        }
+    }
+
+    /** The oldest voice note waiting for transcription; null if none (or battery saver pauses). */
+    private suspend fun nextMemo(): com.callnotes.data.VoiceMemoEntity? {
+        if (com.callnotes.util.BatterySaver.paused(host)) return null
+        memoWaiting = false // cleared before looking, so a note recorded meanwhile sets it again
+        return dao.nextMemo(com.callnotes.data.MemoState.RECORDED)
+    }
+
+    /**
+     * Transcribes one voice note and hands its text to the summary worker. The audio is
+     * deleted once the text is saved. Returns false if the model couldn't be loaded.
+     */
+    private suspend fun transcribeMemo(memo: com.callnotes.data.VoiceMemoEntity, spec: ModelSpec, file: File): Boolean {
+        waitWhileHot()
+        memoId = memo.id
+        currentRequested = true
+        try {
+            val title = "מתמלל הקלטת משימה"
+            if (transcriber == null) {
+                transcriber = load(spec, file, title, null, memo.id) { why ->
+                    dao.setMemo(memo.id, com.callnotes.data.MemoState.FAILED, memo.path, null, why)
+                } ?: return false
+            }
+            if (memo.id in cancelledMemos) { cancelledMemos -= memo.id; return true }
+            val t = transcriber!!
+            val result = runItem {
+                val started = System.currentTimeMillis()
+                publish(ProcessingStatus.State(true, phase = Phase.MEMO_TRANSCRIBING, memoId = memo.id))
+                host.showWork(this, title, "מתמלל…")
+                try {
+                    val audio = memo.path?.let(::File)?.takeIf { it.isFile } ?: error("recording missing")
+                    val transcript = t.transcribe(audio) { done, total ->
+                        if (memo.id !in cancelledMemos) {
+                            publish(ProcessingStatus.State(true, null, done, total, Phase.MEMO_TRANSCRIBING, memoId = memo.id))
+                            host.showWork(this, title, if (total > 0) "${done * 100 / total}%" else "מתמלל…", done, total)
+                        }
+                    }
+                    currentCoroutineContext().ensureActive()
+                    if (memo.id in cancelledMemos) throw CancellationException("deleted")
+                    val text = transcript.segments.joinToString(" ") { it.text.trim() }.trim()
+                    withContext(NonCancellable) {
+                        if (text.isEmpty()) {
+                            dao.setMemo(memo.id, com.callnotes.data.MemoState.NO_TASK, null, "", "לא נשמע דיבור בהקלטה")
+                        } else {
+                            dao.setMemo(memo.id, com.callnotes.data.MemoState.TRANSCRIBED, null, text, null)
+                        }
+                        audio.delete()
+                    }
+                    // The note is the user's words: log only its size.
+                    log("voice note ${memo.id}: transcribed in ${secs(started)} · ${memo.durationMs / 1000} s · ${text.length} chars")
+                    true
+                } catch (e: Throwable) {
+                    if (e is CancellationException) throw e
+                    log("voice note ${memo.id}: transcription FAILED: ${describe(e)}")
+                    dao.setMemo(memo.id, com.callnotes.data.MemoState.FAILED, memo.path, null,
+                        "התמלול נכשל: ${e.javaClass.simpleName}")
+                    false
+                }
+            }
+            when (result) {
+                true -> host.wakeSummary()
+                false -> Unit
+                null -> log("voice note ${memo.id}: " + if (cancelledMemos.remove(memo.id)) "deleted by the user" else "stopped, stays queued")
+            }
+            return true
+        } finally {
+            memoId = null
+            currentRequested = false
         }
     }
 
@@ -137,14 +231,26 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         return dao.nextPending(Prefs(host).autoMaxMs)?.let { it to false }
     }
 
-    private suspend fun load(spec: ModelSpec, file: File, call: CallEntity): Transcriber? {
-        publish(ProcessingStatus.State(running = true, callId = call.id, phase = Phase.LOADING))
-        host.showWork(this, "מתמלל: ${label(call)}", "טוען את מודל התמלול…", callId = call.id)
+    /**
+     * Loads Whisper (making the faster preset's copy first if needed). [title] and
+     * [callId] / [memoId] say what it is loading for, in the notification and the UI;
+     * [onFail] records a load failure on that item.
+     */
+    private suspend fun load(
+        spec: ModelSpec,
+        file: File,
+        title: String,
+        callId: Long?,
+        memoId: Long? = null,
+        onFail: suspend (String) -> Unit,
+    ): Transcriber? {
+        publish(ProcessingStatus.State(running = true, callId = callId, phase = Phase.LOADING, memoId = memoId))
+        host.showWork(this, title, "טוען את מודל התמלול…", callId = callId)
         step("loading model ${spec.id} (${"%.2f".format(file.length() / 1e9)} GB) · ${ProcessingLog.freeRam(host)}")
         val started = System.currentTimeMillis()
         var preset = WhisperSpeed.current(Prefs(host))
         if (preset.quantType != null && !preset.fileFor(file).isFile) {
-            val err = prepareVariant(file, preset, call)
+            val err = prepareVariant(file, preset, title, callId)
             if (err != null) {
                 log("could not prepare the ${preset.suffix} model ($err); using the full model with this preset's decoding")
                 TranscriptionService.note(host, "הכנת הגרסה המהירה נכשלה ($err). מתמלל עם המודל המלא.")
@@ -165,8 +271,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             runCatching { t.close() }
             if (e is CancellationException) throw e
             log("model load FAILED after ${secs(started)}: ${describe(e)}")
-            dao.setStatus(call.id, CallStatus.TRANSCRIBE_FAILED, null,
-                "טעינת המודל נכשלה: ${e.javaClass.simpleName} ${e.message ?: ""}".take(300))
+            onFail("טעינת המודל נכשלה: ${e.javaClass.simpleName} ${e.message ?: ""}".take(300))
             TranscriptionService.note(host, "טעינת מודל התמלול נכשלה: ${e.javaClass.simpleName}")
             null
         }
@@ -205,12 +310,11 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
      * Makes the quantized copy for a faster preset, once (a minute or two). Shown as part of
      * this call's notification; cancel stops it and keeps nothing half-written.
      */
-    private suspend fun prepareVariant(base: File, preset: WhisperSpeed, call: CallEntity): String? {
+    private suspend fun prepareVariant(base: File, preset: WhisperSpeed, title: String, callId: Long?): String? {
         val started = System.currentTimeMillis()
-        val title = "מתמלל: ${label(call)}"
         step("preparing ${preset.suffix} copy of ${base.name} · ${ProcessingLog.freeRam(host)}")
-        publish(ProcessingStatus.State(running = true, callId = call.id, phase = Phase.PREPARING_MODEL))
-        host.showWork(this, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)…", callId = call.id)
+        publish(ProcessingStatus.State(running = true, callId = callId, phase = Phase.PREPARING_MODEL))
+        host.showWork(this, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)…", callId = callId)
         preparing = true
         val err = try {
             withContext(Dispatchers.IO) {
@@ -221,8 +325,8 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                     }
                     try {
                         WhisperSpeed.prepare(base, preset) { pct ->
-                            publish(ProcessingStatus.State(true, call.id, pct, 100, Phase.PREPARING_MODEL))
-                            host.showWork(this@TranscribeWorker, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)… $pct%", pct, 100, call.id)
+                            publish(ProcessingStatus.State(true, callId, pct, 100, Phase.PREPARING_MODEL))
+                            host.showWork(this@TranscribeWorker, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)… $pct%", pct, 100, callId)
                         }
                     } finally {
                         finished.set(true)

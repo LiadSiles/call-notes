@@ -89,6 +89,8 @@ data class CallAnalysis(
         val sourceQuote: String?,
         val lines: List<Int> = emptyList(),
         val certain: Boolean = true,
+        /** "HH:mm" when a time of day was said, else null. Only kept with a [dueDate]. */
+        val dueTime: String? = null,
     )
 }
 

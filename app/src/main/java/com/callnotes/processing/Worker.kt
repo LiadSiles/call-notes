@@ -35,6 +35,12 @@ abstract class Worker(protected val host: TranscriptionService, val notification
     /** Calls the user cancelled while they were running here; their results are dropped. */
     val cancelled: MutableSet<Long> = ConcurrentHashMap.newKeySet()
 
+    /** The voice note being worked on now (see [com.callnotes.util.VoiceMemos]). */
+    @Volatile var memoId: Long? = null
+        protected set
+    /** Voice notes deleted while they were running here. */
+    protected val cancelledMemos: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
     val running get() = job?.isActive == true
 
     /** Whether this worker currently holds a model in memory. */
@@ -59,6 +65,14 @@ abstract class Worker(protected val host: TranscriptionService, val notification
         item?.cancel()
         publish(ProcessingStatus.State(running = true)) // the UI drops it at once
         host.showWork(this, "מבטל…", "")
+    }
+
+    /** Main thread. The user deleted voice note [id]: stop it if it's running here. */
+    fun cancelMemo(id: Long) {
+        if (memoId != id) return
+        cancelledMemos += id
+        abortNative()
+        item?.cancel()
     }
 
     /**

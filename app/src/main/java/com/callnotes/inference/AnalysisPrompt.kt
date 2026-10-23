@@ -50,7 +50,7 @@ object AnalysisPrompt {
                 "\"key_points\": [{\"text\": \"...\", \"lines\": [3, 4], \"certain\": true}], " +
                 "\"decisions\": [{\"text\": \"...\", \"lines\": [7], \"certain\": true}], " +
                 "\"tasks\": [{\"title\": \"what has to be done\", \"owner\": \"me|other|unknown\", " +
-                "\"due\": \"YYYY-MM-DD or null\", \"due_phrase\": \"the words used in the call, or null\", " +
+                "\"due\": \"YYYY-MM-DD or null\", \"due_time\": \"HH:MM or null\", \"due_phrase\": \"the words used in the call, or null\", " +
                 "\"quote\": \"the exact words from the transcript\", \"lines\": [12], \"certain\": true}], " +
                 "\"follow_ups\": [{\"text\": \"...\", \"lines\": [15], \"certain\": true}]}")
             appendLine("Rules:")
@@ -61,6 +61,7 @@ object AnalysisPrompt {
             appendLine("- Only tasks that were actually requested, promised or agreed in the call. \"me\" = the phone's owner. " +
                 "\"quote\" must be copied word for word from the cited line.")
             appendLine("- \"due\": compute from the call date (for example \"מחר\" is ${date.plusDays(1)}). null if no time was mentioned.")
+            appendLine("- \"due_time\": 24-hour time only when a clock time was said (\"בחמש\" in the afternoon is 17:00), else null.")
             appendLine("- Do not invent facts that are not in the transcript. Empty lists are fine.")
             appendLine("- If the transcript has no meaningful content, return empty strings and empty lists.")
             appendLine("- Hebrew acronyms and abbreviations (נתב״ג, צה״ל, ת״א) must use the Hebrew gershayim ״ or geresh ׳, " +
@@ -128,6 +129,7 @@ object AnalysisPrompt {
                 val (ls, citedOk) = checked(t.optBoolean("certain", false), lines(t.optJSONArray("lines")))
                 val rawDue = t.optString("due").clean()
                 val due = rawDue?.let { validDate(it, callDate) }
+                val time = if (due != null) t.optString("due_time").clean()?.let(::validTime) else null
                 // A quote that isn't in the cited lines, or a due date we had to drop, isn't verified.
                 val quoteOk = quote == null || n == 0 || ls.any { contains(lineTexts[it - 1], quote) }
                 CallAnalysis.Task(
@@ -139,6 +141,7 @@ object AnalysisPrompt {
                     // Uncited: still link it to the line its quote/title matches (stays "not sure").
                     lines = ls.ifEmpty { located(quote ?: title, lineTexts) },
                     certain = citedOk && quoteOk && (rawDue == null || due != null),
+                    dueTime = time,
                 )
             }
         }
@@ -197,6 +200,14 @@ object AnalysisPrompt {
             i++
         }
         return out.toString()
+    }
+
+    /** "17:00", "9:30" or "17:00:00" → "HH:mm"; null if it isn't a time of day. */
+    fun validTime(s: String): String? {
+        val m = Regex("^(\\d{1,2}):(\\d{2})(:\\d{2})?$").find(s.trim()) ?: return null
+        val h = m.groupValues[1].toInt()
+        val min = m.groupValues[2].toInt()
+        return if (h in 0..23 && min in 0..59) "%02d:%02d".format(h, min) else null
     }
 
     fun validDate(s: String, callDate: LocalDate): String? = runCatching {

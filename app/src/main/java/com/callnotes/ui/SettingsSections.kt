@@ -286,17 +286,45 @@ internal fun BatterySettings(prefs: Prefs) {
     Note("כמה סוללה כל פעולה צרכה מופיע ב\"פרטים טכניים\" של כל שיחה, וכמה צורכת כל מהירות תמלול — בעמוד התמלול.")
 }
 
-/** Due-date reminders switch. */
+/** Task reminders: on/off, snooze length, and whether they can ring on the minute. */
 @Composable
-internal fun ReminderSettings(prefs: Prefs) {
+internal fun ReminderSettings(prefs: Prefs, resumeTick: Int = 0) {
     var reminders by remember { mutableStateOf(prefs.taskReminders) }
+    var snooze by remember { mutableIntStateOf(prefs.snoozeMinutes) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    // Re-checked on return from the system's "Alarms & reminders" page.
+    val exact = remember(resumeTick) { com.callnotes.util.TaskReminders.exactAllowed(ctx) }
     CardGroup {
         SwitchRow(
-            "תזכורת ביום היעד",
-            "התראה בסביבות ${com.callnotes.util.TaskReminders.HOUR}:00 ביום שמשימה פתוחה צריכה להתבצע.",
+            "תזכורות למשימות",
+            "התראה קופצת בשעה שנקבעה למשימה, או ב-${com.callnotes.util.TaskReminders.HOUR}:00 ביום שלה כשאין שעה.",
             reminders,
         ) { reminders = it; prefs.taskReminders = it; com.callnotes.util.TaskReminders.reschedule(ctx) }
+        RowDivider(inset = false)
+        ChipChoice(
+            "נודניק",
+            "כמה זמן לדחות תזכורת בלחיצה על \"נודניק\" בהתראה.",
+            Prefs.SNOOZE_CHOICES,
+            snooze,
+            label = com.callnotes.util.Notifications::snoozeLabel,
+            enabled = reminders,
+        ) { snooze = it; prefs.snoozeMinutes = it }
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            RowDivider(inset = false)
+            InfoRow(
+                "תזכורות בדקה המדויקת",
+                if (exact) "מופעל. אפשר לבטל בהגדרות המערכת (\"התראות ותזכורות\")."
+                else "כבוי — תזכורת עלולה להגיע באיחור של כמה דקות. הקש כדי לאפשר.",
+                onClick = {
+                    runCatching {
+                        ctx.startActivity(
+                            android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                .setData(android.net.Uri.parse("package:${ctx.packageName}"))
+                        )
+                    }
+                },
+            ) { Pill(if (exact) "פעיל" else "כבוי", if (exact) Tone.Good else Tone.Neutral) }
+        }
     }
 }
 

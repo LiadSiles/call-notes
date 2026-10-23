@@ -25,8 +25,9 @@ import java.time.Instant
 import java.time.ZoneId
 
 /**
- * Summary queue, running alongside transcription: requested calls first, then (with
- * automatic processing on) the newest transcribed call without a summary. While the
+ * Summary queue, running alongside transcription: voice notes waiting to become tasks
+ * first, then requested calls, then (with automatic processing on) the newest transcribed
+ * call without a summary. While the
  * transcription worker is still busy it waits for the next finished transcript instead of
  * exiting, so Gemma stays loaded. Before loading Gemma next to Whisper it checks memory.
  */
@@ -51,6 +52,11 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         var failed = 0
         try {
             while (true) {
+                val memo = nextMemo()
+                if (memo != null) {
+                    if (!memoToTasks(memo, spec, file)) break
+                    continue
+                }
                 val (call, requested) = next() ?: (null to false)
                 if (call == null) {
                     // More transcripts may still come: wait for one rather than unloading Gemma.
@@ -66,8 +72,10 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 begin(call)
                 currentRequested = requested
                 if (analyzer == null) {
-                    waitForMemory(call)
-                    analyzer = load(spec, file, call) ?: break
+                    waitForMemory("מסכם: ${label(call)}", call.id)
+                    analyzer = load(spec, file, "מסכם: ${label(call)}", call.id) { why ->
+                        dao.setAnalysisStatus(call.id, AnalysisStatus.FAILED, why)
+                    } ?: break
                 }
                 if (call.id in cancelled) { cancelled -= call.id; end(); continue }
                 val a = analyzer!!
@@ -92,6 +100,82 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         }
     }
 
+    /** The oldest transcribed voice note waiting for its task; null if none (or battery saver pauses). */
+    private suspend fun nextMemo(): com.callnotes.data.VoiceMemoEntity? {
+        if (com.callnotes.util.BatterySaver.paused(host)) return null
+        return dao.nextMemo(com.callnotes.data.MemoState.TRANSCRIBED)
+    }
+
+    /**
+     * Writes the task(s) of one transcribed voice note with Gemma and replaces the note with
+     * them. Returns false if the model couldn't be loaded.
+     */
+    private suspend fun memoToTasks(memo: com.callnotes.data.VoiceMemoEntity, spec: com.callnotes.inference.ModelSpec, file: java.io.File): Boolean {
+        val title = "מכין משימה מההקלטה"
+        waitWhileHot()
+        memoId = memo.id
+        currentRequested = true
+        try {
+            if (analyzer == null) {
+                waitForMemory(title, null, memo.id)
+                analyzer = load(spec, file, title, null, memo.id) { why ->
+                    dao.setMemo(memo.id, com.callnotes.data.MemoState.FAILED, null, memo.text, why)
+                } ?: return false
+            }
+            if (memo.id in cancelledMemos) { cancelledMemos -= memo.id; return true }
+            val a = analyzer!!
+            val result = runItem {
+                val started = System.currentTimeMillis()
+                publish(ProcessingStatus.State(true, phase = Phase.MEMO_TASK, memoId = memo.id))
+                host.showWork(this, title, "קורא את ההקלטה…")
+                try {
+                    val zone = ZoneId.systemDefault()
+                    val recordedAt = java.time.LocalDateTime.ofInstant(Instant.ofEpochMilli(memo.createdAt), zone)
+                    val answer = a.ask(com.callnotes.inference.TaskPrompt.build(memo.text.orEmpty(), recordedAt))
+                    if (memo.id in cancelledMemos) throw CancellationException("deleted")
+                    val found = try {
+                        com.callnotes.inference.TaskPrompt.parse(answer, recordedAt)
+                    } catch (e: Exception) {
+                        log("voice note ${memo.id}: answer not valid JSON (${answer.length} chars): ${e.javaClass.simpleName}")
+                        throw e
+                    }
+                    withContext(NonCancellable) {
+                        if (found.isEmpty()) {
+                            dao.setMemo(memo.id, com.callnotes.data.MemoState.NO_TASK, null, memo.text, null)
+                        } else {
+                            val now = System.currentTimeMillis()
+                            val rows = found.mapIndexed { i, t ->
+                                TaskEntity(callId = TaskEntity.NO_CALL, idx = i, title = t.title, owner = "me",
+                                    dueDate = t.dueDate, duePhrase = t.duePhrase, quote = memo.text, certain = t.certain,
+                                    createdAt = now, dueTime = t.dueTime, source = com.callnotes.data.TaskSource.VOICE)
+                            }
+                            val ids = dao.memoToTasks(memo.id, rows)
+                            // On screen the new task appears in the list; otherwise say so.
+                            if (!com.callnotes.ui.MainActivity.visible) {
+                                ids.zip(rows).forEach { (id, t) -> Notifications.newTask(host, t.copy(id = id), "מהקלטה") }
+                            }
+                            com.callnotes.util.TaskReminders.plan(host)
+                        }
+                    }
+                    log("voice note ${memo.id}: ${found.size} task(s) in ${secs(started)} · ${answer.length} chars out")
+                    true
+                } catch (e: Throwable) {
+                    if (e is CancellationException || memo.id in cancelledMemos) throw (e as? CancellationException ?: CancellationException("deleted"))
+                    log("voice note ${memo.id}: task FAILED: ${describe(e)}")
+                    dao.setMemo(memo.id, com.callnotes.data.MemoState.FAILED, null, memo.text,
+                        "יצירת המשימה נכשלה: ${e.javaClass.simpleName}")
+                    false
+                }
+            }
+            if (result == null) log("voice note ${memo.id}: " + if (cancelledMemos.remove(memo.id)) "deleted by the user" else "stopped, stays queued")
+            return true
+        } finally {
+            memoId = null
+            currentRequested = false
+            end()
+        }
+    }
+
     /** The next call to summarise and whether the user asked for it; null if none may run now. */
     private suspend fun next(): Pair<CallEntity, Boolean>? {
         if (com.callnotes.util.BatterySaver.paused(host)) return null
@@ -110,7 +194,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
      * memory next to Whisper's ~2 GB. Wait while the phone reports low memory and Whisper
      * is loaded; give up waiting once transcription finishes.
      */
-    private suspend fun waitForMemory(call: CallEntity) {
+    private suspend fun waitForMemory(title: String, callId: Long?, memoId: Long? = null) {
         val am = host.getSystemService(ActivityManager::class.java)
         var logged = false
         while (host.transcribe.modelLoaded) {
@@ -120,15 +204,23 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 logged = true
                 log("waiting for memory before loading the summary model (${ProcessingLog.freeRam(host)})")
             }
-            publish(ProcessingStatus.State(running = true, callId = call.id, phase = Phase.WAITING_MEMORY))
-            host.showWork(this, "מסכם: ${label(call)}", "ממתין לזיכרון פנוי (מתמלל במקביל)…", callId = call.id)
+            publish(ProcessingStatus.State(running = true, callId = callId, phase = Phase.WAITING_MEMORY, memoId = memoId))
+            host.showWork(this, title, "ממתין לזיכרון פנוי (מתמלל במקביל)…", callId = callId)
             delay(5_000)
         }
     }
 
-    private suspend fun load(spec: com.callnotes.inference.ModelSpec, file: java.io.File, call: CallEntity): Analyzer? {
-        publish(ProcessingStatus.State(running = true, callId = call.id, phase = Phase.LOADING_ANALYZER))
-        host.showWork(this, "מסכם: ${label(call)}", "טוען את מודל הסיכום…", callId = call.id)
+    /** Loads Gemma; [title], [callId] / [memoId] name what for; [onFail] records a failure on it. */
+    private suspend fun load(
+        spec: com.callnotes.inference.ModelSpec,
+        file: java.io.File,
+        title: String,
+        callId: Long?,
+        memoId: Long? = null,
+        onFail: suspend (String) -> Unit,
+    ): Analyzer? {
+        publish(ProcessingStatus.State(running = true, callId = callId, phase = Phase.LOADING_ANALYZER, memoId = memoId))
+        host.showWork(this, title, "טוען את מודל הסיכום…", callId = callId)
         step("loading analysis model ${spec.id} · ${ProcessingLog.freeRam(host)}")
         val started = System.currentTimeMillis()
         val g = GemmaAnalyzer(host, spec, file)
@@ -141,7 +233,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             runCatching { g.close() }
             if (e is CancellationException) throw e
             log("analysis model load FAILED: ${describe(e)}")
-            dao.setAnalysisStatus(call.id, AnalysisStatus.FAILED, "טעינת מודל הסיכום נכשלה: ${e.javaClass.simpleName}")
+            onFail("טעינת מודל הסיכום נכשלה: ${e.javaClass.simpleName}")
             null
         }
     }
@@ -192,13 +284,18 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             val tasks = result.tasks.mapIndexed { i, t ->
                 TaskEntity(callId = call.id, idx = i, title = t.title, owner = t.owner, dueDate = t.dueDate,
                     duePhrase = t.duePhrase, quote = t.sourceQuote, lines = t.lines.joinToString(",").ifEmpty { null },
-                    certain = t.certain, createdAt = now)
+                    certain = t.certain, createdAt = now, dueTime = t.dueTime)
             }
             // Re-summarising shouldn't announce tasks the user has already seen (or ticked off).
-            val before = dao.tasksOf(call.id).associateBy { taskKey(it.title) }
-            val kept = tasks.map { t ->
+            val existing = dao.tasksOf(call.id)
+            val before = existing.associateBy { taskKey(it.title) }
+            // Tasks the user edited stay as they are and stand for the summary's version of them.
+            val edited = existing.filter { it.edited }
+            val kept = tasks.filter { t -> edited.none { e -> sameTask(e, t) } }.map { t ->
                 val old = before[taskKey(t.title)] ?: return@map t
-                t.copy(done = old.done, remindedAt = old.remindedAt.takeIf { old.dueDate == t.dueDate })
+                val sameTime = old.dueDate == t.dueDate && old.dueTime == t.dueTime
+                t.copy(done = old.done, remindedAt = old.remindedAt.takeIf { sameTime },
+                    snoozedUntil = old.snoozedUntil.takeIf { sameTime })
             }
             val laterRepeats = dao.repeatsOf(call.id) // re-summary: keep later calls pointing here
             dao.replaceAnalysis(call.id, AnalysisPrompt.toJson(result), result.title.ifBlank { null }, analyzer.modelId, kept)
@@ -238,12 +335,13 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         val candidates = open.map { TaskMatcher.Candidate(it.title, it.owner, it.dueDate) }
         val marked = mutableSetOf<Long>()
         for (t in saved) {
-            if (t.done) continue
+            if (t.done || t.edited) continue
             val i = TaskMatcher.findOriginal(TaskMatcher.Candidate(t.title, t.owner, t.dueDate), candidates) ?: continue
             val original = open[i]
-            // Only an earlier call's task can be the original, so two calls never point at each other.
-            val originalCall = dao.get(original.callId) ?: continue
-            if (originalCall.startedAt > call.startedAt) continue
+            // Only an earlier task can be the original, so two calls never point at each other:
+            // one from an earlier call, or one the user added before this call.
+            val originalTime = if (original.standalone) original.createdAt else dao.get(original.callId)?.startedAt ?: continue
+            if (originalTime > call.startedAt) continue
             dao.setDuplicate(t.id, original.id)
             marked += t.id
         }
@@ -258,3 +356,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
 
 /** Task titles compared loosely (punctuation, niqqud, final letters), to match a re-summary's tasks. */
 private fun taskKey(title: String) = TranscriptText.normalizeText(title)
+
+/** A task the user edited is the same as a new summary's task with its title or quote. */
+private fun sameTask(edited: TaskEntity, new: TaskEntity): Boolean =
+    taskKey(edited.title) == taskKey(new.title) ||
+        edited.quote != null && new.quote != null && taskKey(edited.quote) == taskKey(new.quote)
