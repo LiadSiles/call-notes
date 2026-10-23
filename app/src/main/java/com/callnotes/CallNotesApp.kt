@@ -58,12 +58,12 @@ class CallNotesApp : Application() {
         val prefs = Prefs(this)
         // Only-while-charging: plugging in picks up the queue (unplugging lets the current call finish).
         Energy.watchCharger(this) { plugged ->
-            if (plugged && prefs.autoTranscribe && prefs.onlyWhileCharging) TranscriptionService.start(this)
+            if (plugged && prefs.anyAuto && prefs.onlyWhileCharging) TranscriptionService.start(this)
         }
         // Battery saver on → pause processing; off → pick up what's queued.
         BatterySaver.watch(this) { paused ->
             if (paused) TranscriptionService.pauseForBatterySaver(this)
-            else if (prefs.autoTranscribe) TranscriptionService.start(this)
+            else if (prefs.anyAuto) TranscriptionService.start(this)
         }
     }
 

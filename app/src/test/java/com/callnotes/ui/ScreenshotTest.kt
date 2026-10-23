@@ -90,25 +90,29 @@ class ScreenshotTest {
         val prefs = Prefs(LocalContext.current).apply { autoMaxMinutes = 30 }
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
             item { SubPageBar("תמלול", onBack = {}) }
-            item { GroupLabel("עיבוד") }
-            item { TranscriptionSwitches(prefs) }
+            item { GroupLabel("אוטומטי") }
+            item { AutoTranscribeSettings(prefs) }
+            item { GroupLabel("סיכומים (בעמוד הסיכומים)") }
+            item { AutoSummarySettings(prefs) }
         }
     }
 
     private fun call(
         id: Long, name: String?, minutesAgo: Long, dur: Long,
-        status: String = CallStatus.TRANSCRIBED, kind: String = CallKind.CELLULAR,
+        status: String = CallStatus.TRANSCRIBED, kind: String = CallKind.CELLULAR, analysis: String? = null,
     ) = CallEntity(
         id = id, startedAt = NOW - minutesAgo * 60_000, endedAt = NOW - minutesAgo * 60_000 + dur * 1000,
         incoming = id % 2 == 0L, number = "050-1234567", contactName = name, filePath = "/x.wav", audioSource = "mic",
         peakLevel = 20_000, silenced = false, speakerResult = "na", speakerMethod = null, status = status, kind = kind,
+        analysisStatus = analysis,
     )
 
     private val calls = listOf(
-        CallListItem(call(1, "דני כהן", 30, 412), "סוכם לשלוח את הצעת המחיר עד יום שלישי ולתאם פגישה עם הספק."),
+        CallListItem(call(1, "דני כהן", 30, 412, analysis = com.callnotes.data.AnalysisStatus.DONE), "סוכם לשלוח את הצעת המחיר עד יום שלישי ולתאם פגישה עם הספק."),
         CallListItem(call(2, "מיכל", 95, 125, status = CallStatus.TRANSCRIBING), null),
         CallListItem(call(3, null, 1500, 1800, kind = CallKind.VOIP), "שיחת עבודה על לוחות הזמנים של הפרויקט והחלוקה לשלבים."),
         CallListItem(call(4, "אמא", 1600, 300, status = CallStatus.RECORDED), null),
+        CallListItem(call(5, "ישיבת צוות", 1700, 3900, status = CallStatus.RECORDED), null),
     )
 
     @Test fun callsList() = shot("calls") {
@@ -122,7 +126,7 @@ class ScreenshotTest {
                         CardGroup {
                             list.forEachIndexed { i, c ->
                                 if (i > 0) RowDivider()
-                                CallRow(c, processing) {}
+                                CallRow(c, processing, ProcessingStatus.State(), manualOnly = c.call.id == 5L) {}
                             }
                         }
                     }

@@ -31,14 +31,28 @@ class Prefs(context: Context) {
 
     // ---- Processing --------------------------------------------------------------------
 
-    /** Transcribe and summarise each recording automatically once the models are ready. */
+    /** Transcribe each recording automatically once the model is ready. */
     var autoTranscribe by bool(KEY_AUTO, true)
+
+    /**
+     * Summarise each transcript automatically (separate from transcription since 0.12).
+     * Until first set it follows [autoTranscribe], which used to control both.
+     */
+    var autoSummarize: Boolean
+        get() = sp.getBoolean(KEY_AUTO_SUMMARY, autoTranscribe)
+        set(value) = sp.edit().putBoolean(KEY_AUTO_SUMMARY, value).apply()
+
+    /** Either automatic step is on (worth starting the background service for). */
+    val anyAuto: Boolean get() = autoTranscribe || autoSummarize
 
     /**
      * Calls longer than this many minutes are not transcribed or summarised automatically
      * (the user starts them by hand); 0 = no limit.
      */
     var autoMaxMinutes by int(KEY_AUTO_MAX, 0)
+
+    /** The last limit the user chose, restored when the limit is switched back on. */
+    var autoMaxLastMinutes by int("auto_max_last_minutes", 30)
 
     /** [autoMaxMinutes] in ms for queries; 0 = no limit. */
     val autoMaxMs: Long get() = autoMaxMinutes * 60_000L
@@ -174,14 +188,18 @@ class Prefs(context: Context) {
         private const val KEY_CALL_DAYS = "call_retention_days"
         private const val KEY_WIFI = "wifi_only"
         private const val KEY_AUTO_MAX = "auto_max_minutes"
+        private const val KEY_AUTO_SUMMARY = "auto_summarize"
 
         /** What "restore defaults" resets. */
         private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
             KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
+            KEY_AUTO_SUMMARY,
         )
 
-        /** Choices for [autoMaxMinutes] in settings; 0 = no limit. */
-        val AUTO_MAX_CHOICES = listOf(0, 5, 10, 15, 30, 60)
+        /** Range of the length limit in settings, in minutes. */
+        const val AUTO_MAX_MIN = 1
+        const val AUTO_MAX_SLIDER = 120
+        const val AUTO_MAX_TYPED = 600
     }
 }

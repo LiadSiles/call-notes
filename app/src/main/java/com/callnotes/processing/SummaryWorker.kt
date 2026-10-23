@@ -95,7 +95,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         }
         if (com.callnotes.util.Energy.waitingForCharger(host)) return null
         val prefs = Prefs(host)
-        return if (prefs.autoTranscribe) dao.nextUnanalyzed(prefs.autoMaxMs) else null
+        return if (prefs.autoSummarize) dao.nextUnanalyzed(prefs.autoMaxMs) else null
     }
 
     /**

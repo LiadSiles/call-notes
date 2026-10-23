@@ -232,7 +232,7 @@ fun CallsScreen(
                         CardGroup {
                             calls.forEachIndexed { i, entry ->
                                 if (i > 0) RowDivider(inset = true)
-                                CallRow(entry, processing, manualOnly = manualOnly(entry.call), onClick = { onOpen(entry.call.id) })
+                                CallRow(entry, processing, summaryState, manualOnly = manualOnly(entry.call), onClick = { onOpen(entry.call.id) })
                             }
                         }
                     }
@@ -267,10 +267,15 @@ internal fun CallsHeader(status: Pair<String, Tone>, canSearch: Boolean, onSearc
 }
 
 @Composable
-internal fun CallRow(item: CallListItem, processing: ProcessingStatus.State, manualOnly: Boolean = false, onClick: () -> Unit) {
+internal fun CallRow(
+    item: CallListItem,
+    processing: ProcessingStatus.State,
+    summary: ProcessingStatus.State,
+    manualOnly: Boolean = false,
+    onClick: () -> Unit,
+) {
     val call = item.call
-    val live = processing.callId == call.id
-    val status = statusOf(call, if (live) processing.progress else null, if (live) processing.progressMax else null, manualOnly)
+    val stage = callStage(call, processing, summary, manualOnly)
     Surface(
         color = androidx.compose.ui.graphics.Color.Transparent,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
@@ -295,9 +300,8 @@ internal fun CallRow(item: CallListItem, processing: ProcessingStatus.State, man
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
                         overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
                 }
-                if (status != null && status.second != Tone.Good) {
-                    Pill(status.first, status.second, Modifier.padding(top = 8.dp))
-                }
+                // Always shown: transcribed / summarised / not yet, at a glance.
+                Pill(stage.first, stage.second, Modifier.padding(top = 8.dp))
             }
         }
     }

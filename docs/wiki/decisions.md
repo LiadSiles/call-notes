@@ -3,6 +3,18 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-23 — Separate automatic switches; one stage label per call (0.12.0)
+Owner: each call must say clearly whether it was summarised, transcribed or nothing yet;
+automatic transcription and automatic summaries are separate settings on their own pages;
+the length limit is set exactly (slider or typed). `Prefs.autoSummarize` follows
+`autoTranscribe` until first set, so existing users see no change. "Stop all" turns both
+off. The length limit stays one value (transcription page) and applies to both — a
+summary needs a transcript, and a long call transcribed by hand is still summarised
+right after if automatic summaries are on. `callStage()` is the single source of the
+label shown in the list and on the call screen. Found while doing this: the transcribe
+worker took the next pending call even with automatic transcription off once the service
+was running (e.g. for one manual request); it now only takes requested calls then.
+
 ### 2026-10-22 — Length limit for automatic processing (0.11.0)
 Owner: let the user choose a call length above which nothing is transcribed or
 summarised automatically; shorter calls keep going automatically. `Prefs.autoMaxMinutes`

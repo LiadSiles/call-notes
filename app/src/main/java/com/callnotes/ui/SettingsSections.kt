@@ -277,7 +277,7 @@ internal fun BatterySettings(prefs: Prefs) {
     CardGroup {
         SwitchRow("עיבוד רק בזמן טעינה", "ההקלטה כרגילה; התמלול והסיכום מחכים למטען.", charging) {
             charging = it; prefs.onlyWhileCharging = it
-            if (!it && prefs.autoTranscribe) com.callnotes.processing.TranscriptionService.start(ctx)
+            if (!it && prefs.anyAuto) com.callnotes.processing.TranscriptionService.start(ctx)
         }
         RowDivider(inset = false)
         SwitchRow("השהיה בחיסכון סוללה", "בזמן חיסכון סוללה לא מקליטים ולא מעבדים.", batterySaver) {

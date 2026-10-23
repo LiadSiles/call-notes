@@ -140,8 +140,8 @@ private fun AppRoot() {
         scope.launch(Dispatchers.IO) {
             val dao = app.database.calls()
             val analysable = app.models.readyModel(com.callnotes.inference.ModelRole.ANALYZE) != null &&
-                dao.unanalyzedCount(prefs.autoMaxMs) > 0
-            if (prefs.autoTranscribe && (dao.pendingCount(prefs.autoMaxMs) > 0 || analysable)) {
+                prefs.autoSummarize && dao.unanalyzedCount(prefs.autoMaxMs) > 0
+            if (prefs.autoTranscribe && dao.pendingCount(prefs.autoMaxMs) > 0 || analysable) {
                 TranscriptionService.start(context)
             }
         }

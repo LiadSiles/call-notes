@@ -197,7 +197,7 @@ class TranscriptionService : Service() {
         ProcessingLog.write(this, "stop requested by the user")
         transcribe.stopNow()
         summary.stopNow()
-        note("העיבוד נעצר. התמלול האוטומטי כבוי עד שתפעיל אותו שוב.")
+        note("העיבוד נעצר. התמלול והסיכום האוטומטיים כבויים עד שתפעיל אותם שוב.")
     }
 
     /** Main thread: like stop-all, but automatic processing stays on (resumes later). */
@@ -260,11 +260,11 @@ class TranscriptionService : Service() {
         }
 
         /**
-         * Stops all processing now and turns automatic processing off, so it doesn't start
-         * again on the next app open. Calls in progress go back to the queue.
+         * Stops all processing now and turns automatic transcription and summaries off, so
+         * nothing starts again on the next app open. Calls in progress go back to the queue.
          */
         fun stopAll(context: Context) {
-            Prefs(context).autoTranscribe = false
+            Prefs(context).apply { autoTranscribe = false; autoSummarize = false }
             ProcessingStatus.clearRequests()
             ProcessingStatus.set(ProcessingStatus.State())
             ProcessingStatus.setSummary(ProcessingStatus.State())

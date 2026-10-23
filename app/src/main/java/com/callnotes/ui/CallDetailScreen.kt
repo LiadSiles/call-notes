@@ -126,7 +126,7 @@ fun CallDetailScreen(
     /** Over the length limit: transcribed and summarised only when the user asks. */
     val limitMinutes = remember(noteVersion) { com.callnotes.util.Prefs(context).autoMaxMinutes }
     val manualOnly = remember(noteVersion, c.id) { com.callnotes.util.Prefs(context).tooLongForAuto(c.endedAt - c.startedAt) }
-    val autoForThis = remember(noteVersion) { com.callnotes.util.Prefs(context).autoTranscribe } && !manualOnly
+    val autoForThis = remember(noteVersion) { com.callnotes.util.Prefs(context).autoSummarize } && !manualOnly
     // Items before the first transcript line: header, player, summary, "תמלול", transcript state.
     val segmentStart = 1 + (if (c.filePath != null || c.audioDeletedAt != null) 1 else 0) + (if (transcribed) 1 else 0) + 2
     val showLine: (Int) -> Unit = { idx ->
@@ -195,6 +195,9 @@ fun CallDetailScreen(
                         c.number?.takeIf { c.contactName != null }?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        callStage(c, processing, summaryState, manualOnly).let { (text, tone) ->
+                            Pill(text, tone, Modifier.padding(top = 6.dp))
                         }
                     }
                 }

@@ -54,7 +54,8 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     }
 }
 
-enum class Tone { Neutral, Good, Busy, Bad }
+/** Colour of a [Pill]: Good (done), Info (part done), Busy (working now), Bad (failed), Neutral. */
+enum class Tone { Neutral, Good, Info, Busy, Bad }
 
 /** Small rounded label: status of a call, a model, the app. */
 @Composable
@@ -63,6 +64,7 @@ fun Pill(text: String, tone: Tone = Tone.Neutral, modifier: Modifier = Modifier)
     val (bg, fg) = when (tone) {
         Tone.Neutral -> cs.surfaceVariant to cs.onSurfaceVariant
         Tone.Good -> cs.primaryContainer to cs.onPrimaryContainer
+        Tone.Info -> cs.tertiaryContainer to cs.onTertiaryContainer
         Tone.Busy -> cs.secondaryContainer to cs.onSecondaryContainer
         Tone.Bad -> cs.errorContainer to cs.onErrorContainer
     }
@@ -139,20 +141,39 @@ fun kindLabel(call: CallEntity): String = when {
 }
 
 /**
- * Status pill text and tone for a call; null when there's nothing worth showing.
- * [manualOnly]: the call is over the automatic-processing length limit.
+ * Where a call stands, in one label: nothing done yet / transcribed / summarised, or what
+ * is happening to it now, or what failed. Shown on every call in the list and on the
+ * call's own screen.
+ *
+ * [transcription] and [summary] are the live worker states; [manualOnly] means the call is
+ * over the automatic-processing length limit.
  */
-fun statusOf(call: CallEntity, progress: Int? = null, progressMax: Int? = null, manualOnly: Boolean = false): Pair<String, Tone>? =
-    when (call.status) {
+fun callStage(
+    call: CallEntity,
+    transcription: com.callnotes.processing.ProcessingStatus.State,
+    summary: com.callnotes.processing.ProcessingStatus.State,
+    manualOnly: Boolean = false,
+): Pair<String, Tone> {
+    val transcribingNow = transcription.running && transcription.callId == call.id
+    val summarisingNow = summary.running && summary.callId == call.id
+    return when (call.status) {
         CallStatus.RECORD_FAILED -> "ההקלטה נכשלה" to Tone.Bad
-        CallStatus.RECORDED -> (if (manualOnly) "שיחה ארוכה — לתמלול ידני" else "ממתין לתמלול") to Tone.Neutral
         CallStatus.TRANSCRIBING ->
-            (if (progressMax != null && progressMax > 0) "מתמלל ${progress!! * 100 / progressMax}%" else "מתמלל…") to Tone.Busy
+            (if (transcribingNow && transcription.progressMax > 0) "מתמלל ${transcription.progress * 100 / transcription.progressMax}%"
+            else "מתמלל…") to Tone.Busy
         CallStatus.TRANSCRIBE_FAILED -> "התמלול נכשל" to Tone.Bad
-        CallStatus.TRANSCRIBED -> "תומלל" to Tone.Good
-        CallStatus.HELD -> "התמלול בוטל" to Tone.Neutral
-        else -> null
+        CallStatus.RECORDED ->
+            (if (manualOnly) "טרם תומלל · ארוכה, לתמלול ידני" else "טרם תומלל") to Tone.Neutral
+        CallStatus.HELD -> "טרם תומלל · התמלול בוטל" to Tone.Neutral
+        CallStatus.TRANSCRIBED -> when {
+            summarisingNow -> "תומלל · מסכם…" to Tone.Busy
+            call.analysisStatus == com.callnotes.data.AnalysisStatus.DONE -> "תומלל וסוכם" to Tone.Good
+            call.analysisStatus == com.callnotes.data.AnalysisStatus.FAILED -> "תומלל · הסיכום נכשל" to Tone.Bad
+            else -> "תומלל · טרם סוכם" to Tone.Info
+        }
+        else -> "טרם עובד" to Tone.Neutral
     }
+}
 
 fun formatDuration(millis: Long): String {
     val total = (millis / 1000).coerceAtLeast(0)

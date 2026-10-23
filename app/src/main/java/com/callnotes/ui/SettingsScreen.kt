@@ -117,12 +117,14 @@ private fun SettingsHub(contentPadding: PaddingValues, resumeTick: Int, onOpen: 
             ).joinToString(" · "),
             transcription = if (transcribe == null) "לא הותקן מודל" else listOf(
                 transcribe.displayName, WhisperSpeed.current(prefs).label,
-                if (!prefs.autoTranscribe) "ידני"
-                else if (prefs.autoMaxMinutes > 0) "אוטומטי עד ${prefs.autoMaxMinutes} דק׳" else "אוטומטי",
+                autoLabel(prefs.autoTranscribe, prefs.autoMaxMinutes),
             ).joinToString(" · "),
             speakers = if (VoiceProfile.exists(context)) "דגימת הקול שלך שמורה" else "בלי דגימת קול",
-            summaries = listOfNotNull(analyze?.displayName ?: "לא הותקן מודל", "תזכורות".takeIf { prefs.taskReminders })
-                .joinToString(" · "),
+            summaries = listOfNotNull(
+                analyze?.displayName ?: "לא הותקן מודל",
+                autoLabel(prefs.autoSummarize, prefs.autoMaxMinutes),
+                "תזכורות".takeIf { prefs.taskReminders },
+            ).joinToString(" · "),
             battery = listOfNotNull(
                 "רק בטעינה".takeIf { prefs.onlyWhileCharging }, "נעצר בחיסכון סוללה".takeIf { prefs.pauseInBatterySaver },
             ).joinToString(" · ").ifEmpty { "ללא הגבלה" },
@@ -138,6 +140,13 @@ private fun SettingsHub(contentPadding: PaddingValues, resumeTick: Int, onOpen: 
         )
     }
     SettingsHubContent(contentPadding, state, onOpen)
+}
+
+/** "אוטומטי", "אוטומטי עד 30 דק׳" or "ידני", for the hub rows. */
+private fun autoLabel(on: Boolean, limitMinutes: Int) = when {
+    !on -> "ידני"
+    limitMinutes > 0 -> "אוטומטי עד $limitMinutes דק׳"
+    else -> "אוטומטי"
 }
 
 /** Stateless hub layout (also used by the screenshot tests). */
@@ -226,8 +235,8 @@ private fun SettingsSubPage(
                 item { GroupLabel("מודל") }
                 item { ModelSection(app.models, prefs, ModelRole.TRANSCRIBE, onModelReady) }
                 item { key(resetKey) { SpeedSection(app.models, prefs) } }
-                item { GroupLabel("עיבוד") }
-                item { key(resetKey) { TranscriptionSwitches(prefs) } }
+                item { GroupLabel("אוטומטי") }
+                item { key(resetKey) { AutoTranscribeSettings(prefs) } }
             }
             SettingsPage.SPEAKERS -> {
                 item { GroupLabel("זיהוי דוברים") }
@@ -237,6 +246,8 @@ private fun SettingsSubPage(
                 item { GroupLabel("מודל") }
                 item { ModelSection(app.models, prefs, ModelRole.ANALYZE) }
                 item { Note("מודל שפה שקורא את השיחה הכתובה ומכין כותרת, סיכום ומשימות — על הטלפון, אחרי התמלול.") }
+                item { GroupLabel("אוטומטי") }
+                item { key(resetKey) { AutoSummarySettings(prefs) } }
                 item { GroupLabel("משימות") }
                 item { key(resetKey) { ReminderSettings(prefs) } }
             }
