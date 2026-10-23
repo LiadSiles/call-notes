@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,7 +37,7 @@ internal fun TaskExtras(t: TaskEntity, callLabel: String?) {
     var editing by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { editing = true }, contentPadding = pad, modifier = Modifier.height(36.dp)) {
-            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Create, null,
+            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.Edit, null,
                 modifier = Modifier.padding(end = 6.dp).size(16.dp))
             Text("עריכה", style = MaterialTheme.typography.labelLarge)
         }
