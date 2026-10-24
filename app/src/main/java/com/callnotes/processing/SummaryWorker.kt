@@ -249,14 +249,15 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             val segments = dao.segments(call.id)
             val known = call.meSpeaker != null
             val other = call.contactName ?: call.number ?: "הצד השני"
-            val lines = segments.map { s ->
+            // Background speech (people not on the call) is left out; lines keep their numbers.
+            val lines = segments.filterNot { it.background }.map { s ->
                 val who = when {
                     s.speaker == null -> ""
                     !known -> "דובר ${s.speaker + 1}"
                     s.speaker == call.meSpeaker -> "אני"
                     else -> other
                 }
-                AnalysisPrompt.Line(who, s.text)
+                AnalysisPrompt.Line(who, s.text, number = s.idx + 1)
             }
             val precise = Prefs(host).preciseSummary
             step("call ${call.id}: summarising ${if (precise) "precisely (3 questions per part)" else "quickly"} · " +

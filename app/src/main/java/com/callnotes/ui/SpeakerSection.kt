@@ -234,3 +234,22 @@ private fun VoiceSampleDialog(onDone: (FloatArray) -> Unit, onDismiss: () -> Uni
         dismissButton = { if (!running) TextButton(onClick = onDismiss) { Text("ביטול") } },
     )
 }
+
+/**
+ * "Background speech": people talking near either side who aren't on the call. Set aside
+ * after transcription (hidden, not summarised, never deleted); see BackgroundSpeech.
+ */
+@Composable
+fun BackgroundSpeechSettings(prefs: Prefs) {
+    var on by remember { mutableStateOf(prefs.filterBackground) }
+    CardGroup {
+        SwitchRow(
+            "סינון דיבור ברקע",
+            "קטעים של אנשים שמדברים ליד אחד הצדדים ואינם חלק מהשיחה מוסתרים ולא נכנסים לסיכום.",
+            on,
+        ) { on = it; prefs.filterBackground = it }
+    }
+    Note("עובד אחרי הורדת מודל זיהוי הקול, וטוב יותר עם דגימת הקול שלך. כשבצד אחד יש שני אנשים שמשתתפים בשיחה — " +
+        "שניהם נשארים. שום דבר לא נמחק: במסך השיחה אפשר להציג את הקטעים, ובלחיצה ארוכה להחזיר קטע לשיחה או להסתיר קטע. " +
+        "חל על תמלולים חדשים; לשיחה קיימת — \"תמלל מחדש\".")
+}

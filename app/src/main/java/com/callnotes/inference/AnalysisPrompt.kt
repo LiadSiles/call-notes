@@ -20,8 +20,15 @@ import java.util.Locale
  */
 object AnalysisPrompt {
 
-    /** One line of the conversation as the model sees it. */
-    data class Line(val speaker: String, val text: String)
+    /**
+     * One line of the conversation as the model sees it. [number]: its number in the whole
+     * transcript (segment index + 1) when lines are left out (background speech); 0 = by
+     * position.
+     */
+    data class Line(val speaker: String, val text: String, val number: Int = 0)
+
+    /** The number a line is shown and cited with. */
+    fun numberOf(line: Line, position: Int, firstLine: Int): Int = if (line.number > 0) line.number else firstLine + position
 
     /**
      * The one-question prompt ("quick" summary mode) for the whole call, or for one part of
@@ -129,7 +136,8 @@ object AnalysisPrompt {
         appendLine(calendar(date))
         appendLine()
         if (parts > 1) {
-            appendLine("This is part $part of $parts of a long call: lines $firstLine–${firstLine + lines.size - 1}. " +
+            appendLine("This is part $part of $parts of a long call: lines ${numberOf(lines.first(), 0, firstLine)}–" +
+                "${numberOf(lines.last(), lines.size - 1, firstLine)}. " +
                 "The other parts are read separately; answer only about the lines below.")
         }
         appendLine("Transcript, one numbered line per utterance (automatic speech recognition — it can mishear words):")
@@ -151,7 +159,7 @@ object AnalysisPrompt {
     val HEBREW_DAYS = listOf("ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת")
 
     private fun numbered(lines: List<Line>, firstLine: Int): String =
-        lines.mapIndexed { i, l -> "[${firstLine + i}] " + if (l.speaker.isEmpty()) l.text else "${l.speaker}: ${l.text}" }
+        lines.mapIndexed { i, l -> "[${numberOf(l, i, firstLine)}] " + if (l.speaker.isEmpty()) l.text else "${l.speaker}: ${l.text}" }
             .joinToString("\n")
 
     /**

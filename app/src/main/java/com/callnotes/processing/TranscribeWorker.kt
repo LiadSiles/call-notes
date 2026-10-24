@@ -10,6 +10,7 @@ import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
 import com.callnotes.inference.Transcribers
 import com.callnotes.inference.Transcript
+import com.callnotes.inference.speakers.BackgroundSpeech
 import com.callnotes.inference.speakers.LevelSpeakers
 import com.callnotes.inference.speakers.SpeakerAligner
 import com.callnotes.inference.speakers.Voice
@@ -393,7 +394,8 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             if (call.id in cancelled) throw CancellationException("cancelled")
             val lines = speakers?.lines ?: transcript.segments
             val rows = lines.mapIndexed { i, s ->
-                SegmentEntity(callId = call.id, idx = i, startMs = s.startMs, endMs = s.endMs, text = s.text, speaker = s.speaker)
+                SegmentEntity(callId = call.id, idx = i, startMs = s.startMs, endMs = s.endMs, text = s.text,
+                    speaker = s.speaker, background = s.background)
             }
             dao.replaceTranscript(call.id, rows, transcriber.modelId)
             dao.setSpeakers(call.id, speakers?.let { Voice.pack(it.embeddings) }, speakers?.me)
@@ -460,7 +462,18 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                     check = "voice sample says ${who ?: "?"}${if (trustVoice) "" else " (ignored: handset gap)"}" +
                         voices.entries.joinToString("") { " (${it.key}: %.2f)".format(Voice.cosine(owner, it.value)) }
                 }
-                val lines = SpeakerAligner.align(transcript, LevelSpeakers.turns(transcript.words, level.labels))
+                val windows = VoiceClusters.windows(transcript.words)
+                // A window's side: the side most of its words were given.
+                val sides = IntArray(windows.size) { k ->
+                    val w = windows[k]
+                    val ones = (w.firstWord..w.lastWord).count { level.labels[it] == 1 }
+                    if (ones * 2 > w.lastWord - w.firstWord + 1) 1 else 0
+                }
+                val fingerprints = if (pack && Prefs(host).filterBackground) embedder()?.let { d ->
+                    embedWindows(call, d, LevelSpeakers.equalise(samples), windows)
+                } else null
+                val aside = background(call, samples, windows, sides, fingerprints, me, owner)
+                val lines = SpeakerAligner.align(transcript, LevelSpeakers.turns(transcript.words, level.labels), aside)
                 log("call ${call.id}: speakers by loudness in ${secs(started)} · louder " +
                     "%.1f dB, quieter %.1f dB (%.1f dB apart), quieter share %d%% · me=%d · %s · %d lines".format(
                         level.loudDb, level.quietDb, level.separationDb, (level.quietShare * 100).toInt(), me, check, lines.size))
@@ -472,17 +485,8 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 return null
             }
             val d = embedder() ?: return null
-            val eq = LevelSpeakers.equalise(samples)
             val windows = VoiceClusters.windows(transcript.words)
-            val embeddings = windows.map { w ->
-                currentCoroutineContext().ensureActive()
-                if (call.id in cancelled) throw CancellationException("cancelled")
-                if (w.durationMs < VoiceClusters.MIN_EMBED_MS) null else {
-                    val from = ((w.startMs - 50) * 16).toInt().coerceIn(0, eq.size)
-                    val to = ((w.endMs + 50) * 16).toInt().coerceIn(from, eq.size)
-                    d.embed(eq.copyOfRange(from, to))
-                }
-            }
+            val embeddings = embedWindows(call, d, LevelSpeakers.equalise(samples), windows)
             val result = VoiceClusters.cluster(windows, embeddings)
             if (result == null) {
                 log("call ${call.id}: speakers by voice in ${secs(started)} · ${windows.size} windows, " +
@@ -490,7 +494,8 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 return null
             }
             val me = if (owner != null) Voice.whichIsMe(owner, result.centroids) else null
-            val lines = SpeakerAligner.align(transcript, VoiceClusters.turns(windows, result.labels))
+            val aside = if (Prefs(host).filterBackground) background(call, samples, windows, result.labels, embeddings, me, owner) else emptyList()
+            val lines = SpeakerAligner.align(transcript, VoiceClusters.turns(windows, result.labels), aside)
             log("call ${call.id}: speakers by voice in ${secs(started)} · ${windows.size} windows, " +
                 "${embeddings.count { it != null }} fingerprinted · voices %.2f alike · speaker 1 share %d%% · ".format(
                     result.similarity, (result.shareOf1 * 100).toInt()) +
@@ -502,6 +507,45 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             if (e is CancellationException) throw e
             log("call ${call.id}: speaker separation FAILED, keeping plain transcript: ${describe(e)}")
             null
+        }
+    }
+
+    /** Voice fingerprints of the windows long enough for one (null for the others). */
+    private suspend fun embedWindows(call: CallEntity, d: VoiceEmbedder, eq: FloatArray, windows: List<VoiceClusters.Window>): List<FloatArray?> =
+        windows.map { w ->
+            currentCoroutineContext().ensureActive()
+            if (call.id in cancelled) throw CancellationException("cancelled")
+            if (w.durationMs < VoiceClusters.MIN_EMBED_MS) null else {
+                val from = ((w.startMs - 50) * 16).toInt().coerceIn(0, eq.size)
+                val to = ((w.endMs + 50) * 16).toInt().coerceIn(from, eq.size)
+                d.embed(eq.copyOfRange(from, to))
+            }
+        }
+
+    /**
+     * Speech of people not on the call, as time ranges to set aside ([BackgroundSpeech]).
+     * Empty when switched off, without fingerprints, or on any doubt; never fails the call.
+     */
+    private fun background(
+        call: CallEntity,
+        samples: FloatArray,
+        windows: List<VoiceClusters.Window>,
+        sides: IntArray,
+        fingerprints: List<FloatArray?>?,
+        me: Int?,
+        owner: FloatArray?,
+    ): List<LongRange> {
+        if (fingerprints == null || !Prefs(host).filterBackground) return emptyList()
+        return try {
+            val levels = DoubleArray(windows.size) { BackgroundSpeech.levelDb(samples, windows[it]) }
+            val r = BackgroundSpeech.find(windows, sides, levels, fingerprints, me, owner)
+            log("call ${call.id}: background speech: " + (r.skipped?.let { "nothing set aside ($it)" }
+                ?: "${r.count} windows, %.1f s of %.1f s set aside".format(r.backgroundMs / 1000.0, r.speechMs / 1000.0)) +
+                if (r.keptAnswered > 0) " · ${r.keptAnswered} quiet voice(s) kept: answered by the other side" else "")
+            BackgroundSpeech.ranges(windows, r)
+        } catch (e: Exception) {
+            log("call ${call.id}: background speech check FAILED, nothing set aside: ${describe(e)}")
+            emptyList()
         }
     }
 

@@ -51,7 +51,10 @@ class CallSummarizer(
         zone: ZoneId,
     ): CallAnalysis {
         val callDate = Instant.ofEpochMilli(call.startedAt).atZone(zone).toLocalDate()
-        val texts = lines.map { it.text }
+        // Texts by line number, to check what the model cites (left-out lines stay empty).
+        val numbers = lines.mapIndexed { i, l -> AnalysisPrompt.numberOf(l, i, 1) }
+        val texts = MutableList(numbers.maxOrNull() ?: 0) { "" }
+        lines.forEachIndexed { i, l -> texts[numbers[i] - 1] = l.text }
         val parts = split(lines)
         if (parts.size > 1) listener.log("long call: ${lines.size} lines in ${parts.size} parts")
         val notes = parts.mapIndexed { i, p ->

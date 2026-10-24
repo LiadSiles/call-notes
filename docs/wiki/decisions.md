@@ -3,6 +3,28 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-24 — Background speech set aside, not deleted (0.17.0)
+Owner: other people talking in the background (on either side) hurt transcripts most;
+filter it on both sides, but a side may really have two people on the call — keep them;
+only speech that isn't the side's speaker should go.
+- Denoising and VAD don't help here: both keep speech, and background talk is speech.
+- `BackgroundSpeech` works on the voice windows (≤ 3 s) after speaker separation. Voices
+  of a side = voices heard at the side's level with ≥ 15 % of it (one or two people) +
+  the owner's sample. A window is foreign if unlike all voices of both sides (cos < 0.40 —
+  a mis-sided owner word is never foreign). Background = foreign AND quiet for its side
+  (≥ 10 dB under the side's p75 level) AND not answered (the other side doesn't start
+  within 1.5 s after it, in ≥ 1/3 of its windows and ≥ 2 times — answered quiet voices
+  are people joining in). Foreign at full level only if ≤ 10 % of its side and never
+  answered. Too-short windows follow a neighbour within 1 s.
+- Safety: needs both sides known and voice fingerprints (voice model); skips entirely if
+  it would set aside > 35 % of the speech. All thresholds lean towards keeping speech.
+- Level-separated calls (handset) now fingerprint all ≥ 1 s windows too (only when the
+  filter is on and the voice model installed) — the price of the check.
+- Never deleted: `segments.background` hides the line (call screen toggle), the summary
+  skips it while line numbers stay the segment numbers. Long press brings a line back or
+  hides one; re-transcribing re-evaluates. Rejected for now: target-speaker extraction
+  models (overlapping speech) — heavy, unproven on Hebrew phone audio.
+
 ### 2026-10-24 — Expected words for Whisper; owner's name and task rules for Gemma (0.16.0)
 Owner: cheap, safe improvements — call direction, the owner's name, what is and isn't a
 task, and better input to Whisper.

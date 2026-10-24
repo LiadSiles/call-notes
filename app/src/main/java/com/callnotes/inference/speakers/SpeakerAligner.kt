@@ -5,7 +5,8 @@ import com.callnotes.inference.Transcript
 /**
  * Joins Whisper's words with speaker turns (from [LevelSpeakers] or [VoiceClusters]) into
  * a conversation: each word gets the speaker whose turn overlaps it most, and consecutive
- * words of one speaker become one line. Pure logic (unit-tested).
+ * words of one speaker become one line. Words inside a [background] range (speech of
+ * someone not on the call) become lines of their own, marked. Pure logic (unit-tested).
  */
 object SpeakerAligner {
 
@@ -16,7 +17,7 @@ object SpeakerAligner {
     /** A word with no overlapping turn takes the nearest turn within this distance. */
     private const val NEAREST_MS = 1_000L
 
-    fun align(transcript: Transcript, turns: List<Turn>): List<Transcript.Segment> {
+    fun align(transcript: Transcript, turns: List<Turn>, background: List<LongRange> = emptyList()): List<Transcript.Segment> {
         if (turns.isEmpty()) return transcript.segments
         if (transcript.words.isEmpty()) {
             // Engine without word timing: label whole segments.
@@ -36,17 +37,20 @@ object SpeakerAligner {
         val out = ArrayList<Transcript.Segment>()
         var words = ArrayList<Transcript.Word>()
         var speaker: Int? = null
+        var aside = false
         fun flush() {
             if (words.isEmpty()) return
             val text = words.joinToString(" ") { it.text }.replace(SPACE_BEFORE_PUNCT, "$1").trim()
-            if (text.isNotEmpty()) out += Transcript.Segment(words.first().startMs, words.last().endMs, text, speaker)
+            if (text.isNotEmpty()) out += Transcript.Segment(words.first().startMs, words.last().endMs, text, speaker, aside)
             words = ArrayList()
         }
         for ((w, s0) in labelled) {
             val s = s0 ?: first
+            val mid = (w.startMs + maxOf(w.endMs, w.startMs + 1)) / 2
+            val bg = background.any { mid in it }
             val gap = if (words.isEmpty()) 0L else w.startMs - words.last().endMs
-            if (words.isNotEmpty() && (s != speaker || gap > PAUSE_MS)) flush()
-            if (words.isEmpty()) speaker = s
+            if (words.isNotEmpty() && (s != speaker || bg != aside || gap > PAUSE_MS)) flush()
+            if (words.isEmpty()) { speaker = s; aside = bg }
             words += w
         }
         flush()

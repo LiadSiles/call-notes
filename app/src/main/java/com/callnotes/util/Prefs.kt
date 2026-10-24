@@ -111,6 +111,9 @@ class Prefs(context: Context) {
         @android.annotation.SuppressLint("ApplySharedPref") // must be on disk before a crash
         set(value) { sp.edit().putString("processing_stage", value).commit() }
 
+    /** Set aside speech of people not on the call (background talk) after transcription. */
+    var filterBackground by bool(KEY_BACKGROUND, true)
+
     /**
      * The owner's name, as people say it in calls. Whisper is told to expect it, and the
      * summary knows that whoever is called by it is the owner. Not reset with the settings.
@@ -221,6 +224,7 @@ class Prefs(context: Context) {
         private const val KEY_REMINDERS = "task_reminders"
         private const val KEY_SNOOZE = "snooze_minutes"
         private const val KEY_PRECISE = "precise_summary"
+        private const val KEY_BACKGROUND = "filter_background"
         private const val KEY_AUDIO_DAYS = "audio_retention_days"
         private const val KEY_CALL_DAYS = "call_retention_days"
         private const val KEY_WIFI = "wifi_only"
@@ -230,7 +234,7 @@ class Prefs(context: Context) {
         /** What "restore defaults" resets. */
         private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
-            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
+            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_BACKGROUND, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
             KEY_AUTO_SUMMARY, KEY_T_CHARGING, KEY_S_CHARGING,
         )
 

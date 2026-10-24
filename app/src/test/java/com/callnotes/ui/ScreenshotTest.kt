@@ -123,6 +123,21 @@ class ScreenshotTest {
         }
     }
 
+    @Test fun backgroundSpeech() = shot("background_speech") {
+        val prefs = Prefs(LocalContext.current)
+        fun seg(id: Long, ms: Long, text: String) = com.callnotes.data.SegmentEntity(
+            id = id, callId = 1, idx = id.toInt(), startMs = ms, endMs = ms + 2_000, text = text, speaker = 0, background = true)
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
+            item { SubPageBar("זיהוי דוברים", onBack = {}) }
+            item { GroupLabel("דיבור ברקע") }
+            item { BackgroundSpeechSettings(prefs) }
+            item { GroupLabel("במסך השיחה") }
+            item { BackgroundToggle(2, shown = true) {} }
+            item { BackgroundLine(seg(1, 63_000, "אמא, איפה המפתחות?"), active = false, onClick = {}, onLongClick = {}) }
+            item { BackgroundLine(seg(2, 81_000, "תסגור את הטלוויזיה"), active = false, onClick = {}, onLongClick = {}) }
+        }
+    }
+
     private fun call(
         id: Long, name: String?, minutesAgo: Long, dur: Long,
         status: String = CallStatus.TRANSCRIBED, kind: String = CallKind.CELLULAR, analysis: String? = null,

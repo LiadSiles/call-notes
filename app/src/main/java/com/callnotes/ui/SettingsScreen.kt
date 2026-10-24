@@ -246,6 +246,8 @@ private fun SettingsSubPage(
             SettingsPage.SPEAKERS -> {
                 item { GroupLabel("זיהוי דוברים") }
                 item { SpeakerSection(prefs) }
+                item { GroupLabel("דיבור ברקע") }
+                item { key(resetKey) { BackgroundSpeechSettings(prefs) } }
             }
             SettingsPage.SUMMARIES -> {
                 item { GroupLabel("מודל") }

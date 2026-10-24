@@ -294,6 +294,10 @@ abstract class CallDao {
     @Query("UPDATE segments SET speaker = :speaker WHERE id = :id")
     abstract suspend fun setSegmentSpeaker(id: Long, speaker: Int)
 
+    /** The user says a line is (or isn't) background speech. */
+    @Query("UPDATE segments SET background = :background WHERE id = :id")
+    abstract suspend fun setSegmentBackground(id: Long, background: Boolean)
+
     /** Newest recording waiting for automatic transcription (not longer than [maxMs]; 0 = no limit). */
     @Query(
         "SELECT * FROM calls WHERE status = 'recorded' AND filePath IS NOT NULL " +

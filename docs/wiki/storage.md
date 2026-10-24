@@ -25,6 +25,7 @@ and nothing is written to shared storage.
 | Transcription log | `files/transcription.log` (timings, memory, errors — no transcript text) | `ProcessingLog` | ≤ 64 KB, trimmed |
 | Faster Whisper copies (only if a faster preset was used) | `Android/data/com.callnotes/files/models/<whisper>.q8_0.bin`, `.q5_0.bin` | `WhisperSpeed.prepare` | ~0.87 / ~0.57 GB |
 | Task reminders / repeats (DB v8) | `tasks.remindedAt`, `tasks.duplicateOf` | `TaskReminders`, `SummaryWorker` | small |
+| Background speech flag (DB v12) | `segments.background` | `BackgroundSpeech`, call screen | tiny |
 | Task time, snooze, origin, edited (DB v11) | `tasks.dueTime`, `snoozedUntil`, `source` (call / manual / voice), `edited`; tasks the user adds have `callId` 0 | `TaskActions`, `TaskReminders`, `SummaryWorker` | small |
 | Voice notes for new tasks (DB v11) | table `voice_memos`; audio `files/memos/memo_<millis>.wav` until transcribed, then only the text until the task exists | `VoiceMemos`, workers | ~1.9 MB/min, deleted after transcription |
 | Owner's voice fingerprint (no audio kept) | `files/voice_profile.bin` | `VoiceProfile` | ~1 KB |

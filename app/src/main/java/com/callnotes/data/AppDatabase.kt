@@ -13,7 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [CallEntity::class, SegmentEntity::class, TaskEntity::class, VoiceMemoEntity::class],
-    version = 11,
+    version = 12,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -21,6 +21,13 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun calls(): CallDao
 
     companion object {
+        /** Transcript lines: background speech set aside. */
+        private val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE segments ADD COLUMN background INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         /** Tasks: time of day, snooze, where it came from, edited by hand; voice notes. */
         private val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -129,7 +136,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun build(context: Context): AppDatabase {
             val builder = Room.databaseBuilder(context, AppDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
             when (com.callnotes.security.DataProtection.prepareDatabase(context, context.getDatabasePath(NAME))) {
                 com.callnotes.security.DataProtection.Db.ENCRYPTED -> {
                     com.callnotes.security.DbCrypt.loadLibrary()

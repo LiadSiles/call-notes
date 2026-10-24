@@ -120,6 +120,9 @@ fun CallDetailScreen(
     /** Segment whose speaker the user is correcting (long press). */
     var fixing by remember { mutableStateOf<SegmentEntity?>(null) }
     var speakersEdited by remember(callId) { mutableStateOf(false) }
+    /** Lines set aside as background speech are hidden until the user asks to see them. */
+    var showBackground by remember(callId) { mutableStateOf(false) }
+    val backgroundCount = segments.count { it.background }
 
     val c = call ?: return
     val transcribed = c.status == CallStatus.TRANSCRIBED && c.id !in requested
@@ -128,9 +131,11 @@ fun CallDetailScreen(
     val manualOnly = remember(noteVersion, c.id) { com.callnotes.util.Prefs(context).tooLongForAuto(c.endedAt - c.startedAt) }
     val autoForThis = remember(noteVersion) { com.callnotes.util.Prefs(context).autoSummarize } && !manualOnly
     // Items before the first transcript line: header, player, summary, "תמלול", transcript state.
-    val segmentStart = 1 + (if (c.filePath != null || c.audioDeletedAt != null) 1 else 0) + (if (transcribed) 1 else 0) + 2
+    val segmentStart = 1 + (if (c.filePath != null || c.audioDeletedAt != null) 1 else 0) + (if (transcribed) 1 else 0) + 2 +
+        (if (transcribed && backgroundCount > 0) 1 else 0)
     val showLine: (Int) -> Unit = { idx ->
         if (idx in segments.indices) {
+            if (segments[idx].background) showBackground = true
             highlight = idx
             scope.launch {
                 // One line of context above the target.
@@ -248,20 +253,27 @@ fun CallDetailScreen(
                     Text("לא זוהה דיבור בהקלטה.", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(4.dp))
                 }
+                if (backgroundCount > 0) item {
+                    BackgroundToggle(backgroundCount, showBackground) { showBackground = !showBackground }
+                }
                 val conversation = segments.any { it.speaker != null }
+                // Every line keeps its own item (hidden ones are empty), so positions stay stable.
                 itemsIndexed(segments, key = { _, it -> it.id }) { i, seg ->
                     val active = highlight == i || player.loadedId == c.id && player.positionMs in seg.startMs..seg.endMs
                     val seek = { path?.let { player.playFrom(c.id, it, seg.startMs.toInt()) }; Unit }
-                    if (conversation) {
-                        // Name above the first line of each turn.
-                        val newTurn = i == 0 || segments[i - 1].speaker != seg.speaker
+                    if (seg.background) {
+                        if (showBackground) BackgroundLine(seg, active, onClick = seek, onLongClick = { fixing = seg })
+                    } else if (conversation) {
+                        // Name above the first line of each turn (background lines don't break a turn).
+                        val previous = (i - 1 downTo 0).firstOrNull { !segments[it].background }
+                        val newTurn = previous == null || segments[previous].speaker != seg.speaker
                         val isMe = seg.speaker != null && seg.speaker == c.meSpeaker
                         // Mine on the start side (right, in Hebrew); otherwise speaker 1 / the other side on the end.
                         val alignEnd = if (c.meSpeaker != null) !isMe else seg.speaker == 1
                         ChatLine(seg, speakerLabel(c, seg.speaker), isMe = isMe, alignEnd = alignEnd,
                             showName = newTurn, active = active, onClick = seek, onLongClick = { fixing = seg })
                     } else {
-                        SegmentRow(seg, active, onClick = seek)
+                        SegmentRow(seg, active, onClick = seek, onLongClick = { fixing = seg })
                     }
                 }
                 if (conversation) item {
@@ -325,6 +337,11 @@ fun CallDetailScreen(
                 fixing = null
                 speakersEdited = true
                 scope.launch(Dispatchers.IO) { dao.setMeSpeaker(c.id, me) }
+            },
+            onSetBackground = { bg ->
+                fixing = null
+                speakersEdited = true
+                scope.launch(Dispatchers.IO) { dao.setSegmentBackground(seg.id, bg) }
             },
         )
     }
@@ -526,7 +543,7 @@ private fun elapsed(since: Long): String {
 }
 
 @Composable
-private fun SegmentRow(seg: SegmentEntity, active: Boolean, onClick: () -> Unit) {
+private fun SegmentRow(seg: SegmentEntity, active: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     val bg by animateColorAsState(
         if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, label = "segment",
     )
@@ -535,7 +552,7 @@ private fun SegmentRow(seg: SegmentEntity, active: Boolean, onClick: () -> Unit)
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.small)
             .background(bg)
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 8.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -563,18 +580,23 @@ private fun SpeakerFixDialog(
     onDismiss: () -> Unit,
     onSetLine: (Int) -> Unit,
     onSetMe: (Int?) -> Unit,
+    onSetBackground: (Boolean) -> Unit,
 ) {
     val speaker = seg.speaker ?: 0
     val other = c.contactName ?: c.number ?: "הצד השני"
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("מי אמר את זה?") },
+        title = { Text(if (seg.background) "דיבור ברקע" else "מי אמר את זה?") },
         text = {
             Column {
                 Text("\"${seg.text.take(120)}\"", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.size(12.dp))
                 val me = c.meSpeaker
-                if (me != null) {
+                if (seg.background) {
+                    TextButton(onClick = { onSetBackground(false) }) { Text("זה חלק מהשיחה — להחזיר") }
+                } else if (seg.speaker == null) {
+                    TextButton(onClick = { onSetBackground(true) }) { Text("דיבור ברקע — להסתיר ולא לסכם") }
+                } else if (me != null) {
                     TextButton(onClick = { onSetLine(me) }, enabled = speaker != me) { Text("השורה הזו: אני") }
                     TextButton(onClick = { onSetLine(1 - me) }, enabled = speaker == me) { Text("השורה הזו: $other") }
                     TextButton(onClick = { onSetMe(1 - me) }) { Text("להחליף בין אני ל$other בכל השיחה") }
@@ -584,10 +606,54 @@ private fun SpeakerFixDialog(
                     TextButton(onClick = { onSetMe(1 - speaker) }) { Text("זה $other (דובר ${2 - speaker} הוא אני)") }
                     TextButton(onClick = { onSetLine(1 - speaker) }) { Text("השורה הזו שייכת לדובר ${2 - speaker}") }
                 }
+                if (!seg.background && seg.speaker != null) {
+                    TextButton(onClick = { onSetBackground(true) }) { Text("דיבור ברקע — להסתיר ולא לסכם") }
+                }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("סגירה") } },
     )
+}
+
+/** "N lines of background speech hidden · show" above the transcript. */
+@Composable
+internal fun BackgroundToggle(count: Int, shown: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            if (shown) "$count קטעים של דיבור ברקע מוצגים באפור; הם לא נכנסים לסיכום."
+            else "$count קטעים של דיבור ברקע (אנשים שלא בשיחה) הוסתרו ולא נכנסים לסיכום.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).padding(start = 4.dp),
+        )
+        TextButton(onClick = onToggle) { Text(if (shown) "הסתרה" else "הצגה") }
+    }
+}
+
+/** A line set aside as background speech, when shown: grey and small, long press to bring it back. */
+@Composable
+internal fun BackgroundLine(seg: SegmentEntity, active: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val bg by animateColorAsState(if (active) cs.tertiaryContainer else Color.Transparent, label = "background")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(bg)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text("רקע · ${formatDuration(seg.startMs)}", style = MaterialTheme.typography.labelSmall, color = cs.outline,
+            modifier = Modifier.padding(top = 2.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(seg.text, style = MaterialTheme.typography.bodyMedium, color = cs.outline,
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, modifier = Modifier.weight(1f))
+    }
 }
 
 /** "אני", the other side's name, or "דובר 1/2" when it isn't known who is who. */

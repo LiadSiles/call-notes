@@ -65,8 +65,17 @@ data class Transcript(
     /** Word timing when the engine provides it (Whisper); used to split speakers by word. */
     val words: List<Word> = emptyList(),
 ) {
-    /** [speaker]: 0/1 after speaker separation, null before / without it. */
-    data class Segment(val startMs: Long, val endMs: Long, val text: String, val speaker: Int? = null)
+    /**
+     * [speaker]: 0/1 after speaker separation, null before / without it. [background]:
+     * speech of someone not on the call ([com.callnotes.inference.speakers.BackgroundSpeech]).
+     */
+    data class Segment(
+        val startMs: Long,
+        val endMs: Long,
+        val text: String,
+        val speaker: Int? = null,
+        val background: Boolean = false,
+    )
     data class Word(val startMs: Long, val endMs: Long, val text: String)
 }
 

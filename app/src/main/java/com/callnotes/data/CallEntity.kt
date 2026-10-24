@@ -236,6 +236,8 @@ data class SegmentEntity(
     val text: String,
     /** Speaker index 0/1 from diarization, or null if speakers weren't separated (DB v5). */
     val speaker: Int? = null,
+    /** Someone talking in the background, not on the call: hidden by default, not summarised (DB v12). */
+    val background: Boolean = false,
 )
 
 /** The stored voices of one call, for re-labelling "me" after a new voice sample. */
