@@ -52,16 +52,17 @@ object SummaryPrompts {
         appendLine("Question 2 — commitments. Go through the transcript line by line and find every place where:")
         appendLine("- someone asked the other to do something and it was accepted (\"request\"),")
         appendLine("- someone promised to do something (\"promise\"),")
-        appendLine("- both agreed that something will be done (\"agreement\").")
-        appendLine("NOT tasks: things only mentioned, hypothetical (\"אולי פעם\"), already done (\"שלחתי לך\"), " +
-            "declined or refused, and polite closings (\"נדבר\", \"נהיה בקשר\").")
+        appendLine("- both agreed that something will be done, or set a call or meeting for a time (\"agreement\").")
+        appendLine(AnalysisPrompt.ARE_TASKS)
+        appendLine(AnalysisPrompt.NOT_TASKS)
         appendLine()
         appendLine("{\"tasks\": [{\"quote\": \"...\", \"lines\": [2], \"kind\": \"promise|request|agreement\", " +
             "\"owner\": \"me|other|unknown\", \"title\": \"...\", \"due_phrase\": \"... or null\", " +
             "\"due\": \"YYYY-MM-DD or null\", \"due_time\": \"HH:MM or null\", \"certain\": true}]}")
         appendLine("Rules:")
         appendLine("- Fill the fields in this order: first copy \"quote\" word for word from the line, then decide everything else from it.")
-        appendLine("- \"owner\" is who has to do it. \"me\" = the phone's owner.")
+        appendLine("- \"owner\" is who has to do it. \"me\" = the phone's owner. A task for someone who is not in the call " +
+            "counts only if one of the speakers took it on (then it is theirs).")
         appendLine("- \"title\": the action, starting with a verb, up to 10 words (\"לשלוח את הצעת המחיר\").")
         appendLine("- \"due_phrase\": the words about when, copied as said, or null.")
         appendLine("- \"due\": only if a day was said; take it from the calendar. \"עד יום שלישי\" → that Tuesday.")

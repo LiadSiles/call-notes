@@ -48,6 +48,7 @@ class WhisperTranscriber(
     override suspend fun transcribe(
         audio: File,
         languageHint: String,
+        vocabulary: String,
         onProgress: (Int, Int) -> Unit,
     ): Transcript = withContext(Dispatchers.IO) {
         load()
@@ -61,7 +62,7 @@ class WhisperTranscriber(
                 try { awaitCancellation() } finally { if (!finished.get()) WhisperNative.abort(handle) }
             }
             try {
-                WhisperNative.transcribe(handle, samples, languageHint, threads, beamSize) { p ->
+                WhisperNative.transcribe(handle, samples, languageHint, threads, beamSize, vocabulary) { p ->
                     onProgress(p.coerceIn(0, 100), 100)
                 }
             } finally {

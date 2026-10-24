@@ -240,6 +240,8 @@ private fun SettingsSubPage(
                 item { key(resetKey) { SpeedSection(app.models, prefs) } }
                 item { GroupLabel("אוטומטי") }
                 item { key(resetKey) { AutoTranscribeSettings(prefs) } }
+                item { GroupLabel("מילים ושמות") }
+                item { PersonalWordsSettings(prefs) }
             }
             SettingsPage.SPEAKERS -> {
                 item { GroupLabel("זיהוי דוברים") }

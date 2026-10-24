@@ -39,6 +39,41 @@ import com.callnotes.util.Prefs
  * both (a summary needs a transcript first).
  */
 
+/**
+ * The owner's name and a list of names and words that come up in calls. Whisper is told
+ * to expect them (with the other side's contact name) and the summary knows them, so names
+ * come out spelled right and "ליעד, תשלח…" is understood as said to the owner.
+ */
+@Composable
+fun PersonalWordsSettings(prefs: Prefs) {
+    var name by remember { mutableStateOf(prefs.ownerName) }
+    var words by remember { mutableStateOf(prefs.vocabulary) }
+    CardGroup {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(40); prefs.ownerName = name },
+                label = { Text("השם שלך") },
+                placeholder = { Text("כמו שפונים אליך בשיחות") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.padding(6.dp))
+            OutlinedTextField(
+                value = words,
+                onValueChange = { words = it.take(400); prefs.vocabulary = words },
+                label = { Text("שמות ומילים שחוזרים בשיחות") },
+                placeholder = { Text("למשל: נתב״ג, הצעת מחיר, משה לוי") },
+                minLines = 2,
+                maxLines = 4,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+    Note("מופרדים בפסיקים, בכתיב הנכון. התמלול מצפה למילים האלה ולשם איש הקשר, והסיכום יודע שמי שנקרא בשמך הוא אתה. " +
+        "עדיף רשימה קצרה של מילים שבאמת חוזרות: רק כ-150 התווים הראשונים נכנסים לתמלול.")
+}
+
 /** Transcription page: automatic switch, the length limit, and the processing log. */
 @Composable
 fun AutoTranscribeSettings(prefs: Prefs) {

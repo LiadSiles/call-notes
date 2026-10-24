@@ -59,6 +59,25 @@ class AnalysisPromptTest {
         assertTrue(p.contains("\"certain\""))
     }
 
+    @Test fun promptKnowsOwnerNameWordsAndWhoSpeaksFirst() {
+        val lines = listOf(AnalysisPrompt.Line("דובר 1", "הלו"), AnalysisPrompt.Line("דובר 2", "ליעד, תשלח לי את זה"))
+        val incoming = AnalysisPrompt.build(
+            lines,
+            CallContext(1_792_580_000_000, incoming = true, contactName = "דני", ownerName = "ליעד", vocabulary = listOf("נתב״ג")),
+            ownerLabel = null, otherLabel = null, zone = ZoneId.of("Asia/Jerusalem"),
+        )
+        assertTrue(incoming.contains("The phone's owner is called \"ליעד\""))
+        assertTrue(incoming.contains("first speaker is usually the owner"))
+        assertTrue(incoming.contains("נתב״ג"))
+        assertTrue(incoming.contains("NOT tasks"))
+        val voip = AnalysisPrompt.build(
+            lines, CallContext(1_792_580_000_000, incoming = false, contactName = null, directionKnown = false),
+            ownerLabel = null, otherLabel = null, zone = ZoneId.of("Asia/Jerusalem"),
+        )
+        assertFalse(voip.contains("first speaker"))
+        assertFalse(voip.contains("is called"))
+    }
+
     @Test fun storedJsonRoundTripsAndOldFormatLoads() {
         val a = CallAnalysis("כותרת", "סיכום", listOf(CallAnalysis.Point("א", listOf(1, 2), false)),
             listOf(CallAnalysis.Point("ב", listOf(3))), emptyList(), listOf(CallAnalysis.Point("ג")), false)

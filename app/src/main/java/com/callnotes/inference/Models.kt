@@ -22,11 +22,14 @@ interface Transcriber : AutoCloseable {
 
     /**
      * [audio] is a 16 kHz mono 16-bit WAV (the recorder's format; anything else is
-     * converted first). [onProgress] reports (done, total).
+     * converted first). [vocabulary]: names and words to expect, written as they should
+     * come out ([com.callnotes.inference.whisper.WhisperPrompt]); "" for none.
+     * [onProgress] reports (done, total).
      */
     suspend fun transcribe(
         audio: File,
         languageHint: String = "he",
+        vocabulary: String = "",
         onProgress: (Int, Int) -> Unit = { _, _ -> },
     ): Transcript
 }
@@ -74,6 +77,10 @@ data class CallContext(
     val contactName: String?,
     /** False for internet calls: the app can't tell who called whom. */
     val directionKnown: Boolean = true,
+    /** The phone owner's name, as set in settings, or null. */
+    val ownerName: String? = null,
+    /** Names and words that come up in the owner's calls (settings), spelled right. */
+    val vocabulary: List<String> = emptyList(),
 )
 
 /** What the summariser extracted from a call (JSON from the model, checked in code). */

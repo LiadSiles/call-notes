@@ -289,7 +289,13 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 override fun log(text: String) = this@SummaryWorker.log("call ${call.id}: $text")
             })
             val result = summarizer.summarize(
-                lines, CallContext(call.startedAt, call.incoming, call.contactName, directionKnown = call.kind != CallKind.VOIP),
+                lines,
+                CallContext(
+                    call.startedAt, call.incoming, call.contactName,
+                    directionKnown = call.kind != CallKind.VOIP,
+                    ownerName = Prefs(host).ownerName.trim().ifEmpty { null },
+                    vocabulary = com.callnotes.inference.whisper.WhisperPrompt.parseList(Prefs(host).vocabulary),
+                ),
                 ownerLabel = if (known) "אני" else null, otherLabel = if (known) other else null,
                 zone = ZoneId.systemDefault(),
             )

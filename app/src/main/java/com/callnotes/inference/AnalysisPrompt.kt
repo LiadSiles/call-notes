@@ -58,8 +58,9 @@ object AnalysisPrompt {
             appendLine("- \"certain\": false when the supporting lines are unclear, look misrecognised, contradict each other, " +
                 "or you are inferring rather than reading it. Never guess names, numbers, places or dates — if unclear, mark false.")
             appendLine("- \"summary_certain\": false if large parts of the transcript are unintelligible.")
-            appendLine("- Only tasks that were actually requested, promised or agreed in the call. \"me\" = the phone's owner. " +
-                "\"quote\" must be copied word for word from the cited line.")
+            appendLine(ARE_TASKS)
+            appendLine(NOT_TASKS)
+            appendLine("- \"me\" = the phone's owner. \"quote\" must be copied word for word from the cited line.")
             appendLine("- \"due\": take the day from the calendar (\"מחר\" is ${date.plusDays(1)}). null if no day was mentioned.")
             appendLine("- \"due_time\": 24-hour time only when a clock time was said (\"בחמש\" in the afternoon is 17:00), else null.")
             appendLine("- Do not invent facts that are not in the transcript. Empty lists are fine.")
@@ -67,6 +68,15 @@ object AnalysisPrompt {
             appendLine(ACRONYMS)
         }
     }
+
+    /** What counts as a task — shared by the quick prompt and the precise question 2. */
+    internal const val ARE_TASKS = "- Tasks are only commitments made in the call: a request the other side accepted, even with " +
+        "a short yes (\"בסדר\", \"אין בעיה\"); a promise (\"אני אבדוק\", \"אחזור אליך\"); something both agreed " +
+        "will be done; a call or meeting set for a specific time (\"נדבר מחר בעשר\")."
+    internal const val NOT_TASKS = "- NOT tasks: things only mentioned or discussed; hypothetical or conditional (\"אולי פעם\", " +
+        "\"אם יהיה זמן\"); wishes without a commitment (\"הייתי רוצה\"); things already done, before or during the call " +
+        "(\"שלחתי לך\"); requests that were declined; questions nobody took on; polite closings without a time " +
+        "(\"נדבר\", \"נהיה בקשר\", \"נתראה\")."
 
     /** The rule that keeps Hebrew acronyms from breaking the JSON. */
     internal const val ACRONYMS = "- Hebrew acronyms and abbreviations (נתב״ג, צה״ל, ת״א) must use the Hebrew gershayim ״ or geresh ׳, " +
@@ -96,10 +106,24 @@ object AnalysisPrompt {
             else -> "Outgoing call: the phone's owner made the call."
         })
         call.contactName?.let { appendLine("- Other side's name in the phone's contacts: $it") }
-        appendLine("- " + if (ownerLabel != null && otherLabel != null)
-            "The phone's owner appears as \"$ownerLabel\". The other side appears as \"$otherLabel\"."
-        else
-            "Speakers appear as \"דובר 1\" and \"דובר 2\"; it is not known which one is the phone's owner.")
+        call.ownerName?.let {
+            appendLine("- The phone's owner is called \"$it\": when a speaker says this name, they are talking to or about the owner.")
+        }
+        if (ownerLabel != null && otherLabel != null) {
+            appendLine("- The phone's owner appears as \"$ownerLabel\". The other side appears as \"$otherLabel\".")
+        } else {
+            appendLine("- Speakers appear as \"דובר 1\" and \"דובר 2\"; it is not known which one is the phone's owner." +
+                when {
+                    !call.directionKnown -> ""
+                    // Whoever picks up usually speaks first ("הלו").
+                    call.incoming -> " In an incoming call the owner answers, so the first speaker is usually the owner."
+                    else -> " In an outgoing call the other side answers, so the first speaker is usually the other side."
+                })
+        }
+        if (call.vocabulary.isNotEmpty()) {
+            appendLine("- Names and words that come up in the owner's calls, spelled correctly " +
+                "(speech recognition may have misspelled them): ${call.vocabulary.joinToString(", ")}")
+        }
         appendLine()
         appendLine("Calendar — use it for every day mentioned in the call instead of calculating dates:")
         appendLine(calendar(date))

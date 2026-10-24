@@ -112,6 +112,19 @@ class Prefs(context: Context) {
         set(value) { sp.edit().putString("processing_stage", value).commit() }
 
     /**
+     * The owner's name, as people say it in calls. Whisper is told to expect it, and the
+     * summary knows that whoever is called by it is the owner. Not reset with the settings.
+     */
+    var ownerName by string("owner_name", "")
+
+    /**
+     * Names and words that come up in the owner's calls (people, places, products), comma
+     * separated, spelled right: Whisper expects them and the summary knows them. Not reset
+     * with the settings.
+     */
+    var vocabulary by string("vocabulary", "")
+
+    /**
      * "Precise" summaries: three questions per call (or per part of a long call) — what it
      * was about, the commitments, a review of them. Off = one question ("quick").
      */

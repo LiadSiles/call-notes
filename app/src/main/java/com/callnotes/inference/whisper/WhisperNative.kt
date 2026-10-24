@@ -51,6 +51,8 @@ object WhisperNative {
         language: String,
         threads: Int,
         beamSize: Int,
+        /** Words to expect, or "" ([WhisperPrompt]). */
+        prompt: String,
         listener: ProgressListener?,
     ): Array<Any>?
 }

@@ -170,6 +170,8 @@ The log line says which method ran and why (levels, gap, shares, voice-sample sc
 - The model's answer is call content: the log records only sizes, counts and timings.
 - Speaker labels in the prompt: "אני" / contact name when the owner is known, else
   "דובר 1/2" and the prompt says ownership is unknown.
+- 0.16: owner's name + word list in the summary context and as Whisper's initial prompt
+  (`inference/whisper/WhisperPrompt.kt`, JNI `transcribe(..., prompt, ...)`).
 - 0.15: no part of a call is cut any more (until 0.14 the middle of a > 12k-char transcript
   was dropped). "Precise" mode (default): Q1 summary/points/decisions/follow-ups/title
   (title last), Q2 commitments with the quote first and a worked Hebrew example, Q3 review

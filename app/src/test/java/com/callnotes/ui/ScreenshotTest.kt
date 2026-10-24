@@ -114,6 +114,15 @@ class ScreenshotTest {
         }
     }
 
+    @Test fun settingsWords() = shot("settings_words") {
+        val prefs = Prefs(LocalContext.current).apply { ownerName = "ליעד"; vocabulary = "נתב״ג, הצעת מחיר, משה לוי" }
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
+            item { SubPageBar("תמלול", onBack = {}) }
+            item { GroupLabel("מילים ושמות") }
+            item { PersonalWordsSettings(prefs) }
+        }
+    }
+
     private fun call(
         id: Long, name: String?, minutesAgo: Long, dur: Long,
         status: String = CallStatus.TRANSCRIBED, kind: String = CallKind.CELLULAR, analysis: String? = null,

@@ -3,6 +3,25 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-24 — Expected words for Whisper; owner's name and task rules for Gemma (0.16.0)
+Owner: cheap, safe improvements — call direction, the owner's name, what is and isn't a
+task, and better input to Whisper.
+- Whisper `initial_prompt` with `carry_initial_prompt` (whisper.cpp 1.9.5; re-sent before
+  every 30 s window): owner's name, contact name, the user's word list. Plain
+  comma-separated list, Hebrew-script words only (a Latin contact name could pull the
+  output to English), ≤ 150 chars (shares the 224-token text budget; a long prompt is more
+  likely to be "heard" in silence). Built by `WhisperPrompt`. Voice notes get the owner's
+  name and the list.
+- Gemma gets the name ("whoever is called this is the owner") and the list (correct
+  spellings of words ASR may mangle). With speakers unknown, the direction says who
+  probably spoke first (whoever picks up says "הלו").
+- Task rules (`AnalysisPrompt.ARE_TASKS` / `NOT_TASKS`) shared by quick and precise:
+  short accepted requests count; a call/meeting set for a time counts; conditional,
+  wishes, already done (even during the call), declined, unanswered questions and polite
+  closings without a time don't; tasks of absent people only if a speaker took them on.
+- Name and word list are personal data, kept on the device in prefs (not in backups) and
+  not cleared by "reset settings".
+
 ### 2026-10-23 — Precise summaries in three questions; whole call, never cut (0.15.0)
 Owner: split the summary into focused steps for better tasks, and take the whole call
 into account — no information lost.

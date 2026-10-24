@@ -111,7 +111,7 @@ Java_com_callnotes_inference_whisper_WhisperNative_systemInfo(JNIEnv *env, jobje
 JNIEXPORT jobjectArray JNICALL
 Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
         JNIEnv *env, jobject, jlong handle, jfloatArray jsamples, jstring jlang,
-        jint threads, jint beamSize, jobject listener) {
+        jint threads, jint beamSize, jstring jprompt, jobject listener) {
     auto *h = reinterpret_cast<Holder *>(handle);
     if (!h || !h->ctx) return nullptr;
     h->abort.store(false);
@@ -119,6 +119,13 @@ Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
     const char *lang = env->GetStringUTFChars(jlang, nullptr);
     std::string language(lang);
     env->ReleaseStringUTFChars(jlang, lang);
+    // Words to expect (names, terms): shown to the decoder before every 30 s window.
+    std::string prompt;
+    if (jprompt) {
+        const char *pr = env->GetStringUTFChars(jprompt, nullptr);
+        prompt = pr;
+        env->ReleaseStringUTFChars(jprompt, pr);
+    }
 
     whisper_full_params p = whisper_full_default_params(
             beamSize > 1 ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
@@ -134,6 +141,10 @@ Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
     p.print_timestamps = false;
     p.print_special = false;
     if (beamSize > 1) p.beam_search.beam_size = beamSize;
+    if (!prompt.empty()) {
+        p.initial_prompt = prompt.c_str();
+        p.carry_initial_prompt = true; // every window, not just the first
+    }
     p.abort_callback = abort_cb;
     p.abort_callback_user_data = h;
     p.progress_callback = progress_cb;

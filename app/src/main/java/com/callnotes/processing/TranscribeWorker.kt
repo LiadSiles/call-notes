@@ -177,7 +177,10 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 host.showWork(this, title, "מתמלל…")
                 try {
                     val audio = memo.path?.let(::File)?.takeIf { it.isFile } ?: error("recording missing")
-                    val transcript = t.transcribe(audio) { done, total ->
+                    val prefs = Prefs(host)
+                    val words = com.callnotes.inference.whisper.WhisperPrompt.build(
+                        prefs.ownerName, null, com.callnotes.inference.whisper.WhisperPrompt.parseList(prefs.vocabulary))
+                    val transcript = t.transcribe(audio, vocabulary = words) { done, total ->
                         if (memo.id !in cancelledMemos) {
                             publish(ProcessingStatus.State(true, null, done, total, Phase.MEMO_TRANSCRIBING, memoId = memo.id))
                             host.showWork(this, title, if (total > 0) "${done * 100 / total}%" else "מתמלל…", done, total)
@@ -363,7 +366,12 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             log("call ${call.id}: $audioSec s of audio")
             var lastLogged = -1
             val asrStarted = System.currentTimeMillis()
-            val transcript = transcriber.transcribe(audio) { done, total ->
+            // Names and words to expect: the owner, the other side, the user's list.
+            val prefs = Prefs(host)
+            val words = com.callnotes.inference.whisper.WhisperPrompt.build(
+                prefs.ownerName, call.contactName, com.callnotes.inference.whisper.WhisperPrompt.parseList(prefs.vocabulary))
+            if (words.isNotEmpty()) log("call ${call.id}: ${words.count { it == ',' } + 1} expected words given to Whisper")
+            val transcript = transcriber.transcribe(audio, vocabulary = words) { done, total ->
                 val pct = if (total > 0) done * 100 / total else 0
                 if (pct / 10 != lastLogged / 10 || done == total) {
                     lastLogged = pct
