@@ -51,6 +51,8 @@ class CallSummarizer(
         zone: ZoneId,
     ): CallAnalysis {
         val callDate = Instant.ofEpochMilli(call.startedAt).atZone(zone).toLocalDate()
+        // Nothing to read (every line was background speech): no model call.
+        if (lines.isEmpty()) return CallAnalysis("", "", emptyList(), emptyList(), emptyList(), emptyList(), summaryCertain = false)
         // Texts by line number, to check what the model cites (left-out lines stay empty).
         val numbers = lines.mapIndexed { i, l -> AnalysisPrompt.numberOf(l, i, 1) }
         val texts = MutableList(numbers.maxOrNull() ?: 0) { "" }

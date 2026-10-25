@@ -1,6 +1,5 @@
 package com.callnotes.ui
 
-import com.callnotes.processing.Phase
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +17,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -31,18 +29,28 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
 import com.callnotes.capture.ServiceStatus
+import com.callnotes.data.CallEntity
 import com.callnotes.data.CallListItem
+import com.callnotes.data.CallStatus
+import com.callnotes.data.SearchHit
+import com.callnotes.inference.ModelManager
+import com.callnotes.processing.Phase
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.TranscriptionService
+import com.callnotes.util.BatterySaver
+import com.callnotes.util.Energy
+import com.callnotes.util.Prefs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,30 +73,30 @@ fun CallsScreen(
     val summaryState by ProcessingStatus.summary.collectAsStateWithLifecycle()
     val models by app.models.state.collectAsStateWithLifecycle()
     val setup = rememberSetupState(resumeTick)
-    val prefs = remember { com.callnotes.util.Prefs(context) }
+    val prefs = remember { Prefs(context) }
     val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
     var autoOn by remember(noteVersion, resumeTick) { mutableStateOf(prefs.autoTranscribe) }
     val limitMinutes = remember(noteVersion, resumeTick) { prefs.autoMaxMinutes }
     /** Over the length limit: transcribed and summarised only by hand. */
-    val manualOnly: (com.callnotes.data.CallEntity) -> Boolean = { c ->
+    val manualOnly: (CallEntity) -> Boolean = { c ->
         limitMinutes > 0 && c.endedAt - c.startedAt > limitMinutes * 60_000L
     }
-    val waiting = items.count { it.call.status == com.callnotes.data.CallStatus.RECORDED && !manualOnly(it.call) }
-    val saverPaused = remember(resumeTick, noteVersion) { com.callnotes.util.BatterySaver.paused(context) }
+    val waiting = items.count { it.call.status == CallStatus.RECORDED && !manualOnly(it.call) }
+    val saverPaused = remember(resumeTick, noteVersion) { BatterySaver.paused(context) }
     // Automatic steps held back until the phone is plugged in, and how much waits for each.
     val transcribeWaits = remember(resumeTick, noteVersion, processing.running) {
-        prefs.autoTranscribe && com.callnotes.util.Energy.transcribeWaitsForCharger(context)
+        prefs.autoTranscribe && Energy.transcribeWaitsForCharger(context)
     }
     val summaryWaits = remember(resumeTick, noteVersion, summaryState.running) {
-        prefs.autoSummarize && com.callnotes.util.Energy.summaryWaitsForCharger(context)
+        prefs.autoSummarize && Energy.summaryWaitsForCharger(context)
     }
     val unsummarised = items.count {
-        it.call.status == com.callnotes.data.CallStatus.TRANSCRIBED && it.call.analysisStatus == null && !manualOnly(it.call)
+        it.call.status == CallStatus.TRANSCRIBED && it.call.analysisStatus == null && !manualOnly(it.call)
     }
     val ready = setup.requiredOk && service.connected && service.monitoring
     var searching by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
-    var hits by remember { mutableStateOf<List<com.callnotes.data.SearchHit>?>(null) }
+    var hits by remember { mutableStateOf<List<SearchHit>?>(null) }
     androidx.compose.runtime.LaunchedEffect(query, searching) {
         if (!searching) return@LaunchedEffect
         kotlinx.coroutines.delay(250) // typing
@@ -175,7 +183,7 @@ fun CallsScreen(
                     warn = true,
                 )
             }
-            if (ready && !models.ready && models.download is com.callnotes.inference.ModelManager.Download.Idle) item {
+            if (ready && !models.ready && models.download is ModelManager.Download.Idle) item {
                 Banner(
                     title = "הורד מודל כדי לתמלל",
                     body = "ההקלטות נשמרות, אבל לא יתומללו עד שיותקן מודל.",
@@ -191,7 +199,7 @@ fun CallsScreen(
                     onAction = {
                         prefs.autoTranscribe = true
                         autoOn = true
-                        com.callnotes.processing.TranscriptionService.start(context)
+                        TranscriptionService.start(context)
                     },
                 )
             }
@@ -226,7 +234,7 @@ fun CallsScreen(
                         }
                     }
                     TextButton(onClick = {
-                        com.callnotes.processing.TranscriptionService.stopAll(context)
+                        TranscriptionService.stopAll(context)
                         autoOn = false
                     }) { Text("עצירת הכל") }
                 }

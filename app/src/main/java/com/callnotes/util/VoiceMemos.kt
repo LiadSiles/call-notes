@@ -48,7 +48,7 @@ object VoiceMemos {
         }
     }
 
-    enum class Outcome { SAVED, TOO_SHORT, SILENT, FAILED }
+    enum class Outcome { SAVED, TOO_SHORT, SILENT }
 
     /** Starts recording from the microphone; null if it couldn't start (in use, no permission). */
     fun start(context: Context): Recording? {

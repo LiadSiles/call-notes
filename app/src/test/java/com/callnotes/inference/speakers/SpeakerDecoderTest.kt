@@ -36,7 +36,7 @@ class SpeakerDecoderTest {
         val r = SpeakerDecoder.decode(ws, DoubleArray(ws.size) { -30.0 }, voices)!!
         val labels = if (r.labels[0] == 0) r.labels else r.labels.map { 1 - it }.toIntArray()
         assertArrayEquals(truth, labels)
-        assertTrue(r.usedVoice)
+        assertTrue(r.voiceSimilarity != null)
     }
 
     @Test fun loudnessAndVoiceTogether() {
@@ -45,7 +45,7 @@ class SpeakerDecoderTest {
         val levels = DoubleArray(ws.size) { if (truth[it] == 0) -24.0 + (it % 3) else -30.0 - (it % 3) }
         val r = SpeakerDecoder.decode(ws, levels, truth.map { voice(if (it == 0) a else b) })!!
         assertArrayEquals(truth, r.labels) // 0 = the louder one
-        assertTrue(r.usedLevel && r.usedVoice)
+        assertTrue(r.level != null && r.voiceSimilarity != null)
     }
 
     @Test fun loudnessOverrulesAWeakVoiceMistake() {

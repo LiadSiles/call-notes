@@ -46,6 +46,7 @@ import com.callnotes.CallNotesApp
 import com.callnotes.data.TaskEntity
 import com.callnotes.data.TaskSource
 import com.callnotes.util.TaskActions
+import com.callnotes.util.TaskReminders
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -146,7 +147,7 @@ fun TaskEditorDialog(
     }
 
     if (pickTime) {
-        val initial = time ?: LocalTime.of(com.callnotes.util.TaskReminders.HOUR, 0)
+        val initial = time ?: LocalTime.of(TaskReminders.HOUR, 0)
         val state = rememberTimePickerState(initial.hour, initial.minute, is24Hour = true)
         AlertDialog(
             onDismissRequest = { pickTime = false },

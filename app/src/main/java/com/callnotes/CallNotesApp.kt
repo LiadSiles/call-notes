@@ -13,6 +13,7 @@ import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
 import com.callnotes.util.Retention
 import com.callnotes.util.TaskReminders
+import com.callnotes.util.VoiceMemos
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -54,7 +55,7 @@ class CallNotesApp : Application() {
         appScope.launch {
             Retention.run(this@CallNotesApp)
             DataProtection.applyToAll(this@CallNotesApp)
-            com.callnotes.util.VoiceMemos.cleanUp(this@CallNotesApp)
+            VoiceMemos.cleanUp(this@CallNotesApp)
         }
         val prefs = Prefs(this)
         watchCharger(prefs)
@@ -63,7 +64,7 @@ class CallNotesApp : Application() {
             if (paused) TranscriptionService.pauseForBatterySaver(this)
             else {
                 if (prefs.anyAuto) TranscriptionService.start(this)
-                appScope.launch { com.callnotes.util.VoiceMemos.resume(this@CallNotesApp) }
+                appScope.launch { VoiceMemos.resume(this@CallNotesApp) }
             }
         }
     }
@@ -99,9 +100,12 @@ class CallNotesApp : Application() {
         appScope.launch { block() }
     }
 
-    private companion object {
+    companion object {
+        /** The app is on screen (set by MainActivity): a finished voice task needs no notification then. */
+        @Volatile var onScreen = false
+
         /** How long the charger must stay unplugged before automatic work pauses. */
-        const val UNPLUG_GRACE_MS = 15_000L
+        private const val UNPLUG_GRACE_MS = 15_000L
     }
 
     /**

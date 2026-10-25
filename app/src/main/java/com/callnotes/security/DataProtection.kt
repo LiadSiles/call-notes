@@ -2,15 +2,16 @@ package com.callnotes.security
 
 import android.content.Context
 import com.callnotes.CallNotesApp
+import com.callnotes.data.AppDatabase
 import com.callnotes.data.CallStatus
 import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.ProcessingStatus
 import com.callnotes.util.Prefs
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.io.File
 
 /**
  * Optional extra encryption ("הצפנה נוספת"), off by default. On: the database is SQLCipher
@@ -71,7 +72,7 @@ object DataProtection {
 
     /** Database file matches the setting (false until the app restarts after a change). */
     fun databaseMatchesSetting(context: Context): Boolean =
-        DbCrypt.isEncrypted(context.getDatabasePath(com.callnotes.data.AppDatabase.NAME)) == Prefs(context).encryptData
+        DbCrypt.isEncrypted(context.getDatabasePath(AppDatabase.NAME)) == Prefs(context).encryptData
 
     /** Seals (or unseals) one call's recording to match the setting. Skips busy calls. */
     suspend fun applyToCall(context: Context, callId: Long, force: Boolean = false): Unit =

@@ -1,6 +1,7 @@
 package com.callnotes.inference.whisper
 
 import com.callnotes.inference.Transcript
+import com.callnotes.inference.speakers.LevelSpeakers
 import kotlin.math.log10
 import kotlin.math.sqrt
 
@@ -42,7 +43,7 @@ object MissedSpeech {
     /** The louder of the call's two levels (2-means on word levels), if they are ≥ [LOUDER_DB] apart. */
     private fun loudLevel(levels: DoubleArray, weights: List<Double>): Double? {
         if (levels.size < 6) return null
-        val m = com.callnotes.inference.speakers.LevelSpeakers.fit(levels, weights.toDoubleArray()) ?: return null
+        val m = LevelSpeakers.fit(levels, weights.toDoubleArray()) ?: return null
         return m.loudDb.takeIf { m.separationDb >= LOUDER_DB }
     }
 

@@ -7,6 +7,7 @@ import android.provider.CalendarContract
 import android.widget.Toast
 import com.callnotes.CallNotesApp
 import com.callnotes.data.TaskEntity
+import com.callnotes.data.TaskSource
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -72,7 +73,7 @@ object TaskActions {
             .putExtra(CalendarContract.Events.TITLE, task.title)
             .putExtra(CalendarContract.Events.DESCRIPTION, listOfNotNull(
                 callLabel?.let { "משיחה: $it" },
-                task.quote?.takeIf { task.source == com.callnotes.data.TaskSource.VOICE }?.let { "מהקלטה: $it" },
+                task.quote?.takeIf { task.source == TaskSource.VOICE }?.let { "מהקלטה: $it" },
                 task.duePhrase?.let { "מועד שנאמר: $it" },
             ).joinToString("\n"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

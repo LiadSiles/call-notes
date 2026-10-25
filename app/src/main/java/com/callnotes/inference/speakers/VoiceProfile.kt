@@ -1,6 +1,7 @@
 package com.callnotes.inference.speakers
 
 import android.content.Context
+import com.callnotes.CallNotesApp
 import java.io.File
 
 /**
@@ -27,7 +28,7 @@ object VoiceProfile {
      * with none (all back to unknown). Cheap: compares stored fingerprints only.
      */
     suspend fun relabelAll(context: Context): Int {
-        val dao = (context.applicationContext as com.callnotes.CallNotesApp).database.calls()
+        val dao = (context.applicationContext as CallNotesApp).database.calls()
         val owner = load(context)
         var matched = 0
         for (v in dao.allSpeakerEmbeddings()) {

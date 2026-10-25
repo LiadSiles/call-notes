@@ -5,7 +5,9 @@ import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
 import com.callnotes.inference.whisper.WhisperSpeed
+import com.callnotes.util.Hashing
 import com.callnotes.util.Prefs
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,7 +15,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.io.File
 
 /**
  * Tracks which models are installed, which one is active, and the (single) download in
@@ -199,7 +200,7 @@ class ModelManager(private val context: Context) {
         verifying = spec
         scope.launch {
             val part = partFor(spec)
-            val ok = part.exists() && part.length() == spec.sizeBytes && com.callnotes.util.Hashing.sha256Hex(part) == spec.sha256
+            val ok = part.exists() && part.length() == spec.sizeBytes && Hashing.sha256Hex(part) == spec.sha256
             prefs.downloadId = -1L
             prefs.downloadModelId = null
             val result = if (ok && part.renameTo(fileFor(spec))) {

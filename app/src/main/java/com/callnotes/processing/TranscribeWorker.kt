@@ -1,10 +1,15 @@
 package com.callnotes.processing
 
+import com.callnotes.audio.AudioCompressor
 import com.callnotes.audio.AudioDecoder
 import com.callnotes.audio.Wav
 import com.callnotes.data.CallEntity
+import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
+import com.callnotes.data.MemoState
 import com.callnotes.data.SegmentEntity
+import com.callnotes.data.SpeakerResult
+import com.callnotes.data.VoiceMemoEntity
 import com.callnotes.inference.ModelCatalog
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
@@ -20,25 +25,29 @@ import com.callnotes.inference.speakers.VoiceEmbedder
 import com.callnotes.inference.speakers.VoiceProfile
 import com.callnotes.inference.speakers.VoiceTrack
 import com.callnotes.inference.whisper.WhisperNative
+import com.callnotes.inference.whisper.WhisperPrompt
 import com.callnotes.inference.whisper.WhisperSpeed
 import com.callnotes.inference.whisper.WhisperTranscriber
 import com.callnotes.processing.TranscriptionService.Companion.describe
 import com.callnotes.processing.TranscriptionService.Companion.fingerprint
+import com.callnotes.security.DataProtection
+import com.callnotes.util.BatterySaver
 import com.callnotes.util.CpuInfo
+import com.callnotes.util.Energy
 import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /**
  * Transcription queue: voice notes for new tasks first, then manual requests (either pauses
@@ -151,17 +160,17 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
     }
 
     /** The oldest voice note waiting for transcription; null if none (or battery saver pauses). */
-    private suspend fun nextMemo(): com.callnotes.data.VoiceMemoEntity? {
-        if (com.callnotes.util.BatterySaver.paused(host)) return null
+    private suspend fun nextMemo(): VoiceMemoEntity? {
+        if (BatterySaver.paused(host)) return null
         memoWaiting = false // cleared before looking, so a note recorded meanwhile sets it again
-        return dao.nextMemo(com.callnotes.data.MemoState.RECORDED)
+        return dao.nextMemo(MemoState.RECORDED)
     }
 
     /**
      * Transcribes one voice note and hands its text to the summary worker. The audio is
      * deleted once the text is saved. Returns false if the model couldn't be loaded.
      */
-    private suspend fun transcribeMemo(memo: com.callnotes.data.VoiceMemoEntity, spec: ModelSpec, file: File): Boolean {
+    private suspend fun transcribeMemo(memo: VoiceMemoEntity, spec: ModelSpec, file: File): Boolean {
         waitWhileHot()
         memoId = memo.id
         currentRequested = true
@@ -169,7 +178,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             val title = "מתמלל הקלטת משימה"
             if (transcriber == null) {
                 transcriber = load(spec, file, title, null, memo.id) { why ->
-                    dao.setMemo(memo.id, com.callnotes.data.MemoState.FAILED, memo.path, null, why)
+                    dao.setMemo(memo.id, MemoState.FAILED, memo.path, null, why)
                 } ?: return false
             }
             if (memo.id in cancelledMemos) { cancelledMemos -= memo.id; return true }
@@ -180,10 +189,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 host.showWork(this, title, "מתמלל…")
                 try {
                     val audio = memo.path?.let(::File)?.takeIf { it.isFile } ?: error("recording missing")
-                    val prefs = Prefs(host)
-                    val words = com.callnotes.inference.whisper.WhisperPrompt.build(
-                        prefs.ownerName, null, com.callnotes.inference.whisper.WhisperPrompt.parseList(prefs.vocabulary))
-                    val transcript = t.transcribe(audio, vocabulary = words) { done, total ->
+                    val transcript = t.transcribe(audio, vocabulary = expectedWords(null)) { done, total ->
                         if (memo.id !in cancelledMemos) {
                             publish(ProcessingStatus.State(true, null, done, total, Phase.MEMO_TRANSCRIBING, memoId = memo.id))
                             host.showWork(this, title, if (total > 0) "${done * 100 / total}%" else "מתמלל…", done, total)
@@ -194,9 +200,9 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                     val text = transcript.segments.joinToString(" ") { it.text.trim() }.trim()
                     withContext(NonCancellable) {
                         if (text.isEmpty()) {
-                            dao.setMemo(memo.id, com.callnotes.data.MemoState.NO_TASK, null, "", "לא נשמע דיבור בהקלטה")
+                            dao.setMemo(memo.id, MemoState.NO_TASK, null, "", "לא נשמע דיבור בהקלטה")
                         } else {
-                            dao.setMemo(memo.id, com.callnotes.data.MemoState.TRANSCRIBED, null, text, null)
+                            dao.setMemo(memo.id, MemoState.TRANSCRIBED, null, text, null)
                         }
                         audio.delete()
                     }
@@ -206,7 +212,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 } catch (e: Throwable) {
                     if (e is CancellationException) throw e
                     log("voice note ${memo.id}: transcription FAILED: ${describe(e)}")
-                    dao.setMemo(memo.id, com.callnotes.data.MemoState.FAILED, memo.path, null,
+                    dao.setMemo(memo.id, MemoState.FAILED, memo.path, null,
                         "התמלול נכשל: ${e.javaClass.simpleName}")
                     false
                 }
@@ -224,7 +230,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
     }
 
     private suspend fun nextCall(): Pair<CallEntity, Boolean>? {
-        if (com.callnotes.util.BatterySaver.paused(host)) return null
+        if (BatterySaver.paused(host)) return null
         while (true) {
             val id = ProcessingStatus.firstRequested() ?: break
             ProcessingStatus.unrequest(id)
@@ -233,7 +239,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         }
         // The service also runs for a manual request or for summaries: with automatic
         // transcription off, or waiting for the charger, only requested calls are transcribed.
-        if (!com.callnotes.util.Energy.autoTranscribeAllowed(host)) return null
+        if (!Energy.autoTranscribeAllowed(host)) return null
         return dao.nextPending(Prefs(host).autoMaxMs)?.let { it to false }
     }
 
@@ -294,7 +300,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         val started = System.currentTimeMillis()
         val wavBytes = wav.length()
         val m4a = File(wav.parentFile, wav.nameWithoutExtension + ".m4a")
-        val out = withContext(Dispatchers.IO) { com.callnotes.audio.AudioCompressor.compress(wav, m4a) }
+        val out = withContext(Dispatchers.IO) { AudioCompressor.compress(wav, m4a) }
         if (out == null) { log("call $callId: compression failed, WAV kept"); return }
         withContext(NonCancellable) {
             dao.setFilePath(callId, out.absolutePath)
@@ -357,9 +363,9 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         val converted = File(host.cacheDir, "convert_${call.id}.wav")
         val started = System.currentTimeMillis()
         var plainTemp: File? = null
-        val battery = com.callnotes.util.Energy.read(host)
+        val battery = Energy.read(host)
         try {
-            val (source, temporary) = com.callnotes.security.DataProtection.sourceFor(host, call.id)
+            val (source, temporary) = DataProtection.sourceFor(host, call.id)
                 ?: error("recording missing")
             if (temporary) plainTemp = source
             val before = fingerprint(source)
@@ -369,10 +375,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             log("call ${call.id}: $audioSec s of audio")
             var lastLogged = -1
             val asrStarted = System.currentTimeMillis()
-            // Names and words to expect: the owner, the other side, the user's list.
-            val prefs = Prefs(host)
-            val words = com.callnotes.inference.whisper.WhisperPrompt.build(
-                prefs.ownerName, call.contactName, com.callnotes.inference.whisper.WhisperPrompt.parseList(prefs.vocabulary))
+            val words = expectedWords(call.contactName)
             if (words.isNotEmpty()) log("call ${call.id}: ${words.count { it == ',' } + 1} expected words given to Whisper")
             val transcript = transcriber.transcribe(audio, vocabulary = words) { done, total ->
                 val pct = if (total > 0) done * 100 / total else 0
@@ -409,13 +412,13 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             log("call ${call.id}: done in ${secs(started)} ($audioSec s audio), ${rows.size} segments, " +
                 "${transcript.words.size} words, ${rows.sumOf { it.text.length }} chars · recording " +
                 if (after == before) "unchanged (sha256 $after)" else "CHANGED! $before → $after")
-            val used = com.callnotes.util.Energy.percentUsed(battery, com.callnotes.util.Energy.read(host))
+            val used = Energy.percentUsed(battery, Energy.read(host))
             val tookMs = System.currentTimeMillis() - started
             dao.setTranscribeCost(call.id, used, tookMs)
             if (used != null && audioSec > 0) speed?.let { Prefs(host).addEnergySample(it.name, audioSec * 1000, used) }
             log("call ${call.id}: battery " + (used?.let { "%.2f%%".format(it) } ?: "not measured (charging or no data)"))
             compress(call.id)
-            com.callnotes.security.DataProtection.applyToCall(host, call.id, force = true)
+            DataProtection.applyToCall(host, call.id, force = true)
             return true
         } catch (e: Throwable) {
             if (e is CancellationException || call.id in cancelled) {
@@ -473,11 +476,11 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                     "${voices.count { it != null }} with a voice${if (!pack) ", voice model not installed" else ""}) — one voice, or too little speech")
                 return null
             }
-            val speakerOn = call.speakerResult == com.callnotes.data.SpeakerResult.ON
+            val speakerOn = call.speakerResult == SpeakerResult.ON
             val voiceSays = if (owner != null) Voice.whichIsMe(owner, result.centroids) else null
             val (me, why) = SpeakerDecoder.whoIsMe(
                 result, speakerOn, voiceSays, firstSpeaker = result.labels.firstOrNull(),
-                incoming = call.incoming.takeIf { call.kind == com.callnotes.data.CallKind.CELLULAR },
+                incoming = call.incoming.takeIf { call.kind == CallKind.CELLULAR },
             )
 
             // Background speech, on the word groups (a window's side = most of its words).
@@ -539,6 +542,11 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         }
     }
 
+    /** Names and words Whisper is told to expect: the owner, the other side, the user's list. */
+    private fun expectedWords(contactName: String?): String {
+        val prefs = Prefs(host)
+        return WhisperPrompt.build(prefs.ownerName, contactName, WhisperPrompt.parseList(prefs.vocabulary))
+    }
 
     private fun embedder(): VoiceEmbedder? {
         if (!embedderTried) {

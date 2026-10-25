@@ -233,9 +233,6 @@ abstract class CallDao {
     @Query("SELECT * FROM voice_memos ORDER BY createdAt")
     abstract fun observeMemos(): Flow<List<VoiceMemoEntity>>
 
-    @Query("SELECT * FROM voice_memos WHERE id = :id")
-    abstract suspend fun getMemo(id: Long): VoiceMemoEntity?
-
     /** Oldest voice note in [state] ([MemoState]). */
     @Query("SELECT * FROM voice_memos WHERE state = :state ORDER BY createdAt LIMIT 1")
     abstract suspend fun nextMemo(state: String): VoiceMemoEntity?

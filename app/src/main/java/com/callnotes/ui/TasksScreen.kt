@@ -1,7 +1,10 @@
 package com.callnotes.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,9 +19,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -45,13 +45,20 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
 import com.callnotes.data.CallKind
+import com.callnotes.data.Caller
+import com.callnotes.data.TaskEntity
 import com.callnotes.data.TaskListItem
+import com.callnotes.data.TaskSource
+import com.callnotes.data.VoiceMemoEntity
+import com.callnotes.inference.ModelRole
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.util.TaskActions
+import com.callnotes.util.VoiceMemos
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 /**
  * Every task — from calls, typed in, or recorded: open ones first (by due date and time),
@@ -67,25 +74,25 @@ fun TasksScreen(
     onOpenCall: (callId: Long, segment: Int?, text: String?) -> Unit,
 ) {
     val context = LocalContext.current
-    val dao = (context.applicationContext as CallNotesApp).database.calls()
+    val app = context.applicationContext as CallNotesApp
+    val dao = app.database.calls()
     val all by remember { dao.observeAllTasks() }.collectAsStateWithLifecycle(null)
     val memos by remember { dao.observeMemos() }.collectAsStateWithLifecycle(emptyList())
     val transcribing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val summarising by ProcessingStatus.summary.collectAsStateWithLifecycle()
-    var editing by remember { mutableStateOf<com.callnotes.data.TaskEntity?>(null) }
+    var editing by remember { mutableStateOf<TaskEntity?>(null) }
     /** Typing a new task: its starting text, or null = closed. */
     var adding by remember { mutableStateOf<String?>(null) }
     /** The voice note the new task is being written from (removed once it is saved). */
-    var fromMemo by remember { mutableStateOf<com.callnotes.data.VoiceMemoEntity?>(null) }
+    var fromMemo by remember { mutableStateOf<VoiceMemoEntity?>(null) }
     var recordingNote by remember { mutableStateOf(false) }
     var needModels by remember { mutableStateOf(false) }
-    val app = context.applicationContext as CallNotesApp
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) recordingNote = true
     }
     val record: () -> Unit = {
         when {
-            app.models.readyModel() == null || app.models.readyModel(com.callnotes.inference.ModelRole.ANALYZE) == null -> needModels = true
+            app.models.readyModel() == null || app.models.readyModel(ModelRole.ANALYZE) == null -> needModels = true
             !micAllowed(context) -> micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
             else -> recordingNote = true
         }
@@ -105,10 +112,10 @@ fun TasksScreen(
     val open = tasks.filter { !it.task.done }
     val done = tasks.filter { it.task.done }
     val tick: (TaskListItem, Boolean) -> Unit = { t, v ->
-        scope.launch(Dispatchers.IO) { com.callnotes.util.TaskActions.setDone(context, t.task, v) }
+        scope.launch(Dispatchers.IO) { TaskActions.setDone(context, t.task, v) }
     }
     val unlink: (TaskListItem) -> Unit = { t ->
-        scope.launch(Dispatchers.IO) { com.callnotes.util.TaskActions.unlinkDuplicate(context, t.task) }
+        scope.launch(Dispatchers.IO) { TaskActions.unlinkDuplicate(context, t.task) }
     }
     val openItem: (TaskListItem) -> Unit = { t ->
         if (t.task.standalone) editing = t.task
@@ -148,9 +155,9 @@ fun TasksScreen(
             items(memos, key = { "memo-${it.id}" }) { m ->
                 MemoCard(
                     m, transcribing, summarising,
-                    onRetry = { app.launchBackground { com.callnotes.util.VoiceMemos.retry(app, m) } },
+                    onRetry = { app.launchBackground { VoiceMemos.retry(app, m) } },
                     onWrite = { fromMemo = m; adding = m.text.orEmpty() },
-                    onDelete = { app.launchBackground { com.callnotes.util.VoiceMemos.delete(app, m) } },
+                    onDelete = { app.launchBackground { VoiceMemos.delete(app, m) } },
                 )
             }
             if (all != null && tasks.isEmpty() && memos.isEmpty()) item {
@@ -184,7 +191,7 @@ fun TasksScreen(
             onDismiss = { adding = null; fromMemo = null },
             initialTitle = text,
             voiceText = memo?.text,
-            onSaved = { if (memo != null) app.launchBackground { com.callnotes.util.VoiceMemos.delete(app, memo) } },
+            onSaved = { if (memo != null) app.launchBackground { VoiceMemos.delete(app, memo) } },
         )
     }
     if (recordingNote) VoiceTaskDialog(onDismiss = { recordingNote = false })
@@ -281,9 +288,9 @@ internal fun TaskCard(
 
 /** Where the task came from: the call's name, or how the user added it. */
 private fun who(item: TaskListItem) = when (item.task.source) {
-    com.callnotes.data.TaskSource.MANUAL -> "נוספה ידנית"
-    com.callnotes.data.TaskSource.VOICE -> "מהקלטה"
-    else -> com.callnotes.data.Caller.label(item.callContactName, item.callNumber, item.callKind ?: CallKind.CELLULAR,
+    TaskSource.MANUAL -> "נוספה ידנית"
+    TaskSource.VOICE -> "מהקלטה"
+    else -> Caller.label(item.callContactName, item.callNumber, item.callKind ?: CallKind.CELLULAR,
         item.callIncoming ?: false)
 }
 

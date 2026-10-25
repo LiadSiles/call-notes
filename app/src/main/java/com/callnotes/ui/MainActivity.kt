@@ -6,10 +6,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -19,6 +15,10 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -40,16 +40,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.callnotes.CallNotesApp
 import com.callnotes.capture.CallRecorderService
+import com.callnotes.inference.ModelRole
 import com.callnotes.processing.TranscriptionService
 import com.callnotes.ui.theme.CallNotesTheme
+import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
+import com.callnotes.util.VoiceMemos
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -79,13 +82,13 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        visible = true
+        CallNotesApp.onScreen = true
         AppLock.onStart(this)
     }
 
     override fun onStop() {
         super.onStop()
-        visible = false
+        CallNotesApp.onScreen = false
         AppLock.onStop()
     }
 
@@ -96,17 +99,13 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     /** A notification about a call opens that call. */
     private fun openFrom(intent: android.content.Intent?) {
-        intent?.getLongExtra(com.callnotes.util.Notifications.EXTRA_OPEN_CALL, -1L)?.takeIf { it > 0 }
+        intent?.getLongExtra(Notifications.EXTRA_OPEN_CALL, -1L)?.takeIf { it > 0 }
             ?.let { openRequest.value = it }
-        intent?.getLongExtra(com.callnotes.util.Notifications.EXTRA_OPEN_TASK, -1L)?.takeIf { it > 0 }
+        intent?.getLongExtra(Notifications.EXTRA_OPEN_TASK, -1L)?.takeIf { it > 0 }
             ?.let { openTaskRequest.value = it }
     }
 
     companion object {
-        /** The app is on screen (a finished voice task needs no notification then). */
-        @Volatile var visible = false
-            private set
-
         /** Call to open, set from a notification tap; consumed by [AppRoot]. */
         val openRequest = kotlinx.coroutines.flow.MutableStateFlow<Long?>(null)
         /** Task to show in the tasks screen, from a "new task" notification. */
@@ -145,13 +144,13 @@ private fun AppRoot() {
     val kickQueue: () -> Unit = {
         scope.launch(Dispatchers.IO) {
             val dao = app.database.calls()
-            val analysable = app.models.readyModel(com.callnotes.inference.ModelRole.ANALYZE) != null &&
+            val analysable = app.models.readyModel(ModelRole.ANALYZE) != null &&
                 prefs.autoSummarize && dao.unanalyzedCount(prefs.autoMaxMs) > 0
             if (prefs.autoTranscribe && dao.pendingCount(prefs.autoMaxMs) > 0 || analysable) {
                 TranscriptionService.start(context)
             }
             // Voice notes interrupted earlier (app closed, battery saver, stop all).
-            com.callnotes.util.VoiceMemos.resume(context)
+            VoiceMemos.resume(context)
         }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {

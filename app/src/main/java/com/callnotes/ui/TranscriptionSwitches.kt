@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.ProcessingStatus
 import com.callnotes.processing.TranscriptionService
+import com.callnotes.util.Energy
 import com.callnotes.util.Prefs
 
 /*
@@ -232,7 +233,7 @@ fun OnlyWhileChargingRow(prefs: Prefs, step: ProcessingStep, enabled: Boolean = 
         on = it
         if (transcribe) prefs.transcribeOnlyCharging = it else prefs.summarizeOnlyCharging = it
         ProcessingStatus.touch()
-        if (it && !com.callnotes.util.Energy.pluggedIn(context)) TranscriptionService.pauseForCharger(context)
+        if (it && !Energy.pluggedIn(context)) TranscriptionService.pauseForCharger(context)
         else TranscriptionService.start(context)
     }
 }

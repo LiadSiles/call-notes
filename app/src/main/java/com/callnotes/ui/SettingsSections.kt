@@ -44,8 +44,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,8 +57,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
@@ -67,21 +67,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
 import com.callnotes.capture.CallRecorderService
 import com.callnotes.capture.ServiceStatus
-import com.callnotes.processing.ProcessingStatus
-import com.callnotes.processing.TranscriptionService
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SpeakerResult
+import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.TranscriptionService
+import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.callnotes.util.TaskReminders
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /*
  * Settings page bodies: setup checklist, optional permissions, and the switch groups for
@@ -293,20 +295,20 @@ internal fun ReminderSettings(prefs: Prefs, resumeTick: Int = 0) {
     var snooze by remember { mutableIntStateOf(prefs.snoozeMinutes) }
     val ctx = androidx.compose.ui.platform.LocalContext.current
     // Re-checked on return from the system's "Alarms & reminders" page.
-    val exact = remember(resumeTick) { com.callnotes.util.TaskReminders.exactAllowed(ctx) }
+    val exact = remember(resumeTick) { TaskReminders.exactAllowed(ctx) }
     CardGroup {
         SwitchRow(
             "תזכורות למשימות",
             "התראה קופצת בשעה שנקבעה למשימה, או ב-${com.callnotes.util.TaskReminders.HOUR}:00 ביום שלה כשאין שעה.",
             reminders,
-        ) { reminders = it; prefs.taskReminders = it; com.callnotes.util.TaskReminders.reschedule(ctx) }
+        ) { reminders = it; prefs.taskReminders = it; TaskReminders.reschedule(ctx) }
         RowDivider(inset = false)
         ChipChoice(
             "נודניק",
             "כמה זמן לדחות תזכורת בלחיצה על \"נודניק\" בהתראה.",
             Prefs.SNOOZE_CHOICES,
             snooze,
-            label = com.callnotes.util.Notifications::snoozeLabel,
+            label = Notifications::snoozeLabel,
             enabled = reminders,
         ) { snooze = it; prefs.snoozeMinutes = it }
         if (android.os.Build.VERSION.SDK_INT >= 31) {

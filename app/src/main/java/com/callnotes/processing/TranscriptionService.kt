@@ -15,8 +15,12 @@ import androidx.core.content.ContextCompat
 import com.callnotes.CallNotesApp
 import com.callnotes.data.AnalysisStatus
 import com.callnotes.inference.ModelRole
+import com.callnotes.util.BatterySaver
+import com.callnotes.util.Energy
+import com.callnotes.util.Hashing
 import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
+import java.io.File
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +28,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.io.File
 
 /**
  * Background processing: two workers at the same time — [TranscribeWorker] (Whisper +
@@ -295,7 +298,7 @@ class TranscriptionService : Service() {
          */
         fun startMemo(context: Context, needsTranscription: Boolean = true): Boolean {
             val app = context.applicationContext as CallNotesApp
-            if (com.callnotes.util.BatterySaver.paused(context)) {
+            if (BatterySaver.paused(context)) {
                 note(context, "מושהה — מצב חיסכון בסוללה פעיל. ההקלטה תהפוך למשימה כשיכבה.")
                 return false
             }
@@ -353,14 +356,14 @@ class TranscriptionService : Service() {
          */
         fun start(context: Context, afterCall: Boolean = false, callId: Long? = null, analyseId: Long? = null): Boolean {
             val app = context.applicationContext as CallNotesApp
-            if (com.callnotes.util.BatterySaver.paused(context)) {
+            if (BatterySaver.paused(context)) {
                 note(context, "מושהה — מצב חיסכון בסוללה פעיל")
                 return false
             }
             // Automatic start: only if some automatic step may run now (switched on, and
             // not waiting for the charger). Explicit requests always run.
             if (callId == null && analyseId == null &&
-                !com.callnotes.util.Energy.autoTranscribeAllowed(context) && !com.callnotes.util.Energy.autoSummaryAllowed(context)
+                !Energy.autoTranscribeAllowed(context) && !Energy.autoSummaryAllowed(context)
             ) {
                 val prefs = Prefs(context)
                 if (prefs.anyAuto) note(context, "ממתין לטעינה — העיבוד יתחיל כשהטלפון יחובר למטען")
@@ -410,7 +413,7 @@ class TranscriptionService : Service() {
 
         /** Short SHA-256 of a file (first 12 hex chars), for the log. */
         internal fun fingerprint(file: File): String =
-            runCatching { com.callnotes.util.Hashing.sha256Hex(file).take(12) }.getOrDefault("unreadable")
+            runCatching { Hashing.sha256Hex(file).take(12) }.getOrDefault("unreadable")
 
         /** Exception with its first app/library frames, for the log. */
         internal fun describe(e: Throwable): String {

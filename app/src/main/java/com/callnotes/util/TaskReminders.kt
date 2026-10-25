@@ -106,7 +106,8 @@ object TaskReminders {
             scope.launch {
                 try {
                     plan(app)
-                    Retention.run(app)
+                    // Clean-up on the daily alarm, at boot and after an update — not on every reminder.
+                    if (intent.action != ACTION_FIRE) Retention.run(app)
                 } finally { pending.finish() }
             }
         }

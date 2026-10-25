@@ -1,29 +1,40 @@
 package com.callnotes.processing
 
 import android.app.ActivityManager
+import com.callnotes.CallNotesApp
 import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
+import com.callnotes.data.MemoState
 import com.callnotes.data.TaskEntity
+import com.callnotes.data.TaskSource
+import com.callnotes.data.VoiceMemoEntity
 import com.callnotes.inference.AnalysisPrompt
-import com.callnotes.inference.CallContext
 import com.callnotes.inference.Analyzer
+import com.callnotes.inference.CallContext
+import com.callnotes.inference.CallSummarizer
 import com.callnotes.inference.GemmaAnalyzer
-import com.callnotes.inference.TranscriptText
 import com.callnotes.inference.ModelRole
+import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.TaskMatcher
+import com.callnotes.inference.TaskPrompt
+import com.callnotes.inference.TranscriptText
+import com.callnotes.inference.whisper.WhisperPrompt
 import com.callnotes.processing.TranscriptionService.Companion.describe
+import com.callnotes.util.BatterySaver
+import com.callnotes.util.Energy
 import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
+import com.callnotes.util.TaskReminders
+import java.time.Instant
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.time.Instant
-import java.time.ZoneId
 
 /**
  * Summary queue, running alongside transcription: voice notes waiting to become tasks
@@ -102,16 +113,16 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
     }
 
     /** The oldest transcribed voice note waiting for its task; null if none (or battery saver pauses). */
-    private suspend fun nextMemo(): com.callnotes.data.VoiceMemoEntity? {
-        if (com.callnotes.util.BatterySaver.paused(host)) return null
-        return dao.nextMemo(com.callnotes.data.MemoState.TRANSCRIBED)
+    private suspend fun nextMemo(): VoiceMemoEntity? {
+        if (BatterySaver.paused(host)) return null
+        return dao.nextMemo(MemoState.TRANSCRIBED)
     }
 
     /**
      * Writes the task(s) of one transcribed voice note with Gemma and replaces the note with
      * them. Returns false if the model couldn't be loaded.
      */
-    private suspend fun memoToTasks(memo: com.callnotes.data.VoiceMemoEntity, spec: com.callnotes.inference.ModelSpec, file: java.io.File): Boolean {
+    private suspend fun memoToTasks(memo: VoiceMemoEntity, spec: ModelSpec, file: java.io.File): Boolean {
         val title = "מכין משימה מההקלטה"
         waitWhileHot()
         memoId = memo.id
@@ -120,7 +131,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             if (analyzer == null) {
                 waitForMemory(title, null, memo.id)
                 analyzer = load(spec, file, title, null, memo.id) { why ->
-                    dao.setMemo(memo.id, com.callnotes.data.MemoState.FAILED, null, memo.text, why)
+                    dao.setMemo(memo.id, MemoState.FAILED, null, memo.text, why)
                 } ?: return false
             }
             if (memo.id in cancelledMemos) { cancelledMemos -= memo.id; return true }
@@ -132,30 +143,30 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 try {
                     val zone = ZoneId.systemDefault()
                     val recordedAt = java.time.LocalDateTime.ofInstant(Instant.ofEpochMilli(memo.createdAt), zone)
-                    val answer = a.ask(com.callnotes.inference.TaskPrompt.build(memo.text.orEmpty(), recordedAt))
+                    val answer = a.ask(TaskPrompt.build(memo.text.orEmpty(), recordedAt))
                     if (memo.id in cancelledMemos) throw CancellationException("deleted")
                     val found = try {
-                        com.callnotes.inference.TaskPrompt.parse(answer, recordedAt)
+                        TaskPrompt.parse(answer, recordedAt)
                     } catch (e: Exception) {
                         log("voice note ${memo.id}: answer not valid JSON (${answer.length} chars): ${e.javaClass.simpleName}")
                         throw e
                     }
                     withContext(NonCancellable) {
                         if (found.isEmpty()) {
-                            dao.setMemo(memo.id, com.callnotes.data.MemoState.NO_TASK, null, memo.text, null)
+                            dao.setMemo(memo.id, MemoState.NO_TASK, null, memo.text, null)
                         } else {
                             val now = System.currentTimeMillis()
                             val rows = found.mapIndexed { i, t ->
                                 TaskEntity(callId = TaskEntity.NO_CALL, idx = i, title = t.title, owner = "me",
                                     dueDate = t.dueDate, duePhrase = t.duePhrase, quote = memo.text, certain = t.certain,
-                                    createdAt = now, dueTime = t.dueTime, source = com.callnotes.data.TaskSource.VOICE)
+                                    createdAt = now, dueTime = t.dueTime, source = TaskSource.VOICE)
                             }
                             val ids = dao.memoToTasks(memo.id, rows)
                             // On screen the new task appears in the list; otherwise say so.
-                            if (!com.callnotes.ui.MainActivity.visible) {
+                            if (!CallNotesApp.onScreen) {
                                 ids.zip(rows).forEach { (id, t) -> Notifications.newTask(host, t.copy(id = id), "מהקלטה") }
                             }
-                            com.callnotes.util.TaskReminders.plan(host)
+                            TaskReminders.plan(host)
                         }
                     }
                     log("voice note ${memo.id}: ${found.size} task(s) in ${secs(started)} · ${answer.length} chars out")
@@ -163,7 +174,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 } catch (e: Throwable) {
                     if (e is CancellationException || memo.id in cancelledMemos) throw (e as? CancellationException ?: CancellationException("deleted"))
                     log("voice note ${memo.id}: task FAILED: ${describe(e)}")
-                    dao.setMemo(memo.id, com.callnotes.data.MemoState.FAILED, null, memo.text,
+                    dao.setMemo(memo.id, MemoState.FAILED, null, memo.text,
                         "יצירת המשימה נכשלה: ${e.javaClass.simpleName}")
                     false
                 }
@@ -179,14 +190,14 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
 
     /** The next call to summarise and whether the user asked for it; null if none may run now. */
     private suspend fun next(): Pair<CallEntity, Boolean>? {
-        if (com.callnotes.util.BatterySaver.paused(host)) return null
+        if (BatterySaver.paused(host)) return null
         while (true) {
             val id = ProcessingStatus.firstAnalysisRequested() ?: break
             ProcessingStatus.unrequestAnalysis(id)
             dao.get(id)?.takeIf { it.status == CallStatus.TRANSCRIBED }?.let { return it to true }
         }
         // Automatic summaries: switched on, and not waiting for the charger.
-        if (!com.callnotes.util.Energy.autoSummaryAllowed(host)) return null
+        if (!Energy.autoSummaryAllowed(host)) return null
         return dao.nextUnanalyzed(Prefs(host).autoMaxMs)?.let { it to false }
     }
 
@@ -213,7 +224,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
 
     /** Loads Gemma; [title], [callId] / [memoId] name what for; [onFail] records a failure on it. */
     private suspend fun load(
-        spec: com.callnotes.inference.ModelSpec,
+        spec: ModelSpec,
         file: java.io.File,
         title: String,
         callId: Long?,
@@ -241,7 +252,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
 
     private suspend fun analyse(call: CallEntity, analyzer: Analyzer): Boolean {
         val started = System.currentTimeMillis()
-        val battery = com.callnotes.util.Energy.read(host)
+        val battery = Energy.read(host)
         val title = "מסכם: ${label(call)}"
         publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.ANALYZING))
         host.showWork(this, title, "קורא את השיחה…", callId = call.id)
@@ -264,18 +275,18 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 "${lines.size} lines, ${lines.sumOf { it.text.length }} chars")
             var lastShown = 0L
             var stage = "קורא את השיחה…"
-            val summarizer = com.callnotes.inference.CallSummarizer(analyzer, precise, object : com.callnotes.inference.CallSummarizer.Listener {
-                override fun step(step: com.callnotes.inference.CallSummarizer.Step, part: Int, parts: Int) {
+            val summarizer = CallSummarizer(analyzer, precise, object : CallSummarizer.Listener {
+                override fun step(step: CallSummarizer.Step, part: Int, parts: Int) {
                     val of = if (parts > 1) " · חלק $part מתוך $parts" else ""
                     stage = when (step) {
-                        com.callnotes.inference.CallSummarizer.Step.NOTES -> "מסכם$of"
-                        com.callnotes.inference.CallSummarizer.Step.TASKS -> "מחלץ משימות$of"
-                        com.callnotes.inference.CallSummarizer.Step.REVIEW -> "בודק את המשימות$of"
-                        com.callnotes.inference.CallSummarizer.Step.MERGE -> "מאחד את חלקי השיחה" + if (parts > 1) " ($part/$parts)" else ""
+                        CallSummarizer.Step.NOTES -> "מסכם$of"
+                        CallSummarizer.Step.TASKS -> "מחלץ משימות$of"
+                        CallSummarizer.Step.REVIEW -> "בודק את המשימות$of"
+                        CallSummarizer.Step.MERGE -> "מאחד את חלקי השיחה" + if (parts > 1) " ($part/$parts)" else ""
                     }
                     if (call.id !in cancelled) {
                         // Parts of the call as progress; merging is one last step.
-                        val merging = step == com.callnotes.inference.CallSummarizer.Step.MERGE
+                        val merging = step == CallSummarizer.Step.MERGE
                         publish(ProcessingStatus.State(true, call.id, if (merging) 0 else part, if (merging) 0 else parts, Phase.ANALYZING))
                         host.showWork(this@SummaryWorker, title, stage, callId = call.id)
                     }
@@ -295,7 +306,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                     call.startedAt, call.incoming, call.contactName,
                     directionKnown = call.kind != CallKind.VOIP,
                     ownerName = Prefs(host).ownerName.trim().ifEmpty { null },
-                    vocabulary = com.callnotes.inference.whisper.WhisperPrompt.parseList(Prefs(host).vocabulary),
+                    vocabulary = WhisperPrompt.parseList(Prefs(host).vocabulary),
                 ),
                 ownerLabel = if (known) "אני" else null, otherLabel = if (known) other else null,
                 zone = ZoneId.systemDefault(),
@@ -328,8 +339,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             val repeats = linkRepeats(call, saved)
             val fresh = saved.filter { taskKey(it.title) !in before && !it.done && it.id !in repeats }
             fresh.forEach { Notifications.newTask(host, it, label(call)) }
-            com.callnotes.util.TaskReminders.plan(host)
-            val used = com.callnotes.util.Energy.percentUsed(battery, com.callnotes.util.Energy.read(host))
+            TaskReminders.plan(host)
+            val used = Energy.percentUsed(battery, Energy.read(host))
             dao.setAnalyzeCost(call.id, used, System.currentTimeMillis() - started)
             log("call ${call.id}: summary done in ${secs(started)} · ${summarizer.charsOut} chars out · " +
                 "${result.keyPoints.size} points (${result.keyPoints.count { !it.certain }} unsure), " +

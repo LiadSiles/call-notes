@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.callnotes.security.SealedFile
 
 /**
  * Plays one recording at a time. The loaded recording stays loaded while paused, so
@@ -36,8 +37,8 @@ class AudioPlayer(private val appContext: android.content.Context) {
         player = try {
             MediaPlayer().apply {
                 // An encrypted recording is decrypted on the fly, never written out.
-                if (com.callnotes.security.SealedFile.isSealed(path)) {
-                    setDataSource(com.callnotes.security.SealedFile.Source(appContext, java.io.File(path)))
+                if (SealedFile.isSealed(path)) {
+                    setDataSource(SealedFile.Source(appContext, java.io.File(path)))
                 } else {
                     setDataSource(path)
                 }

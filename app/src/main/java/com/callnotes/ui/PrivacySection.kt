@@ -23,6 +23,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
+import com.callnotes.capture.ServiceStatus
+import com.callnotes.processing.ProcessingStatus
+import com.callnotes.security.DataProtection
 import com.callnotes.util.Prefs
 import com.callnotes.util.Retention
 import kotlinx.coroutines.Dispatchers
@@ -148,11 +151,11 @@ fun EncryptionSection(prefs: Prefs) {
     var on by remember { mutableStateOf(prefs.encryptData) }
     var confirm by remember { mutableStateOf<Boolean?>(null) }
     var keyLost by remember { mutableStateOf(prefs.dataKeyLost) }
-    val progress by com.callnotes.security.DataProtection.progress.collectAsStateWithLifecycle()
-    val service by com.callnotes.capture.ServiceStatus.state.collectAsStateWithLifecycle()
-    val processing by com.callnotes.processing.ProcessingStatus.state.collectAsStateWithLifecycle()
-    val summary by com.callnotes.processing.ProcessingStatus.summary.collectAsStateWithLifecycle()
-    val dbPending = remember(on) { !com.callnotes.security.DataProtection.databaseMatchesSetting(context) }
+    val progress by DataProtection.progress.collectAsStateWithLifecycle()
+    val service by ServiceStatus.state.collectAsStateWithLifecycle()
+    val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
+    val summary by ProcessingStatus.summary.collectAsStateWithLifecycle()
+    val dbPending = remember(on) { !DataProtection.databaseMatchesSetting(context) }
 
     CardGroup {
         SwitchRow("הצפנה נוספת", "מסד הנתונים וההקלטות ב-AES-256, במפתח ששמור רק בטלפון.", on) { confirm = it }
@@ -196,7 +199,7 @@ fun EncryptionSection(prefs: Prefs) {
                 TextButton(onClick = {
                     confirm = null
                     prefs.encryptData = want; on = want
-                    app.launchBackground { com.callnotes.security.DataProtection.applyToAll(app) }
+                    app.launchBackground { DataProtection.applyToAll(app) }
                 }) { Text(if (want) "הפעלה" else "כיבוי") }
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("ביטול") } },

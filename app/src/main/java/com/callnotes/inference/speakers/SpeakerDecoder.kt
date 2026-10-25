@@ -38,10 +38,7 @@ object SpeakerDecoder {
         /** Voice of each speaker (mean fingerprint of their words), when fingerprints exist. */
         val centroids: Map<Int, FloatArray>,
         val shareOf1: Double,
-    ) {
-        val usedLevel get() = level != null
-        val usedVoice get() = voiceSimilarity != null
-    }
+    )
 
     /**
      * [levels]: dBFS per word. [voices]: fingerprint per word (null = none). Null when

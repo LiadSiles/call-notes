@@ -13,6 +13,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.callnotes.R
+import com.callnotes.data.CallEntity
+import com.callnotes.data.Caller
+import com.callnotes.data.TaskEntity
+import com.callnotes.processing.TranscriptionService
 import com.callnotes.ui.MainActivity
 
 /**
@@ -91,13 +95,13 @@ object Notifications {
             .setProgress(if (total > 0) total else 0, if (total > 0) done else 0, total <= 0)
         hideOnLockScreen(context, b, CHANNEL_RECORDING, if (id == ID_SUMMARY) "מסכם שיחה" else "מתמלל שיחה")
         if (callId != null) b.addAction(0, "ביטול", serviceAction(context, ACTION_CANCEL, id * 10 + 1, callId))
-        b.addAction(0, "עצירת הכל", serviceAction(context, com.callnotes.processing.TranscriptionService.ACTION_STOP, id * 10 + 2, null))
+        b.addAction(0, "עצירת הכל", serviceAction(context, TranscriptionService.ACTION_STOP, id * 10 + 2, null))
         return b.build()
     }
 
     /** "דני · 21.10 14:05" — who the call was with, or what kind of call, and when. */
-    fun callLabel(call: com.callnotes.data.CallEntity): String {
-        val who = com.callnotes.data.Caller.label(call.contactName, call.number, call.kind, call.incoming)
+    fun callLabel(call: CallEntity): String {
+        val who = Caller.label(call.contactName, call.number, call.kind, call.incoming)
         val time = java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.US).format(java.util.Date(call.startedAt))
         return "$who · $time"
     }
@@ -106,7 +110,7 @@ object Notifications {
      * A new task from a summary. Stays until tapped or dismissed; the tap opens the tasks
      * screen at this task.
      */
-    fun newTask(context: Context, task: com.callnotes.data.TaskEntity, callLabel: String) {
+    fun newTask(context: Context, task: TaskEntity, callLabel: String) {
         val due = task.dueDate?.let {
             runCatching { java.time.LocalDate.parse(it).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM")) }.getOrNull()
         }
@@ -118,18 +122,18 @@ object Notifications {
      * A task's reminder: pops up at the time it is due (or was due while the phone was off),
      * with "Done" and "Snooze" buttons. Tap opens it in the tasks screen.
      */
-    fun taskDue(context: Context, task: com.callnotes.data.TaskEntity, callLabel: String?) {
+    fun taskDue(context: Context, task: TaskEntity, callLabel: String?) {
         val text = listOfNotNull(dueText(task), callLabel).joinToString(" · ")
         val snooze = Prefs(context).snoozeMinutes
         val b = taskBuilder(context, CHANNEL_REMINDERS, task, "תזכורת: ${task.title}", text, publicTitle = "תזכורת למשימה")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .addAction(0, "בוצע", taskAction(context, task.id, com.callnotes.util.TaskReminders.ACTION_DONE, 1))
-            .addAction(0, "נודניק · ${snoozeLabel(snooze)}", taskAction(context, task.id, com.callnotes.util.TaskReminders.ACTION_SNOOZE, 2))
+            .addAction(0, "בוצע", taskAction(context, task.id, TaskReminders.ACTION_DONE, 1))
+            .addAction(0, "נודניק · ${snoozeLabel(snooze)}", taskAction(context, task.id, TaskReminders.ACTION_SNOOZE, 2))
         post(context, taskNotificationId(task.id), b)
     }
 
     /** "עכשיו · 10:00", "להיום", "עבר המועד · 21.10". */
-    private fun dueText(task: com.callnotes.data.TaskEntity): String {
+    private fun dueText(task: TaskEntity): String {
         val date = task.dueDate?.let { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
         val today = java.time.LocalDate.now()
         return when {
@@ -152,18 +156,18 @@ object Notifications {
     private fun taskAction(context: Context, taskId: Long, action: String, slot: Int): PendingIntent =
         PendingIntent.getBroadcast(
             context, (taskId * 4 + slot).toInt(),
-            Intent(context, com.callnotes.util.TaskReminders.ActionReceiver::class.java)
+            Intent(context, TaskReminders.ActionReceiver::class.java)
                 .setAction(action)
-                .putExtra(com.callnotes.util.TaskReminders.EXTRA_TASK_ID, taskId),
+                .putExtra(TaskReminders.EXTRA_TASK_ID, taskId),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
     /** One notification per task (new or due — the later replaces the earlier); tap opens it. */
-    private fun postTask(context: Context, task: com.callnotes.data.TaskEntity, title: String, text: String, publicTitle: String) =
+    private fun postTask(context: Context, task: TaskEntity, title: String, text: String, publicTitle: String) =
         post(context, taskNotificationId(task.id), taskBuilder(context, CHANNEL_TASKS, task, title, text, publicTitle))
 
     private fun taskBuilder(
-        context: Context, channel: String, task: com.callnotes.data.TaskEntity, title: String, text: String, publicTitle: String,
+        context: Context, channel: String, task: TaskEntity, title: String, text: String, publicTitle: String,
     ) = NotificationCompat.Builder(context, channel)
         .also { hideOnLockScreen(context, it, channel, publicTitle) }
         .setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -209,7 +213,7 @@ object Notifications {
     private fun serviceAction(context: Context, action: String, requestCode: Int, callId: Long?): PendingIntent =
         PendingIntent.getService(
             context, requestCode,
-            Intent(context, com.callnotes.processing.TranscriptionService::class.java)
+            Intent(context, TranscriptionService::class.java)
                 .setAction(action)
                 .apply { if (callId != null) putExtra(EXTRA_CALL_ID, callId) },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,

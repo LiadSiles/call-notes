@@ -1,6 +1,5 @@
 package com.callnotes.ui
 
-import com.callnotes.processing.Phase
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,8 +27,11 @@ import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.CallEntity
 import com.callnotes.data.TaskEntity
 import com.callnotes.inference.AnalysisPrompt
+import com.callnotes.inference.CallAnalysis
 import com.callnotes.inference.SourceFinder
+import com.callnotes.processing.Phase
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.util.Notifications
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -105,7 +107,7 @@ fun SummarySection(
                     val target = remember(t.id, lineTexts.size) {
                         t.firstSegment ?: SourceFinder.bestLine(t.quote ?: t.title, lineTexts)
                     }
-                    TaskRow(t, ownerLabel(c, t.owner), com.callnotes.util.Notifications.callLabel(c),
+                    TaskRow(t, ownerLabel(c, t.owner), Notifications.callLabel(c),
                         target?.let { line -> { onShowLine(line) } }) { onTaskDone(t, it) }
                 }
             }
@@ -142,7 +144,7 @@ fun SummarySection(
 @Composable
 private fun Points(
     title: String,
-    items: List<com.callnotes.inference.CallAnalysis.Point>,
+    items: List<CallAnalysis.Point>,
     lineTexts: List<String>,
     onShowLine: (Int) -> Unit,
 ) {

@@ -6,6 +6,9 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.callnotes.security.DataProtection
+import com.callnotes.security.DbCrypt
+import com.callnotes.security.KeyVault
 
 /**
  * Room database `callnotes.db`. Schema changes are explicit migrations (never destructive);
@@ -137,16 +140,16 @@ abstract class AppDatabase : RoomDatabase() {
         fun build(context: Context): AppDatabase {
             val builder = Room.databaseBuilder(context, AppDatabase::class.java, NAME)
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
-            when (com.callnotes.security.DataProtection.prepareDatabase(context, context.getDatabasePath(NAME))) {
-                com.callnotes.security.DataProtection.Db.ENCRYPTED -> {
-                    com.callnotes.security.DbCrypt.loadLibrary()
+            when (DataProtection.prepareDatabase(context, context.getDatabasePath(NAME))) {
+                DataProtection.Db.ENCRYPTED -> {
+                    DbCrypt.loadLibrary()
                     builder.openHelperFactory(
                     net.zetetic.database.sqlcipher.SupportOpenHelperFactory(
-                        com.callnotes.security.KeyVault.sqlKey(context)
+                        KeyVault.sqlKey(context)
                     )
                 )
                 }
-                com.callnotes.security.DataProtection.Db.PLAIN -> Unit
+                DataProtection.Db.PLAIN -> Unit
             }
             return builder.build()
         }

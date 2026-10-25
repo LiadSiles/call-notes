@@ -27,9 +27,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
+import com.callnotes.processing.ProcessingStatus
+import com.callnotes.security.DataProtection
+import com.callnotes.security.SealedFile
+import com.callnotes.ui.theme.LocalTints
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -92,7 +97,7 @@ fun Avatar(call: CallEntity, size: Int = 44) {
         call.kind == CallKind.VOIP -> "◎"
         else -> "#"
     }
-    val t = com.callnotes.ui.theme.LocalTints.current
+    val t = LocalTints.current
     val palette = listOf(t.green, t.indigo, t.brass, t.teal, t.plum, t.rose)
     val (bg, fg) = if (name.isEmpty()) t.slate else palette[(name.hashCode() and 0x7fffffff) % palette.size]
     Box(
@@ -150,8 +155,8 @@ fun kindLabel(call: CallEntity): String = when {
  */
 fun callStage(
     call: CallEntity,
-    transcription: com.callnotes.processing.ProcessingStatus.State,
-    summary: com.callnotes.processing.ProcessingStatus.State,
+    transcription: ProcessingStatus.State,
+    summary: ProcessingStatus.State,
     manualOnly: Boolean = false,
 ): Pair<String, Tone> {
     val transcribingNow = transcription.running && transcription.callId == call.id
@@ -167,8 +172,8 @@ fun callStage(
         CallStatus.HELD -> "טרם תומלל · התמלול בוטל" to Tone.Neutral
         CallStatus.TRANSCRIBED -> when {
             summarisingNow -> "תומלל · מסכם…" to Tone.Busy
-            call.analysisStatus == com.callnotes.data.AnalysisStatus.DONE -> "תומלל וסוכם" to Tone.Good
-            call.analysisStatus == com.callnotes.data.AnalysisStatus.FAILED -> "תומלל · הסיכום נכשל" to Tone.Bad
+            call.analysisStatus == AnalysisStatus.DONE -> "תומלל וסוכם" to Tone.Good
+            call.analysisStatus == AnalysisStatus.FAILED -> "תומלל · הסיכום נכשל" to Tone.Bad
             else -> "תומלל · טרם סוכם" to Tone.Info
         }
         else -> "טרם עובד" to Tone.Neutral
@@ -207,8 +212,8 @@ fun gb(bytes: Long) = "%.1fGB".format(bytes / 1_000_000_000.0)
 
 fun shareRecording(context: Context, path: String) {
     // An encrypted recording is shared as a decrypted temporary copy (removed at next start).
-    val file = if (com.callnotes.security.SealedFile.isSealed(path)) {
-        runCatching { com.callnotes.security.DataProtection.plainCopy(context, File(path), "share") }.getOrNull() ?: return
+    val file = if (SealedFile.isSealed(path)) {
+        runCatching { DataProtection.plainCopy(context, File(path), "share") }.getOrNull() ?: return
     } else File(path)
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
     val send = Intent(Intent.ACTION_SEND)

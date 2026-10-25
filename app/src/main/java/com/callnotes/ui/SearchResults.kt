@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.callnotes.data.CallDao
 import com.callnotes.data.CallKind
+import com.callnotes.data.Caller
 import com.callnotes.data.SearchHit
 
 /** Searches transcripts, summaries, tasks and names. Everything stays on the phone. */
@@ -83,7 +84,7 @@ fun LazyListScope.searchResults(
     }
 }
 
-private fun who(h: SearchHit) = com.callnotes.data.Caller.label(h.contactName, h.number, h.kind, h.incoming)
+private fun who(h: SearchHit) = Caller.label(h.contactName, h.number, h.kind, h.incoming)
 
 /** A window of the text around the first match, so long lines show the relevant part. */
 internal fun snippet(text: String, q: String, around: Int = 60): String {

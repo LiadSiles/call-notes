@@ -1,6 +1,5 @@
 package com.callnotes.ui
 
-import com.callnotes.processing.Phase
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,10 +17,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -69,14 +68,23 @@ import com.callnotes.data.CallEntity
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SegmentEntity
 import com.callnotes.data.SpeakerResult
+import com.callnotes.inference.ModelRole
+import com.callnotes.inference.SourceFinder
+import com.callnotes.processing.Phase
 import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.ProcessingStatus
 import com.callnotes.processing.TranscriptionService
+import com.callnotes.util.Energy
+import com.callnotes.util.Notifications
+import com.callnotes.util.Prefs
+import com.callnotes.util.RecordingFiles
+import com.callnotes.util.TaskActions
+import com.callnotes.util.TaskReminders
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /** Below this peak level (~-40 dBFS) the recording is effectively silent. */
 private const val SILENT_PEAK = 330
@@ -102,7 +110,7 @@ fun CallDetailScreen(
     val initial = remember(callId) { app.callList.value?.firstOrNull { it.call.id == callId }?.call }
     val call by remember(callId) { dao.observe(callId) }.collectAsStateWithLifecycle(initial)
     val noteVersion by ProcessingStatus.version.collectAsStateWithLifecycle()
-    val lastRun = remember(noteVersion) { com.callnotes.util.Prefs(context).lastProcessing }
+    val lastRun = remember(noteVersion) { Prefs(context).lastProcessing }
     val segments by remember(callId) { dao.observeSegments(callId) }.collectAsStateWithLifecycle(emptyList())
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val summaryState by ProcessingStatus.summary.collectAsStateWithLifecycle()
@@ -127,9 +135,9 @@ fun CallDetailScreen(
     val c = call ?: return
     val transcribed = c.status == CallStatus.TRANSCRIBED && c.id !in requested
     /** Over the length limit: transcribed and summarised only when the user asks. */
-    val limitMinutes = remember(noteVersion) { com.callnotes.util.Prefs(context).autoMaxMinutes }
-    val manualOnly = remember(noteVersion, c.id) { com.callnotes.util.Prefs(context).tooLongForAuto(c.endedAt - c.startedAt) }
-    val autoForThis = remember(noteVersion) { com.callnotes.util.Prefs(context).autoSummarize } && !manualOnly
+    val limitMinutes = remember(noteVersion) { Prefs(context).autoMaxMinutes }
+    val manualOnly = remember(noteVersion, c.id) { Prefs(context).tooLongForAuto(c.endedAt - c.startedAt) }
+    val autoForThis = remember(noteVersion) { Prefs(context).autoSummarize } && !manualOnly
     // Items before the first transcript line: header, player, summary, "תמלול", transcript state.
     val segmentStart = 1 + (if (c.filePath != null || c.audioDeletedAt != null) 1 else 0) + (if (transcribed) 1 else 0) + 2 +
         (if (transcribed && backgroundCount > 0) 1 else 0)
@@ -148,7 +156,7 @@ fun CallDetailScreen(
     LaunchedEffect(focusSegment, focusText, segments.size) {
         if ((focusSegment != null || focusText != null) && segments.isNotEmpty()) {
             val target = focusSegment?.takeIf { it in segments.indices }
-                ?: focusText?.let { com.callnotes.inference.SourceFinder.bestLine(it, segments.map { s -> s.text }) }
+                ?: focusText?.let { SourceFinder.bestLine(it, segments.map { s -> s.text }) }
             onFocusConsumed()
             target?.let(showLine)
         }
@@ -224,7 +232,7 @@ fun CallDetailScreen(
                 SummarySection(
                     c, tasks, summaryState,
                     queued = c.id in analysisRequested,
-                    modelInstalled = modelsSnap.active(com.callnotes.inference.ModelRole.ANALYZE) != null,
+                    modelInstalled = modelsSnap.active(ModelRole.ANALYZE) != null,
                     autoOn = autoForThis,
                     onSummarise = {
                         scope.launch(Dispatchers.IO) {
@@ -233,7 +241,7 @@ fun CallDetailScreen(
                         }
                     },
                     onCancel = cancelTranscription,
-                    onTaskDone = { t, done -> scope.launch(Dispatchers.IO) { com.callnotes.util.TaskActions.setDone(context, t, done) } },
+                    onTaskDone = { t, done -> scope.launch(Dispatchers.IO) { TaskActions.setDone(context, t, done) } },
                     onShowLine = showLine,
                     speakersEdited = speakersEdited,
                     lineTexts = segments.map { it.text },
@@ -300,8 +308,8 @@ fun CallDetailScreen(
                             )
                             // What processing this call cost (whole phone during the operation; not while charging).
                             val costs = listOfNotNull(
-                                c.transcribeMs?.let { "תמלול: ${formatDuration(it)}" + (com.callnotes.util.Energy.label(c.transcribeEnergy)?.let { e -> " · $e" } ?: " · בטעינה / לא נמדד") },
-                                c.analyzeMs?.let { "סיכום: ${formatDuration(it)}" + (com.callnotes.util.Energy.label(c.analyzeEnergy)?.let { e -> " · $e" } ?: " · בטעינה / לא נמדד") },
+                                c.transcribeMs?.let { "תמלול: ${formatDuration(it)}" + (Energy.label(c.transcribeEnergy)?.let { e -> " · $e" } ?: " · בטעינה / לא נמדד") },
+                                c.analyzeMs?.let { "סיכום: ${formatDuration(it)}" + (Energy.label(c.analyzeEnergy)?.let { e -> " · $e" } ?: " · בטעינה / לא נמדד") },
                             )
                             if (costs.isNotEmpty()) Text(
                                 costs.joinToString("\n"),
@@ -358,10 +366,10 @@ fun CallDetailScreen(
                 confirmDelete = false
                 if (player.loadedId == c.id) player.release()
                 scope.launch(Dispatchers.IO) {
-                    path?.let(com.callnotes.util.RecordingFiles::delete)
-                    tasks.forEach { com.callnotes.util.Notifications.cancelTask(context, it.id) }
+                    path?.let(RecordingFiles::delete)
+                    tasks.forEach { Notifications.cancelTask(context, it.id) }
                     dao.delete(c.id)
-                    com.callnotes.util.TaskReminders.plan(context)
+                    TaskReminders.plan(context)
                 }
                 onBack()
             }) { Text("מחיקה", color = MaterialTheme.colorScheme.error) }
