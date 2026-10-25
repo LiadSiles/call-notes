@@ -28,6 +28,8 @@ import com.callnotes.data.TaskSource
 import com.callnotes.data.MemoState
 import com.callnotes.data.VoiceMemoEntity
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.Request
+import com.callnotes.processing.Stage
 import com.callnotes.ui.theme.CallNotesTheme
 import com.callnotes.util.Prefs
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -158,6 +160,7 @@ class ScreenshotTest {
 
     @Test fun callsList() = shot("calls") {
         val processing = ProcessingStatus.State(running = true, callId = 2, progress = 40, progressMax = 100, phase = "transcribing")
+        val queue = listOf(Request(Stage.TRANSCRIBE, callId = 4))
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
             item { CallsHeader("ההקלטה פעילה" to Tone.Good, canSearch = true) {} }
             calls.groupBy { dayLabel(it.call.startedAt) }.forEach { (day, list) ->
@@ -167,7 +170,7 @@ class ScreenshotTest {
                         CardGroup {
                             list.forEachIndexed { i, c ->
                                 if (i > 0) RowDivider()
-                                CallRow(c, processing, ProcessingStatus.State(), manualOnly = c.call.id == 5L) {}
+                                CallRow(c, processing, ProcessingStatus.State(), manualOnly = c.call.id == 5L, queue = queue) {}
                             }
                         }
                     }
@@ -213,7 +216,7 @@ class ScreenshotTest {
         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
             LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 104.dp)) {
                 item { PageHeader("משימות", subtitle = "2 פתוחות") {} }
-                memos.forEach { m -> item { MemoCard(m, transcribing, ProcessingStatus.State(), {}, {}, {}) } }
+                memos.forEach { m -> item { MemoCard(m, transcribing, ProcessingStatus.State(), null, {}, {}, {}) } }
                 items.forEach { t -> item { TaskCard(t, emptyList(), false, {}, {}, {}) } }
             }
             AddTaskButtons({}, {}, Modifier.align(androidx.compose.ui.Alignment.BottomStart))

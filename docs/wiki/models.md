@@ -2,7 +2,7 @@
 
 _Last verified: 2026-10-25 (code at 0.18.3)._
 
-## Where things are (0.18.3)
+## Where things are (0.19.0)
 
 | Piece | Where |
 |---|---|
@@ -21,7 +21,7 @@ _Last verified: 2026-10-25 (code at 0.18.3)._
 | Repeats of a task across calls | `inference/TaskMatcher.kt` |
 | Voice note → task prompt | `inference/TaskPrompt.kt` (see [tasks.md](tasks.md)) |
 | Gemma via LiteRT-LM (text; multi-question conversations) | `inference/GemmaAnalyzer.kt` |
-| Two parallel workers in a foreground service | `processing/` |
+| Two parallel workers in a foreground service; the request queue (`ProcessingStatus.queue`: first asked, first served, nothing in progress interrupted); one notification row per item in progress or waiting | `processing/` (+ `RequestQueueTest`), `util/Notifications.kt` |
 
 All of the above except the JNI/LiteRT-LM/ONNX wrappers is pure Kotlin with unit tests in
 `app/src/test` (fake analyzer for the summarizer).
@@ -177,7 +177,7 @@ The log line per call: loudness levels and gap (or "not used"), voices' similari
 | "Precise" prompts (3 questions in one conversation) and the merge prompt for long calls | `inference/SummaryPrompts.kt` |
 | Order of steps: split long calls (≤ 9k chars in one piece, else ~6k-char parts, 2 lines overlap), per part quick or precise, merge rounds (≤ 10k-char prompts), in-call task de-duplication, date-word check | `inference/CallSummarizer.kt`, `DueWords.kt` (+ tests with a fake analyzer) |
 | Model call: LiteRT-LM `Engine` text only (no audio backend), CPU, `maxNumTokens` 8192 (whole conversation), greedy, thinking off, ≤ 1536 output tokens per answer; `Analyzer.conversation` keeps one `Conversation` open for several questions (history stays native-side, the transcript is prefilled once); streamed with `sendMessageAsync` (chunks are deltas; cancel → `onError(CancellationException)`), `abort()` = `cancelProcess()`; a conversation is closed only after the native side reported done | `inference/GemmaAnalyzer.kt` |
-| Worker running in parallel with transcription: requested calls, then (auto on) newest unanalysed; waits for the next transcript while transcription runs | `processing/SummaryWorker.kt` |
+| Worker running in parallel with transcription: requests in order (calls to summarise, voice notes becoming tasks), then (auto on) newest unanalysed; waits for the next transcript while transcription runs | `processing/SummaryWorker.kt` |
 | Storage: `calls.analysisStatus/analysisJson/summaryTitle/analysisModel/analysisError`, `tasks` table (DB v6) | `data/` |
 
 - **Hebrew gotcha (0.5.4):** Gemma writes acronyms with an ASCII `"` as gershayim

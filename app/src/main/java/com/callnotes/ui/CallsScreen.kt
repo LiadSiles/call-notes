@@ -47,6 +47,7 @@ import com.callnotes.data.SearchHit
 import com.callnotes.inference.ModelManager
 import com.callnotes.processing.Phase
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.Request
 import com.callnotes.processing.TranscriptionService
 import com.callnotes.util.BatterySaver
 import com.callnotes.util.Energy
@@ -71,6 +72,7 @@ fun CallsScreen(
     val service by ServiceStatus.state.collectAsStateWithLifecycle()
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val summaryState by ProcessingStatus.summary.collectAsStateWithLifecycle()
+    val queue by ProcessingStatus.queue.collectAsStateWithLifecycle()
     val models by app.models.state.collectAsStateWithLifecycle()
     val setup = rememberSetupState(resumeTick)
     val prefs = remember { Prefs(context) }
@@ -257,7 +259,7 @@ fun CallsScreen(
                         CardGroup {
                             calls.forEachIndexed { i, entry ->
                                 if (i > 0) RowDivider(inset = true)
-                                CallRow(entry, processing, summaryState, manualOnly = manualOnly(entry.call), onClick = { onOpen(entry.call.id) })
+                                CallRow(entry, processing, summaryState, manualOnly = manualOnly(entry.call), queue = queue, onClick = { onOpen(entry.call.id) })
                             }
                         }
                     }
@@ -297,10 +299,11 @@ internal fun CallRow(
     processing: ProcessingStatus.State,
     summary: ProcessingStatus.State,
     manualOnly: Boolean = false,
+    queue: List<Request> = emptyList(),
     onClick: () -> Unit,
 ) {
     val call = item.call
-    val stage = callStage(call, processing, summary, manualOnly)
+    val stage = callStage(call, processing, summary, manualOnly, queue)
     Surface(
         color = androidx.compose.ui.graphics.Color.Transparent,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),

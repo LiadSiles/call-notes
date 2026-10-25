@@ -45,7 +45,7 @@ app/src/main/java/com/callnotes/
               whisper/ (JNI, presets, quantization, expected words, second look at missed speech);
               speakers/ (loudness + voice per word, background speech);
               summaries (CallSummarizer, prompts, date checks), voice-note task prompt, Gemma
-  processing/ foreground service with two parallel workers (transcribe, summary), log
+  processing/ foreground service with two parallel workers (transcribe, summary), request queue, log
   security/   optional extra encryption (Keystore-wrapped key, SQLCipher, sealed files)
   ui/         Compose UI (design system in Design.kt + theme/), settings pages, tasks, app lock
   util/       prefs, notifications, task reminders/actions, voice notes, retention, energy

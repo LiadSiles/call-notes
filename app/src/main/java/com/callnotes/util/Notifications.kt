@@ -16,12 +16,15 @@ import com.callnotes.R
 import com.callnotes.data.CallEntity
 import com.callnotes.data.Caller
 import com.callnotes.data.TaskEntity
+import com.callnotes.processing.Request
+import com.callnotes.processing.Stage
 import com.callnotes.processing.TranscriptionService
 import com.callnotes.ui.MainActivity
 
 /**
- * Every notification the app shows: recording in progress, one per background operation
- * (with Cancel / Stop all), new tasks, task reminders, and problems. Channels: "recording"
+ * Every notification the app shows: recording in progress, one row per background operation
+ * in progress or waiting in the queue (with Cancel; Stop all on those in progress), new
+ * tasks, task reminders, and problems. Channels: "recording"
  * (quiet, ongoing), "alerts" (problems, speaker prompt), "tasks" (new tasks), "reminders"
  * (pops up on screen, with Done / Snooze). With the app lock on, task and processing
  * notifications hide their text on the lock screen.
@@ -35,10 +38,8 @@ object Notifications {
     private const val CHANNEL_REMINDERS = "reminders"
 
     const val ID_RECORDING = 1
-    /** Transcription in progress. */
-    const val ID_TRANSCRIBE = 4
-    /** Summary in progress. */
-    const val ID_SUMMARY = 5
+    /** Background processing starting, before (and between) rows for what it works on. */
+    const val ID_SERVICE = 4
     private const val ID_SPEAKER = 2
     private const val ID_PROBLEM = 3
 
@@ -70,19 +71,65 @@ object Notifications {
             .build()
 
     /**
-     * One background operation (transcribing or summarising one call). Shown while it runs
-     * and removed when it ends. [callId] adds a cancel button for that call and opens it on tap.
+     * Notification id of the row for one request — a call or a voice note, in one stage — so
+     * its waiting row and its progress row are the same row. Negative: clear of the task ids.
+     */
+    fun rowId(stage: Stage, callId: Long, memoId: Long): Int =
+        -(1_000 + (if (memoId != 0L) memoId * 4 + 2 else callId * 4) + stage.ordinal).toInt()
+
+    /**
+     * The row of one operation in progress (transcribing or summarising a call, or a voice
+     * note on its way to a task), removed when it ends. Cancel stops that one; tap opens it.
      */
     fun work(
         context: Context,
         id: Int,
+        stage: Stage,
         title: String,
         text: String,
         done: Int = 0,
         total: Int = 0,
         callId: Long? = null,
+        memoId: Long? = null,
     ): Notification {
-        val b = NotificationCompat.Builder(context, CHANNEL_RECORDING)
+        val b = row(context, id, title, text, callId)
+            .setProgress(if (total > 0) total else 0, if (total > 0) done else 0, total <= 0)
+        hideOnLockScreen(context, b, CHANNEL_RECORDING, if (stage == Stage.SUMMARY) "מסכם" else "מתמלל")
+        if (callId != null || memoId != null) b.addAction(0, "ביטול", serviceAction(context, ACTION_CANCEL, id * 4 + 1, callId, memoId))
+        b.addAction(0, "עצירת הכל", serviceAction(context, TranscriptionService.ACTION_STOP, id * 4 + 2, null))
+        return b.build()
+    }
+
+    /**
+     * The row of a request waiting its turn: what it is, its place in its queue, and a
+     * cancel button. [sortTime] keeps the rows in queue order in the shade.
+     */
+    fun waiting(context: Context, id: Int, r: Request, callLabel: String?, place: Int, sortTime: Long): Notification {
+        val what = if (r.stage == Stage.TRANSCRIBE) "תמלול" else "סיכום"
+        val title = when {
+            r.isMemo && r.stage == Stage.TRANSCRIBE -> "הקלטת משימה ממתינה לתמלול"
+            r.isMemo -> "הקלטת משימה ממתינה ליצירת המשימה"
+            else -> "ממתין ל$what: ${callLabel ?: "שיחה"}"
+        }
+        val text = if (place <= 1) "הבא בתור ה$what" else "מקום $place בתור ה$what"
+        val b = row(context, id, title, text, r.callId.takeIf { !r.isMemo })
+            .setWhen(sortTime)
+            .setShowWhen(false)
+        hideOnLockScreen(context, b, CHANNEL_RECORDING, "ממתין בתור")
+        b.addAction(0, "ביטול", serviceAction(context, ACTION_CANCEL, id * 4 + 1,
+            r.callId.takeIf { !r.isMemo }, r.memoId.takeIf { r.isMemo }))
+        return b.build()
+    }
+
+    /** The service's row before it shows what it works on (and briefly between items). */
+    fun service(context: Context): Notification {
+        val b = row(context, ID_SERVICE, "מכין…", "", null).setProgress(0, 0, true)
+        b.addAction(0, "עצירת הכל", serviceAction(context, TranscriptionService.ACTION_STOP, ID_SERVICE * 4 + 2, null))
+        return b.build()
+    }
+
+    private fun row(context: Context, id: Int, title: String, text: String, callId: Long?) =
+        NotificationCompat.Builder(context, CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(text)
@@ -92,12 +139,6 @@ object Notifications {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setProgress(if (total > 0) total else 0, if (total > 0) done else 0, total <= 0)
-        hideOnLockScreen(context, b, CHANNEL_RECORDING, if (id == ID_SUMMARY) "מסכם שיחה" else "מתמלל שיחה")
-        if (callId != null) b.addAction(0, "ביטול", serviceAction(context, ACTION_CANCEL, id * 10 + 1, callId))
-        b.addAction(0, "עצירת הכל", serviceAction(context, TranscriptionService.ACTION_STOP, id * 10 + 2, null))
-        return b.build()
-    }
 
     /** "דני · 21.10 14:05" — who the call was with, or what kind of call, and when. */
     fun callLabel(call: CallEntity): String {
@@ -208,14 +249,18 @@ object Notifications {
     const val EXTRA_OPEN_TASK = "open_task_id"
     const val ACTION_CANCEL = "com.callnotes.action.CANCEL_CALL"
     const val EXTRA_CALL_ID = "call_id"
+    const val EXTRA_MEMO_ID = "memo_id"
     const val EXTRA_OPEN_CALL = "open_call_id"
 
-    private fun serviceAction(context: Context, action: String, requestCode: Int, callId: Long?): PendingIntent =
+    private fun serviceAction(context: Context, action: String, requestCode: Int, callId: Long?, memoId: Long? = null): PendingIntent =
         PendingIntent.getService(
             context, requestCode,
             Intent(context, TranscriptionService::class.java)
                 .setAction(action)
-                .apply { if (callId != null) putExtra(EXTRA_CALL_ID, callId) },
+                .apply {
+                    if (callId != null) putExtra(EXTRA_CALL_ID, callId)
+                    if (memoId != null) putExtra(EXTRA_MEMO_ID, memoId)
+                },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 

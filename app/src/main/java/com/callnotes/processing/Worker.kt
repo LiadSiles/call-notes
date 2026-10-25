@@ -3,6 +3,7 @@ package com.callnotes.processing
 import android.os.PowerManager
 import com.callnotes.CallNotesApp
 import com.callnotes.data.CallEntity
+import com.callnotes.data.VoiceMemoEntity
 import com.callnotes.util.Notifications
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -15,13 +16,20 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 
+/** What a worker takes next: a voice note, or a call (asked for by the user, or picked automatically). */
+sealed interface Item {
+    data class Memo(val memo: VoiceMemoEntity) : Item
+    data class Call(val call: CallEntity, val requested: Boolean) : Item
+}
+
 /**
  * One queue of background work (transcription, or summaries) inside [TranscriptionService].
- * The two workers run at the same time, each with its own model, status, notification
- * and cancel. Each call's work runs as a child job so cancelling one call doesn't stop
- * the worker; the native engine is told to abort first, so a cancel takes effect at once.
+ * The two workers run at the same time, each with its own model, status and cancel; each
+ * works on one thing at a time and takes the next only when it is done (requests in the
+ * order asked, then automatic work). Each item runs as a child job so cancelling it doesn't
+ * stop the worker; the native engine is told to abort first, so a cancel takes effect at once.
  */
-abstract class Worker(protected val host: TranscriptionService, val notificationId: Int) {
+abstract class Worker(protected val host: TranscriptionService, val stage: Stage) {
 
     protected val app get() = host.application as CallNotesApp
     protected val dao get() = app.database.calls()
@@ -42,6 +50,9 @@ abstract class Worker(protected val host: TranscriptionService, val notification
     protected val cancelledMemos: MutableSet<Long> = ConcurrentHashMap.newKeySet()
 
     val running get() = job?.isActive == true
+
+    /** [ProcessingStatus.enqueued] when this run started (see TranscriptionService.onWorkerDone). */
+    @Volatile var requestsSeen = 0L
 
     /** Whether this worker currently holds a model in memory. */
     @Volatile var modelLoaded = false
@@ -86,9 +97,6 @@ abstract class Worker(protected val host: TranscriptionService, val notification
         job?.cancel()
     }
 
-    /** Stops the current call's job without marking it cancelled (it returns to the queue). */
-    protected fun cancelItem() { item?.cancel() }
-
     /**
      * Runs [block] for one call; null if it was cancelled (the worker carries on). The call
      * runs as its own job so cancelling one call doesn't stop the worker; if the worker
@@ -116,6 +124,23 @@ abstract class Worker(protected val host: TranscriptionService, val notification
 
     protected fun begin(call: CallEntity) { callId = call.id }
     protected fun end() { callId = null }
+
+    /**
+     * The first request of this worker's stage that can still run, taken out of the queue;
+     * [valid] checks it against the database (a cancelled or already finished request is
+     * dropped). A voice note is marked as this worker's before it leaves the queue, so it
+     * isn't queued again from the database meanwhile.
+     */
+    protected suspend fun takeRequest(valid: suspend (Request) -> Item?): Item? {
+        host.syncMemos()
+        while (true) {
+            val r = ProcessingStatus.first(stage) ?: return null
+            if (r.isMemo) memoId = r.memoId
+            ProcessingStatus.dequeue(r)
+            valid(r)?.let { return it }
+            if (r.isMemo) memoId = null
+        }
+    }
 
     protected fun log(text: String) = ProcessingLog.write(host, "[$tag] $text")
     protected fun step(text: String) = ProcessingLog.step(host, "[$tag] $text")

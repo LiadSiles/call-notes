@@ -21,8 +21,11 @@ re-summary may bring it back (the confirm dialog says so).
 
 1. Recorded in the app (16 kHz WAV in `files/memos/`, ≤ 2 min, stops when the app leaves the
    screen; too short / silent → not kept).
-2. `RECORDED` → the transcribe worker takes it before any call (pausing an automatic call),
-   ignoring the automatic switches and "only while charging"; battery saver still applies.
+2. `RECORDED` → joins the request queue in the order recorded (0.19.0; before that it went
+   ahead of everything and paused an automatic call). It waits for what is in progress and
+   earlier requests, goes before automatic work, and ignores the automatic switches and
+   "only while charging"; battery saver still applies. Its waiting row in the notification
+   shade shows its place; cancel there = "ביטול" on the note (recording thrown away).
    The audio is deleted once the text is saved → `TRANSCRIBED`.
 3. The summary worker asks Gemma (`TaskPrompt`) → task(s) with day and time; the note row is
    replaced by them in one transaction. No task found → `NO_TASK` (text kept, "write a

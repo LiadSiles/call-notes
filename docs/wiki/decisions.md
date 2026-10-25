@@ -3,6 +3,37 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-25 — Requests queue up; nothing in progress is interrupted (0.19.0)
+Owner: several requests at once — each new one joins a queue and waits its turn, the next
+starts when one finishes, each request has its own row in the notification shade, and the
+call screen must stop saying it is stopping the current process to start this one.
+Before: a manual transcription paused an automatic call in progress (back to the queue,
+restarted from the start later) and a voice note went ahead of everything, also pausing an
+automatic call; between two manual requests the order was kept, but the screen still said
+"מתחיל… עוצר קודם תמלול אוטומטי של שיחה אחרת".
+- `ProcessingStatus.queue`: `Request(stage, callId | memoId, at)` sorted by `at` — first
+  asked, first served. Calls and voice notes share the order; a note keeps its recording
+  time for both stages (after a restart the in-memory queue is empty, so notes are read back
+  from `voice_memos` with that time — `syncMemos`). Asking again keeps the first place.
+- Each worker takes the first request of its stage only when it is free; requests go before
+  automatic work. The one exception that is not an interruption: an automatic call whose
+  model was still loading when a request came is put back (nothing had started).
+  Transcription and summaries are still two queues running at the same time (0.5.5); each
+  runs one thing at a time.
+- A worker that ends restarts only if a request was added during its run
+  (`ProcessingStatus.enqueued` vs `Worker.requestsSeen`) — a request it couldn't take
+  (battery saver, model missing) must not restart it in a loop.
+- Notification rows: one per request, id `Notifications.rowId(stage, call | note)`
+  (negative, clear of task ids), so the waiting row ("ממתין לתמלול: דני · 21.10 14:05 —
+  מקום 2 בתור") becomes the progress row when its turn comes. Waiting rows carry Cancel
+  (for a voice note = delete it, as in the app); shade order by `when` (earlier place =
+  later time). The service is foreground with one row and moves to another before that one
+  is removed; a "מכין…" row only when there is no other. Rejected: a notification group
+  with a summary — collapses the rows the owner asked to see.
+- UI: "בתור לתמלול · מקום N" / "בתור לסיכום · מקום N" with Cancel on the call screen; the
+  list pill and voice-note cards show the place; "תמלל עכשיו" reads "הוספה לתור" while
+  something else is being transcribed.
+
 ### 2026-10-25 — Patch whisper.cpp: no DTW on windows under 160 ms (0.18.3)
 Owner sent a native crash from 0.17.1 (`abort` inside `WhisperNative.transcribe`). The
 library is stripped, so it was traced by disassembly: the abort is

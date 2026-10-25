@@ -37,13 +37,14 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Summary queue, running alongside transcription: voice notes waiting to become tasks
- * first, then requested calls, then (with automatic processing on) the newest transcribed
- * call without a summary. While the
- * transcription worker is still busy it waits for the next finished transcript instead of
- * exiting, so Gemma stays loaded. Before loading Gemma next to Whisper it checks memory.
+ * Summary queue, running alongside transcription: what the user asked for (voice notes
+ * becoming tasks and calls to summarise), in the order asked, then (with automatic
+ * processing on) the newest transcribed call without a summary. One at a time; a request
+ * waits for the summary in progress. While the transcription worker is still busy it waits
+ * for the next finished transcript instead of exiting, so Gemma stays loaded. Before loading
+ * Gemma next to Whisper it checks memory.
  */
-class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_SUMMARY) {
+class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
 
     override val tag = "summary"
     @Volatile private var analyzer: Analyzer? = null
@@ -64,13 +65,12 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         var failed = 0
         try {
             while (true) {
-                val memo = nextMemo()
-                if (memo != null) {
-                    if (!memoToTasks(memo, spec, file)) break
+                val next = next()
+                if (next is Item.Memo) {
+                    if (!memoToTasks(next.memo, spec, file)) break
                     continue
                 }
-                val (call, requested) = next() ?: (null to false)
-                if (call == null) {
+                if (next == null) {
                     // More transcripts may still come: wait for one rather than unloading Gemma.
                     if (host.transcribe.running) {
                         publish(ProcessingStatus.State())
@@ -80,9 +80,10 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                     }
                     break
                 }
-                waitWhileHot()
+                val (call, requested) = next as Item.Call
                 begin(call)
                 currentRequested = requested
+                waitWhileHot()
                 if (analyzer == null) {
                     waitForMemory("מסכם: ${label(call)}", call.id)
                     analyzer = load(spec, file, "מסכם: ${label(call)}", call.id) { why ->
@@ -90,6 +91,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                     } ?: break
                 }
                 if (call.id in cancelled) { cancelled -= call.id; end(); continue }
+                // Picked automatically, and the user asked for something while Gemma loaded: that goes first.
+                if (!requested && ProcessingStatus.first(stage) != null) { end(); continue }
                 val a = analyzer!!
                 when (runItem { analyse(call, a) }) {
                     true -> done++
@@ -112,22 +115,16 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         }
     }
 
-    /** The oldest transcribed voice note waiting for its task; null if none (or battery saver pauses). */
-    private suspend fun nextMemo(): VoiceMemoEntity? {
-        if (BatterySaver.paused(host)) return null
-        return dao.nextMemo(MemoState.TRANSCRIBED)
-    }
-
     /**
      * Writes the task(s) of one transcribed voice note with Gemma and replaces the note with
      * them. Returns false if the model couldn't be loaded.
      */
     private suspend fun memoToTasks(memo: VoiceMemoEntity, spec: ModelSpec, file: java.io.File): Boolean {
         val title = "מכין משימה מההקלטה"
-        waitWhileHot()
         memoId = memo.id
         currentRequested = true
         try {
+            waitWhileHot()
             if (analyzer == null) {
                 waitForMemory(title, null, memo.id)
                 analyzer = load(spec, file, title, null, memo.id) { why ->
@@ -188,17 +185,16 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         }
     }
 
-    /** The next call to summarise and whether the user asked for it; null if none may run now. */
-    private suspend fun next(): Pair<CallEntity, Boolean>? {
+    /** Requests first, in the order asked; then an automatic summary. Null if none may run now. */
+    private suspend fun next(): Item? {
         if (BatterySaver.paused(host)) return null
-        while (true) {
-            val id = ProcessingStatus.firstAnalysisRequested() ?: break
-            ProcessingStatus.unrequestAnalysis(id)
-            dao.get(id)?.takeIf { it.status == CallStatus.TRANSCRIBED }?.let { return it to true }
-        }
+        takeRequest { r ->
+            if (r.isMemo) dao.getMemo(r.memoId)?.takeIf { it.state == MemoState.TRANSCRIBED }?.let { Item.Memo(it) }
+            else dao.get(r.callId)?.takeIf { it.status == CallStatus.TRANSCRIBED }?.let { Item.Call(it, true) }
+        }?.let { return it }
         // Automatic summaries: switched on, and not waiting for the charger.
         if (!Energy.autoSummaryAllowed(host)) return null
-        return dao.nextUnanalyzed(Prefs(host).autoMaxMs)?.let { it to false }
+        return dao.nextUnanalyzed(Prefs(host).autoMaxMs)?.let { Item.Call(it, false) }
     }
 
     /**
@@ -217,7 +213,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                 log("waiting for memory before loading the summary model (${ProcessingLog.freeRam(host)})")
             }
             publish(ProcessingStatus.State(running = true, callId = callId, phase = Phase.WAITING_MEMORY, memoId = memoId))
-            host.showWork(this, title, "ממתין לזיכרון פנוי (מתמלל במקביל)…", callId = callId)
+            host.showWork(this, title, "ממתין לזיכרון פנוי (מתמלל במקביל)…")
             delay(5_000)
         }
     }
@@ -232,7 +228,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         onFail: suspend (String) -> Unit,
     ): Analyzer? {
         publish(ProcessingStatus.State(running = true, callId = callId, phase = Phase.LOADING_ANALYZER, memoId = memoId))
-        host.showWork(this, title, "טוען את מודל הסיכום…", callId = callId)
+        host.showWork(this, title, "טוען את מודל הסיכום…")
         step("loading analysis model ${spec.id} · ${ProcessingLog.freeRam(host)}")
         val started = System.currentTimeMillis()
         val g = GemmaAnalyzer(host, spec, file)
@@ -255,7 +251,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
         val battery = Energy.read(host)
         val title = "מסכם: ${label(call)}"
         publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.ANALYZING))
-        host.showWork(this, title, "קורא את השיחה…", callId = call.id)
+        host.showWork(this, title, "קורא את השיחה…")
         return try {
             val segments = dao.segments(call.id)
             val known = call.meSpeaker != null
@@ -274,11 +270,11 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
             step("call ${call.id}: summarising ${if (precise) "precisely (3 questions per part)" else "quickly"} · " +
                 "${lines.size} lines, ${lines.sumOf { it.text.length }} chars")
             var lastShown = 0L
-            var stage = "קורא את השיחה…"
+            var doing = "קורא את השיחה…"
             val summarizer = CallSummarizer(analyzer, precise, object : CallSummarizer.Listener {
                 override fun step(step: CallSummarizer.Step, part: Int, parts: Int) {
                     val of = if (parts > 1) " · חלק $part מתוך $parts" else ""
-                    stage = when (step) {
+                    doing = when (step) {
                         CallSummarizer.Step.NOTES -> "מסכם$of"
                         CallSummarizer.Step.TASKS -> "מחלץ משימות$of"
                         CallSummarizer.Step.REVIEW -> "בודק את המשימות$of"
@@ -288,14 +284,14 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Notifications.ID_
                         // Parts of the call as progress; merging is one last step.
                         val merging = step == CallSummarizer.Step.MERGE
                         publish(ProcessingStatus.State(true, call.id, if (merging) 0 else part, if (merging) 0 else parts, Phase.ANALYZING))
-                        host.showWork(this@SummaryWorker, title, stage, callId = call.id)
+                        host.showWork(this@SummaryWorker, title, doing)
                     }
                 }
                 override fun chars(written: Int) {
                     val now = System.currentTimeMillis()
                     if (now - lastShown > 1_000 && call.id !in cancelled) {
                         lastShown = now
-                        host.showWork(this@SummaryWorker, title, "$stage · $written תווים", callId = call.id)
+                        host.showWork(this@SummaryWorker, title, "$doing · $written תווים")
                     }
                 }
                 override fun log(text: String) = this@SummaryWorker.log("call ${call.id}: $text")

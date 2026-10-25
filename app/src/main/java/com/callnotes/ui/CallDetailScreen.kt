@@ -73,6 +73,7 @@ import com.callnotes.inference.SourceFinder
 import com.callnotes.processing.Phase
 import com.callnotes.processing.ProcessingLog
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.Stage
 import com.callnotes.processing.TranscriptionService
 import com.callnotes.util.Energy
 import com.callnotes.util.Notifications
@@ -114,8 +115,7 @@ fun CallDetailScreen(
     val segments by remember(callId) { dao.observeSegments(callId) }.collectAsStateWithLifecycle(emptyList())
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val summaryState by ProcessingStatus.summary.collectAsStateWithLifecycle()
-    val requested by ProcessingStatus.requested.collectAsStateWithLifecycle()
-    val analysisRequested by ProcessingStatus.analysisRequested.collectAsStateWithLifecycle()
+    val queue by ProcessingStatus.queue.collectAsStateWithLifecycle()
     val tasks by remember(callId) { dao.observeTasks(callId) }.collectAsStateWithLifecycle(emptyList())
     val modelsSnap by app.models.state.collectAsStateWithLifecycle()
     var confirmDelete by remember { mutableStateOf(false) }
@@ -133,7 +133,10 @@ fun CallDetailScreen(
     val backgroundCount = segments.count { it.background }
 
     val c = call ?: return
-    val transcribed = c.status == CallStatus.TRANSCRIBED && c.id !in requested
+    /** This call's place in the transcription / summary queue (null = not waiting). */
+    val transcribePlace = ProcessingStatus.placeOf(queue, Stage.TRANSCRIBE, c.id)
+    val summaryPlace = ProcessingStatus.placeOf(queue, Stage.SUMMARY, c.id)
+    val transcribed = c.status == CallStatus.TRANSCRIBED && transcribePlace == null
     /** Over the length limit: transcribed and summarised only when the user asks. */
     val limitMinutes = remember(noteVersion) { Prefs(context).autoMaxMinutes }
     val manualOnly = remember(noteVersion, c.id) { Prefs(context).tooLongForAuto(c.endedAt - c.startedAt) }
@@ -161,10 +164,9 @@ fun CallDetailScreen(
             target?.let(showLine)
         }
     }
-    // Shown as "starting" at once (the request is visible before any database write), then
-    // the service takes it ahead of the queue.
+    // Shown in the queue at once (before any database write); the service takes it in turn.
     val startTranscription: () -> Unit = {
-        ProcessingStatus.request(c.id)
+        ProcessingStatus.requestTranscription(c.id)
         scope.launch(Dispatchers.IO) {
             dao.setStatusOnly(c.id, CallStatus.RECORDED)
             withContext(Dispatchers.Main) { onTranscribe() }
@@ -209,7 +211,7 @@ fun CallDetailScreen(
                             Text(it, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        callStage(c, processing, summaryState, manualOnly).let { (text, tone) ->
+                        callStage(c, processing, summaryState, manualOnly, queue).let { (text, tone) ->
                             Pill(text, tone, Modifier.padding(top = 6.dp))
                         }
                     }
@@ -231,7 +233,7 @@ fun CallDetailScreen(
             if (transcribed) item {
                 SummarySection(
                     c, tasks, summaryState,
-                    queued = c.id in analysisRequested,
+                    queuePlace = summaryPlace,
                     modelInstalled = modelsSnap.active(ModelRole.ANALYZE) != null,
                     autoOn = autoForThis,
                     onSummarise = {
@@ -251,7 +253,7 @@ fun CallDetailScreen(
             item { SectionHeader("תמלול") }
 
             item {
-                TranscriptState(c, processing, queued = c.id in requested, lastRun = lastRun,
+                TranscriptState(c, processing, queuePlace = transcribePlace, lastRun = lastRun,
                     manualOnlyMinutes = if (manualOnly) limitMinutes else null,
                     onStart = startTranscription, onCancel = cancelTranscription, onShowLog = { showLog = true })
             }
@@ -424,7 +426,8 @@ private fun PlayerPanel(id: Long, path: String, player: AudioPlayer) {
 private fun TranscriptState(
     c: CallEntity,
     processing: ProcessingStatus.State,
-    queued: Boolean,
+    /** Place in the transcription queue; null = not waiting. */
+    queuePlace: Int?,
     lastRun: String?,
     /** Set when the call is over the automatic length limit (the limit, in minutes). */
     manualOnlyMinutes: Int?,
@@ -434,7 +437,9 @@ private fun TranscriptState(
 ) {
     val cs = MaterialTheme.colorScheme
     val onThis = processing.running && processing.callId == c.id
-    val busyElsewhere = processing.running && processing.callId != null && processing.callId != c.id
+    // Transcribing something else (another call or a voice note), or loading the model for it.
+    val busyElsewhere = processing.running && processing.phase.isNotEmpty() && !onThis
+    val queued = queuePlace != null
 
     @Composable
     fun LastRun() {
@@ -444,6 +449,17 @@ private fun TranscriptState(
                 color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
             TextButton(onClick = onShowLog) { Text("יומן") }
         }
+    }
+
+    @Composable
+    fun Waiting(title: String, detail: String) {
+      Panel {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = onCancel) { Text("ביטול") }
+        }
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+      }
     }
 
     @Composable
@@ -493,13 +509,12 @@ private fun TranscriptState(
             FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) { Text("נסה שוב") }
             LastRun()
         }
-        queued && busyElsewhere -> Progress(
-            "מתחיל… עוצר קודם תמלול אוטומטי של שיחה אחרת",
-            "השיחה הזו תתומלל ראשונה; השנייה תחזור לתור.",
-            null,
-        )
         queued && processing.phase == Phase.WAITING_THERMAL -> Progress(
             "הטלפון חם — התמלול יתחיל כשיתקרר", null, null,
+        )
+        queued && (busyElsewhere || (queuePlace ?: 0) > 1) -> Waiting(
+            if (queuePlace == 1) "בתור לתמלול · הבא בתור" else "בתור לתמלול · מקום $queuePlace",
+            "יתחיל כשמה שלפניו בתור יסתיים. אפשר לבקש עוד שיחות — כל בקשה נכנסת לתור לפי הסדר.",
         )
         queued -> Progress("מתחיל תמלול…", null, null)
         c.status == CallStatus.TRANSCRIBED -> Unit
@@ -512,12 +527,14 @@ private fun TranscriptState(
             Text(
                 when {
                     manualOnlyMinutes != null -> "כך הוגדר בהגדרות ← תמלול. אפשר לתמלל ולסכם אותה עכשיו:"
-                    busyElsewhere -> "כרגע מתומללת שיחה אחרת. אפשר להקדים את זו:"
+                    busyElsewhere -> "כרגע מתומלל משהו אחר. אפשר להוסיף את השיחה הזו לתור:"
                     else -> "התמלול רץ ברקע כשמותקן מודל. אפשר להתחיל אותו עכשיו:"
                 },
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant,
             )
-            FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) { Text("תמלל עכשיו") }
+            FilledTonalButton(onClick = onStart, modifier = Modifier.padding(top = 8.dp)) {
+                Text(if (busyElsewhere) "הוספה לתור" else "תמלל עכשיו")
+            }
             LastRun()
         }
         c.status == CallStatus.TRANSCRIBE_FAILED -> Panel {

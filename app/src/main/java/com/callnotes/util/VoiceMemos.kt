@@ -59,8 +59,8 @@ object VoiceMemos {
     }
 
     /**
-     * Stops [r] and, unless it is too short or silent, queues it to become a task (the
-     * processing starts at once; see [TranscriptionService.startMemo]).
+     * Stops [r] and, unless it is too short or silent, queues it to become a task (it waits
+     * its turn after what is in progress; see [TranscriptionService.startMemo]).
      */
     suspend fun finish(context: Context, r: Recording): Outcome = withContext(Dispatchers.IO) {
         val peak = r.stop()
@@ -87,9 +87,8 @@ object VoiceMemos {
     /** Picks up notes interrupted earlier (app closed, battery saver, stop all). */
     suspend fun resume(context: Context) {
         val dao = dao(context)
-        val toTranscribe = dao.memoCount(MemoState.RECORDED) > 0
-        if (toTranscribe || dao.memoCount(MemoState.TRANSCRIBED) > 0) {
-            TranscriptionService.startMemo(context, needsTranscription = toTranscribe)
+        if (dao.memoCount(MemoState.RECORDED) > 0 || dao.memoCount(MemoState.TRANSCRIBED) > 0) {
+            TranscriptionService.startMemo(context)
         }
     }
 
@@ -108,7 +107,7 @@ object VoiceMemos {
             else -> return
         }
         dao(context).setMemo(memo.id, state, memo.path, memo.text, null)
-        TranscriptionService.startMemo(context, needsTranscription = state == MemoState.RECORDED)
+        TranscriptionService.startMemo(context)
     }
 
     /**

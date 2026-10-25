@@ -46,12 +46,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
 import com.callnotes.data.CallKind
 import com.callnotes.data.Caller
+import com.callnotes.data.MemoState
 import com.callnotes.data.TaskEntity
 import com.callnotes.data.TaskListItem
 import com.callnotes.data.TaskSource
 import com.callnotes.data.VoiceMemoEntity
 import com.callnotes.inference.ModelRole
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.Stage
 import com.callnotes.util.TaskActions
 import com.callnotes.util.VoiceMemos
 import java.time.LocalDate
@@ -80,6 +82,7 @@ fun TasksScreen(
     val memos by remember { dao.observeMemos() }.collectAsStateWithLifecycle(emptyList())
     val transcribing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val summarising by ProcessingStatus.summary.collectAsStateWithLifecycle()
+    val queue by ProcessingStatus.queue.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<TaskEntity?>(null) }
     /** Typing a new task: its starting text, or null = closed. */
     var adding by remember { mutableStateOf<String?>(null) }
@@ -155,6 +158,11 @@ fun TasksScreen(
             items(memos, key = { "memo-${it.id}" }) { m ->
                 MemoCard(
                     m, transcribing, summarising,
+                    place = when (m.state) {
+                        MemoState.RECORDED -> ProcessingStatus.placeOfMemo(queue, Stage.TRANSCRIBE, m.id)
+                        MemoState.TRANSCRIBED -> ProcessingStatus.placeOfMemo(queue, Stage.SUMMARY, m.id)
+                        else -> null
+                    },
                     onRetry = { app.launchBackground { VoiceMemos.retry(app, m) } },
                     onWrite = { fromMemo = m; adding = m.text.orEmpty() },
                     onDelete = { app.launchBackground { VoiceMemos.delete(app, m) } },

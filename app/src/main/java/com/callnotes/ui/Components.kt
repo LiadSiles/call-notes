@@ -32,6 +32,8 @@ import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
 import com.callnotes.processing.ProcessingStatus
+import com.callnotes.processing.Request
+import com.callnotes.processing.Stage
 import com.callnotes.security.DataProtection
 import com.callnotes.security.SealedFile
 import com.callnotes.ui.theme.LocalTints
@@ -158,9 +160,16 @@ fun callStage(
     transcription: ProcessingStatus.State,
     summary: ProcessingStatus.State,
     manualOnly: Boolean = false,
+    /** [ProcessingStatus.queue]: a call the user asked for shows its place. */
+    queue: List<Request> = emptyList(),
 ): Pair<String, Tone> {
     val transcribingNow = transcription.running && transcription.callId == call.id
     val summarisingNow = summary.running && summary.callId == call.id
+    val transcribePlace = ProcessingStatus.placeOf(queue, Stage.TRANSCRIBE, call.id)
+    val summaryPlace = ProcessingStatus.placeOf(queue, Stage.SUMMARY, call.id)
+    if (transcribePlace != null && call.status != CallStatus.TRANSCRIBING && !transcribingNow) {
+        return "בתור לתמלול · ${placeLabel(transcribePlace)}" to Tone.Info
+    }
     return when (call.status) {
         CallStatus.RECORD_FAILED -> "ההקלטה נכשלה" to Tone.Bad
         CallStatus.TRANSCRIBING ->
@@ -172,6 +181,7 @@ fun callStage(
         CallStatus.HELD -> "טרם תומלל · התמלול בוטל" to Tone.Neutral
         CallStatus.TRANSCRIBED -> when {
             summarisingNow -> "תומלל · מסכם…" to Tone.Busy
+            summaryPlace != null -> "תומלל · בתור לסיכום · ${placeLabel(summaryPlace)}" to Tone.Info
             call.analysisStatus == AnalysisStatus.DONE -> "תומלל וסוכם" to Tone.Good
             call.analysisStatus == AnalysisStatus.FAILED -> "תומלל · הסיכום נכשל" to Tone.Bad
             else -> "תומלל · טרם סוכם" to Tone.Info
@@ -179,6 +189,9 @@ fun callStage(
         else -> "טרם עובד" to Tone.Neutral
     }
 }
+
+/** "הבא בתור", "מקום 3". */
+private fun placeLabel(place: Int) = if (place == 1) "הבא בתור" else "מקום $place"
 
 fun formatDuration(millis: Long): String {
     val total = (millis / 1000).coerceAtLeast(0)

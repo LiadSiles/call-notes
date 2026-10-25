@@ -14,13 +14,16 @@ import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import com.callnotes.CallNotesApp
 import com.callnotes.data.AnalysisStatus
+import com.callnotes.data.MemoState
 import com.callnotes.inference.ModelRole
 import com.callnotes.util.BatterySaver
 import com.callnotes.util.Energy
 import com.callnotes.util.Hashing
 import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
+import com.callnotes.util.VoiceMemos
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,9 +35,13 @@ import kotlinx.coroutines.launch
 /**
  * Background processing: two workers at the same time — [TranscribeWorker] (Whisper +
  * speakers) and [SummaryWorker] (Gemma). Voice notes for new tasks pass through both
- * (Whisper, then Gemma) ahead of the calls. Each shows its own notification naming the call
- * it is working on, with a cancel button, and removes it when done; the service stays in
- * the foreground with whichever is running and stops when both are idle.
+ * (Whisper, then Gemma). What the user asks for waits its turn in [ProcessingStatus.queue]
+ * (first asked, first served, before automatic work); nothing in progress is interrupted.
+ *
+ * Notifications: one row per thing in progress and one per request waiting (with its place
+ * in the queue); a waiting row turns into the progress row when its turn comes. Each has a
+ * cancel button. The service stays in the foreground with one of the rows (moved when that
+ * one goes) and stops when both workers are idle.
  *
  * Cancel is immediate from the user's point of view: the UI state, the database and the
  * notification change at once, and the native engine is told to abort (whisper.cpp abort
@@ -56,12 +63,19 @@ class TranscriptionService : Service() {
     private var stoppingAll = false
     /** Main thread: the notification id the service is in the foreground with. */
     private var anchor: Int? = null
-    /** Main thread: the latest notification of each running worker. */
-    private val shown = HashMap<Int, Notification>()
+    /** Main thread: every processing row in the notification shade, by notification id. */
+    private val rows = LinkedHashMap<Int, Notification>()
+    /** Main thread: the row each worker shows for what it is doing now. */
+    private val workerRows = HashMap<Worker, Int>()
+    /** Main thread: rows of requests waiting their turn. */
+    private val waitingRows = HashSet<Int>()
+    /** "דני · 21.10 14:05" per call, for the waiting rows (read once). */
+    private val labels = ConcurrentHashMap<Long, String>()
 
     override fun onCreate() {
         super.onCreate()
         instance = this
+        scope.launch { ProcessingStatus.queue.collect { main.post { refreshWaiting() } } }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -72,25 +86,32 @@ class TranscriptionService : Service() {
             ACTION_STOP -> { stopAll(this); finishIfIdle(); return START_NOT_STICKY }
             Notifications.ACTION_CANCEL -> {
                 intent.getLongExtra(Notifications.EXTRA_CALL_ID, -1L).takeIf { it > 0 }?.let { cancelCall(this, it) }
+                intent.getLongExtra(Notifications.EXTRA_MEMO_ID, -1L).takeIf { it > 0 }?.let { id ->
+                    // Same as "ביטול" on the note in the tasks screen: the recording is thrown away.
+                    ProcessingStatus.removeMemo(id)
+                    val app = application as CallNotesApp
+                    app.launchBackground { app.database.calls().getMemo(id)?.let { VoiceMemos.delete(app, it) } }
+                }
                 finishIfIdle()
                 return START_NOT_STICKY
             }
         }
         if (anchor == null) {
             try {
-                goForeground(Notifications.ID_TRANSCRIBE, Notifications.work(this, Notifications.ID_TRANSCRIBE, "מכין…", ""))
-                anchor = Notifications.ID_TRANSCRIBE
+                goForeground(Notifications.ID_SERVICE, Notifications.service(this))
+                anchor = Notifications.ID_SERVICE
             } catch (e: Exception) {
                 ProcessingLog.write(this, "startForeground refused: ${describe(e)}")
                 note("לא ניתן היה להפעיל את העיבוד ברקע: ${e.javaClass.simpleName}")
-                ProcessingStatus.clearRequests()
+                ProcessingStatus.clearQueue()
                 finishIfIdle()
                 return START_NOT_STICKY
             }
         }
         stoppingAll = false
-        if (intent?.getBooleanExtra(EXTRA_MEMO, false) == true) transcribe.onMemo()
-        intent?.getLongExtra(EXTRA_CALL_ID, -1L)?.takeIf { it > 0 }?.let { transcribe.onRequest(it) }
+        refreshWaiting()
+        // A voice note was recorded: it joins the queue now, so its row shows while others run.
+        if (intent?.getBooleanExtra(EXTRA_MEMO, false) == true) scope.launch { syncMemos() }
         if (intent?.getBooleanExtra(EXTRA_AFTER_CALL, false) == true && !transcribe.running) transcribe.delayFirst = true
         ensure(transcribe)
         ensure(summary)
@@ -108,6 +129,7 @@ class TranscriptionService : Service() {
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "callnotes:processing")
                 .apply { acquire(3 * 60 * 60 * 1000L) }
         }
+        w.requestsSeen = ProcessingStatus.enqueued
         lateinit var job: Job
         job = scope.launch {
             try { w.loop() } finally { main.post { onWorkerDone(w, job) } }
@@ -120,15 +142,13 @@ class TranscriptionService : Service() {
 
     private fun onWorkerDone(w: Worker, job: Job) {
         if (w.job === job) w.job = null
-        hideWorkNow(w)
-        // A request, a voice note or a finished transcript may have slipped in while the
-        // worker was finishing.
-        if (!stoppingAll && w === transcribe && (ProcessingStatus.firstRequested() != null || transcribe.memoWaiting)) {
-            ensure(transcribe); return
-        }
-        if (!stoppingAll && w === summary && (ProcessingStatus.firstAnalysisRequested() != null || summary.wake.tryReceive().isSuccess)) {
-            ensure(summary); return
-        }
+        // A request or a finished transcript may have slipped in while the worker was
+        // finishing. (Only a request added during the run counts: one the worker couldn't
+        // take — battery saver, no model — must not restart it in a loop.)
+        val newRequest = ProcessingStatus.first(w.stage) != null && ProcessingStatus.enqueued != w.requestsSeen
+        val newTranscript = w === summary && summary.wake.tryReceive().isSuccess
+        if (!stoppingAll && (newRequest || newTranscript)) { ensure(w); return }
+        workerRows.remove(w)?.let { if (transcribe.running || summary.running) removeRow(it) }
         finishIfIdle()
     }
 
@@ -136,43 +156,99 @@ class TranscriptionService : Service() {
         if (transcribe.running || summary.running) return
         stopForeground(STOP_FOREGROUND_REMOVE)
         anchor = null
-        shown.clear()
-        nm().cancel(Notifications.ID_TRANSCRIBE)
-        nm().cancel(Notifications.ID_SUMMARY)
+        (rows.keys + Notifications.ID_SERVICE).forEach { nm().cancel(it) }
+        rows.clear(); workerRows.clear(); waitingRows.clear()
         wakeLock?.takeIf { it.isHeld }?.release()
         wakeLock = null
         stoppingAll = false
         stopSelf(lastStartId)
     }
 
-    /** Any thread: show or update [w]'s notification. */
-    fun showWork(w: Worker, title: String, text: String, done: Int = 0, total: Int = 0, callId: Long? = null) {
-        val n = Notifications.work(this, w.notificationId, title, text, done, total, callId)
+    /**
+     * Any thread: show or update the row of what [w] is working on now (its current voice
+     * note or call). The row of what it worked on before goes; a waiting row of the same
+     * request becomes this one.
+     */
+    fun showWork(w: Worker, title: String, text: String, done: Int = 0, total: Int = 0) {
+        val memo = w.memoId
+        val call = if (memo == null) w.callId else null
+        if (memo == null && call == null) return
+        val id = Notifications.rowId(w.stage, call ?: 0, memo ?: 0)
+        val n = Notifications.work(this, id, w.stage, title, text, done, total, callId = call, memoId = memo)
         main.post {
             if (!w.running && w.job == null) return@post
-            shown[w.notificationId] = n
-            if (anchor == null) {
-                runCatching { goForeground(w.notificationId, n); anchor = w.notificationId }
-            } else {
-                notify(w.notificationId, n)
-            }
+            workerRows.put(w, id)?.takeIf { it != id }?.let(::removeRow)
+            waitingRows.remove(id)
+            putRow(id, n)
         }
     }
 
-    /** Any thread: remove [w]'s notification (e.g. the summary worker waiting for work). */
-    fun hideWork(w: Worker) = main.post { hideWorkNow(w) }
+    /** Any thread: remove [w]'s row (e.g. the summary worker waiting for a transcript). */
+    fun hideWork(w: Worker) = main.post { workerRows.remove(w)?.let(::removeRow) }
 
-    private fun hideWorkNow(w: Worker) {
-        val id = w.notificationId
-        shown.remove(id)
+    /**
+     * Main thread: one row per request waiting, in queue order ("הבא בתור", "מקום 3 בתור"),
+     * each with a cancel button. A request being worked on already has its progress row.
+     */
+    private fun refreshWaiting() {
+        if (anchor == null) return
+        val queue = ProcessingStatus.queue.value
+        val busy = workerRows.values.toSet()
+        val now = System.currentTimeMillis()
+        val want = LinkedHashMap<Int, Notification>()
+        queue.forEachIndexed { i, r ->
+            val id = Notifications.rowId(r.stage, r.callId, r.memoId)
+            if (id in busy) return@forEachIndexed
+            val place = queue.filter { it.stage == r.stage }.indexOfFirst { it.sameItem(r) } + 1
+            val label = if (r.isMemo) null else labels[r.callId] ?: run { fetchLabel(r.callId); null }
+            // Shade order: newer first, so earlier places get later times.
+            want[id] = Notifications.waiting(this, id, r, label, place, sortTime = now - (i + 1) * 1_000L)
+        }
+        (waitingRows - want.keys).filter { it !in busy }.forEach(::removeRow)
+        waitingRows.clear()
+        waitingRows += want.keys
+        want.forEach { (id, n) -> putRow(id, n) }
+    }
+
+    private fun fetchLabel(callId: Long) {
+        val dao = (application as CallNotesApp).database.calls()
+        scope.launch {
+            val call = dao.get(callId) ?: return@launch
+            if (labels.putIfAbsent(callId, Notifications.callLabel(call)) == null) main.post { refreshWaiting() }
+        }
+    }
+
+    /** Main thread: adds or updates a row; the first real row takes over the "מכין…" one. */
+    private fun putRow(id: Int, n: Notification) {
+        rows[id] = n
+        val old = anchor
+        if (old == null || old == Notifications.ID_SERVICE) {
+            runCatching { goForeground(id, n); anchor = id }
+            if (old != null && anchor == id) nm().cancel(old)
+        } else {
+            notify(id, n)
+        }
+    }
+
+    /** Main thread: removes a row. The service keeps a foreground row while it runs, so it moves first. */
+    private fun removeRow(id: Int) {
+        rows.remove(id)
         if (anchor != id) { nm().cancel(id); return }
-        // The foreground notification must stay while anything runs: move it to the other worker.
-        val other = if (w === transcribe) summary else transcribe
-        if (other.running) {
-            val n = shown[other.notificationId]
-                ?: Notifications.work(this, other.notificationId, "מעבד…", "")
-            runCatching { goForeground(other.notificationId, n); anchor = other.notificationId }
-            nm().cancel(id)
+        val (next, n) = rows.entries.firstOrNull()?.toPair() ?: (Notifications.ID_SERVICE to Notifications.service(this))
+        runCatching { goForeground(next, n); anchor = next }
+        nm().cancel(id)
+    }
+
+    /**
+     * Voice notes waiting in the database join the queue in the order they were recorded
+     * (the queue lives in memory; after a restart the notes are still there).
+     */
+    suspend fun syncMemos() {
+        val dao = (application as CallNotesApp).database.calls()
+        for ((state, stage) in listOf(MemoState.RECORDED to Stage.TRANSCRIBE, MemoState.TRANSCRIBED to Stage.SUMMARY)) {
+            val memos = dao.memosIn(state)
+            val busy = setOfNotNull(transcribe.memoId, summary.memoId)
+            memos.filter { it.id !in busy }.forEach { ProcessingStatus.enqueue(Request(stage, memoId = it.id, at = it.createdAt)) }
         }
     }
 
@@ -231,7 +307,6 @@ class TranscriptionService : Service() {
 
     companion object {
         private const val EXTRA_AFTER_CALL = "after_call"
-        private const val EXTRA_CALL_ID = "call_id"
         private const val EXTRA_MEMO = "memo"
         const val ACTION_STOP = "com.callnotes.action.STOP_TRANSCRIPTION"
 
@@ -243,8 +318,7 @@ class TranscriptionService : Service() {
          * back), and the engine working on it aborted.
          */
         fun cancelCall(context: Context, id: Long) {
-            ProcessingStatus.unrequest(id)
-            ProcessingStatus.unrequestAnalysis(id)
+            ProcessingStatus.removeCall(id)
             if (ProcessingStatus.state.value.callId == id) ProcessingStatus.set(ProcessingStatus.State(running = true))
             val summarising = ProcessingStatus.summary.value.callId == id
             if (summarising) ProcessingStatus.setSummary(ProcessingStatus.State(running = true))
@@ -289,14 +363,12 @@ class TranscriptionService : Service() {
         }
 
         /**
-         * Turns waiting voice notes into tasks now: they go ahead of everything (an
-         * automatic call in progress is paused and requeued). Not held back by the
+         * Turns waiting voice notes into tasks: each joins the queue in the order recorded,
+         * like any request (nothing in progress is stopped for it). Not held back by the
          * automatic switches or "only while charging" — the user asked for it — but battery
-         * saver (when set to pause) still applies. [needsTranscription]: a note is waiting
-         * for Whisper (only then is a running automatic call paused for it). Returns false
-         * if it couldn't start.
+         * saver (when set to pause) still applies. Returns false if it couldn't start.
          */
-        fun startMemo(context: Context, needsTranscription: Boolean = true): Boolean {
+        fun startMemo(context: Context): Boolean {
             val app = context.applicationContext as CallNotesApp
             if (BatterySaver.paused(context)) {
                 note(context, "מושהה — מצב חיסכון בסוללה פעיל. ההקלטה תהפוך למשימה כשיכבה.")
@@ -308,7 +380,7 @@ class TranscriptionService : Service() {
             }
             return try {
                 ContextCompat.startForegroundService(context,
-                    Intent(context, TranscriptionService::class.java).putExtra(EXTRA_MEMO, needsTranscription))
+                    Intent(context, TranscriptionService::class.java).putExtra(EXTRA_MEMO, true))
                 true
             } catch (e: Exception) {
                 ProcessingLog.write(context, "service start refused (voice note): ${describe(e)}")
@@ -317,8 +389,9 @@ class TranscriptionService : Service() {
             }
         }
 
-        /** A voice note was deleted: stop working on it if either worker is. */
+        /** A voice note was deleted: out of the queue, and stopped if either worker is on it. */
         fun cancelMemo(id: Long) {
+            ProcessingStatus.removeMemo(id)
             if (ProcessingStatus.state.value.memoId == id) ProcessingStatus.set(ProcessingStatus.State(running = true))
             if (ProcessingStatus.summary.value.memoId == id) ProcessingStatus.setSummary(ProcessingStatus.State(running = true))
             Handler(Looper.getMainLooper()).post {
@@ -341,7 +414,7 @@ class TranscriptionService : Service() {
          */
         fun stopAll(context: Context) {
             Prefs(context).apply { autoTranscribe = false; autoSummarize = false }
-            ProcessingStatus.clearRequests()
+            ProcessingStatus.clearQueue()
             ProcessingStatus.set(ProcessingStatus.State())
             ProcessingStatus.setSummary(ProcessingStatus.State())
             ProcessingStatus.touch()
@@ -349,9 +422,10 @@ class TranscriptionService : Service() {
         }
 
         /**
-         * Starts processing if a model is ready. Safe to call often. With [callId] that
-         * call is transcribed next, ahead of everything else; with [analyseId] that call is
-         * summarised next. Returns false (and records why in the "last run" note) if it
+         * Starts processing if a model is ready. Safe to call often. [callId] / [analyseId]:
+         * the user asked to transcribe / summarise that call — it joins the queue and runs
+         * when its turn comes (after what is in progress and earlier requests, before
+         * automatic work). Returns false (and records why in the "last run" note) if it
          * couldn't start.
          */
         fun start(context: Context, afterCall: Boolean = false, callId: Long? = null, analyseId: Long? = null): Boolean {
@@ -377,27 +451,26 @@ class TranscriptionService : Service() {
                     return false
                 }
                 callId != null && !canTranscribe || !canTranscribe && !canAnalyse -> {
-                    if (callId != null) ProcessingStatus.unrequest(callId)
+                    if (callId != null) ProcessingStatus.removeCall(callId)
                     note(context, "אין מודל תמלול מותקן — התמלול לא הופעל")
                     return false
                 }
             }
             if (analyseId != null) {
-                ProcessingStatus.requestAnalysis(analyseId)
+                ProcessingStatus.requestSummary(analyseId)
                 instance?.summary?.cancelled?.remove(analyseId)
             }
             if (callId != null) {
-                ProcessingStatus.request(callId)
+                ProcessingStatus.requestTranscription(callId)
                 instance?.transcribe?.cancelled?.remove(callId)
             }
             return try {
-                val intent = Intent(context, TranscriptionService::class.java).putExtra(EXTRA_AFTER_CALL, afterCall)
-                if (callId != null) intent.putExtra(EXTRA_CALL_ID, callId)
-                ContextCompat.startForegroundService(context, intent)
+                ContextCompat.startForegroundService(context,
+                    Intent(context, TranscriptionService::class.java).putExtra(EXTRA_AFTER_CALL, afterCall))
                 true
             } catch (e: Exception) {
-                // e.g. background start not allowed; picked up when the app opens.
-                if (callId != null) ProcessingStatus.unrequest(callId)
+                // e.g. background start not allowed; the user can ask again from the app.
+                (callId ?: analyseId)?.let(ProcessingStatus::removeCall)
                 ProcessingLog.write(context, "service start refused: ${describe(e)}")
                 note(context, "העיבוד לא הופעל (${e.javaClass.simpleName}). ינסה שוב כשהאפליקציה תיפתח.")
                 false
