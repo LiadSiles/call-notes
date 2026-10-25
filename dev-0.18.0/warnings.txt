@@ -1,2 +1,1 @@
-w: app/src/test/java/com/callnotes/inference/speakers/LevelSpeakersTest.kt:48:67 Unnecessary non-null assertion (!!) on a non-null receiver of type 'LevelSpeakers.Model'.
 w: ⚠️ Deprecated Gradle Version
