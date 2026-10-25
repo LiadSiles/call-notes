@@ -1,2 +1,1 @@
-w: app/src/main/java/com/callnotes/ui/SummarySection.kt:73:54 Elvis operator (?:) always returns the left operand of non-nullable type 'Int'.
 w: ⚠️ Deprecated Gradle Version
