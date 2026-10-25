@@ -116,22 +116,32 @@ Facts and choices:
   prints the two voices' similarity and the "me" decision per call to tune them.
 - A failure in speaker separation keeps the plain transcript (logged).
 
-### Two methods, chosen per call (0.5.2)
+### One decoder, loudness and voice together (0.18; was "one method per call" 0.5.2–0.17)
 
-1. **Loudness** (`inference/speakers/LevelSpeakers.kt`, + tests) — first choice. Word
-   level = RMS over the word ±40 ms in dBFS; weighted 2-means; accepted if the clusters
-   are ≥ 7 dB apart and each side has ≥ 6 % of the speech time. Two-state Viterbi with a
-   Gaussian emission (pooled sd, floor 3 dB) and a switch probability that grows with the
-   pause before the word (0.03 < 250 ms … 0.45 ≥ 1.5 s). Louder = me; with a voice sample
-   and the speaker pack, the two sides' fingerprints may swap it. No models needed; no
-   fingerprints stored (`relabelAll` leaves these calls alone).
-2. **Voice fingerprints** (`VoiceClusters` + `VoiceEmbedder`, 0.5.3) — when loudness
-   doesn't separate (speakerphone, VoIP). Whisper words → windows (split at > 400 ms
-   pauses, ≤ 3 s); windows ≥ 1 s of loudness-equalised audio get a WeSpeaker
-   fingerprint; weighted 2-means on cosine (seeds: longest window + the one least like
-   it); one voice if centroids ≥ 0.75 alike or a side has < 5 %; two-state Viterbi
-   (emission 8 × cosine margin; switch p 0.3 after a pause, 0.08 otherwise); windows
-   without a fingerprint follow their neighbours. Centroids are stored per call.
+`inference/speakers/SpeakerDecoder.kt` (+ tests), per Whisper word:
+- **Loudness** (`LevelSpeakers`): word level = RMS over the word ±40 ms in dBFS; weighted
+  2-means (`fit`); counts when ≥ 5 dB apart, weight (gap − 5)/5 clamped 0.3–1. Gaussian
+  emission (pooled sd, floor 3 dB).
+- **Voice** (`VoiceTrack` + `VoiceEmbedder`, voice model needed): WeSpeaker fingerprints of
+  1.5 s windows every 0.75 s over each stretch of speech (equalised audio); a word takes
+  the mean of the windows centred within 0.5 s of it. 2-means on cosine, seeded from the
+  loudness split when there is one (so 0 = louder), else longest word + least-alike word;
+  counts when the centroids are < 0.75 alike, weight (0.75 − cos)/0.35 clamped 0.3–1;
+  emission 8 × cosine margin.
+- Two-state Viterbi over words with the pause-based switch cost (0.03 < 250 ms … 0.45 ≥
+  1.5 s). Each speaker needs ≥ 5 % of the speech.
+- Why: until 0.17 the app used loudness *or* voice, and voice on windows of up to 3 s
+  grouped at pauses ≥ 400 ms — a quick answer (no pause) fell inside the other speaker's
+  window and got their label. Per-word voices fix that, and a middling level gap now helps
+  instead of being thrown away.
+- **Who is "me"** (`whoIsMe`): loudness gap ≥ 15 dB with the speaker off → louder (voice
+  sample ignored: earpiece leak too distorted); else the voice sample (`Voice.whichIsMe` on
+  the speakers' mean fingerprints); else gap ≥ 7 dB with the speaker off → louder; else on
+  a cellular call whoever spoke first (incoming → the owner answered; outgoing → the other
+  side); else unknown ("דובר 1/2"). Until 0.18 a speakerphone call without a voice sample
+  was "louder = me", often backwards (the phone's speaker can be louder than the owner).
+- Fingerprints are stored per call except for handset calls (gap ≥ 15 dB, speaker off).
+- `VoiceClusters` now only groups words into windows for [BackgroundSpeech].
 
 **sherpa-onnx's `OfflineSpeakerDiarization` is not used any more** (0.5.3): its native
 code calls `exit(-1)` on edge cases (`offline-speaker-diarization-pyannote-impl.h`:
@@ -140,7 +150,8 @@ the POCO. Only `SpeakerEmbeddingExtractor` is used, with length and `isReady` ch
 in Kotlin before `compute`. pyannote segmentation is no longer downloaded
 (`ModelCatalog.RETIRED`, file deleted on start).
 
-The log line says which method ran and why (levels, gap, shares, voice-sample scores).
+The log line per call: loudness levels and gap (or "not used"), voices' similarity (or
+"not used"), speaker 1 share, speaker on/off, "me" and why, voice-sample scores.
 
 ## Summary and tasks: Gemma 4 text (0.5.0)
 

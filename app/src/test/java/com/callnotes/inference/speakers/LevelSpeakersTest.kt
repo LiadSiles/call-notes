@@ -36,12 +36,16 @@ class LevelSpeakersTest {
         return samples to words
     }
 
+    /** Speakers from loudness alone (no voice model). */
+    private fun byLoudness(samples: FloatArray, words: List<Transcript.Word>) =
+        SpeakerDecoder.decode(words, DoubleArray(words.size) { LevelSpeakers.levelDb(samples, words[it]) }, List(words.size) { null })
+
     @Test fun handsetCallSplitsByLoudness() {
         val plan = listOf(0 to 6, 1 to 5, 0 to 3, 1 to 8, 0 to 4)
         val (samples, labelled) = call(plan)
-        val r = LevelSpeakers.analyse(samples, labelled.map { it.first })!!
+        val r = byLoudness(samples, labelled.map { it.first })!!
         assertArrayEquals(labelled.map { it.second }.toIntArray(), r.labels)
-        assertTrue("separation ${r.separationDb}", r.separationDb > 15)
+        assertTrue("separation ${r.level!!.separationDb}", r.level!!.separationDb > 15)
     }
 
     @Test fun oneSoftWordInsidePhraseDoesNotFlipSpeaker() {
@@ -50,13 +54,13 @@ class LevelSpeakersTest {
         // Make one word in the middle of the loud phrase much softer (a mumbled word).
         val w = labelled[4].first
         for (k in (w.startMs * 16).toInt() until (w.endMs * 16).toInt()) samples[k] *= 0.25f
-        val r = LevelSpeakers.analyse(samples, labelled.map { it.first })!!
+        val r = byLoudness(samples, labelled.map { it.first })!!
         assertEquals(0, r.labels[4])
     }
 
-    @Test fun similarLevelsAreLeftToVoiceEmbeddings() {
+    @Test fun similarLevelsAloneDontSplit() {
         val (samples, labelled) = call(listOf(0 to 8, 1 to 8, 0 to 8), loud = 0.3f, quiet = 0.22f)
-        assertNull(LevelSpeakers.analyse(samples, labelled.map { it.first }))
+        assertNull(byLoudness(samples, labelled.map { it.first }))
     }
 
     @Test fun equaliseLiftsQuietSpeechButNotSilence() {

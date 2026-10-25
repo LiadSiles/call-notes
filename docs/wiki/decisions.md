@@ -3,6 +3,18 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-25 — Speakers: loudness and voice together, per word (0.18.0)
+Owner: who-said-what is still often confused. Two structural causes found in the code
+(no per-call log was available): (1) voice windows of up to 3 s cut only at pauses
+≥ 400 ms merged a quick answer into the other speaker's window; (2) loudness *or* voice
+was used — a 5–7 dB gap was thrown away, a 7 dB gap ignored the voices — and on
+speakerphone without a voice sample "louder = me" was assumed. `SpeakerDecoder` weighs
+both per word (each by how clearly it separates this call), voices from 1.5 s windows
+every 0.75 s; "me" by a ranked rule list incl. who answered first. Cost: about 2–3× the
+fingerprints of before on speakerphone/VoIP, and fingerprints on handset calls too (with
+the voice model) — the voice evidence now also helps there. Thresholds are first
+guesses; the per-call log line has what is needed to tune them on real calls.
+
 ### 2026-10-25 — Second look at speech Whisper skipped; trim loops, keep lines (0.17.1)
 Owner report: incoming call with hold music, then a receptionist; her first ~15 s were
 missing (trace: audio present the whole time, faint −48 dBFS through the earpiece).

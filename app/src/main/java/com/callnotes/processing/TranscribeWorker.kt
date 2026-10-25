@@ -13,10 +13,12 @@ import com.callnotes.inference.Transcript
 import com.callnotes.inference.speakers.BackgroundSpeech
 import com.callnotes.inference.speakers.LevelSpeakers
 import com.callnotes.inference.speakers.SpeakerAligner
+import com.callnotes.inference.speakers.SpeakerDecoder
 import com.callnotes.inference.speakers.Voice
 import com.callnotes.inference.speakers.VoiceClusters
 import com.callnotes.inference.speakers.VoiceEmbedder
 import com.callnotes.inference.speakers.VoiceProfile
+import com.callnotes.inference.speakers.VoiceTrack
 import com.callnotes.inference.whisper.WhisperNative
 import com.callnotes.inference.whisper.WhisperSpeed
 import com.callnotes.inference.whisper.WhisperTranscriber
@@ -435,9 +437,9 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
     private class Speakers(val lines: List<Transcript.Segment>, val embeddings: Map<Int, FloatArray>, val me: Int?)
 
     /**
-     * Splits the transcript by speaker: loudness first (calls held to the ear), voice
-     * fingerprints when the levels are close (speakerphone, VoIP). Never fails the
-     * transcription: on any error the transcript is kept without speakers.
+     * Splits the transcript by speaker with loudness and voice together ([SpeakerDecoder]),
+     * decides which speaker is the owner, and sets background speech aside. Never fails
+     * the transcription: on any error the transcript is kept without speakers.
      */
     private suspend fun separateSpeakers(call: CallEntity, audio: File, transcript: Transcript): Speakers? {
         val pack = app.models.allInstalled(ModelCatalog.SPEAKER_PACK)
@@ -447,84 +449,68 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
             publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.SPEAKERS))
             val samples = Wav.readFloats(audio)
             val owner = VoiceProfile.load(host)
+            val words = transcript.words
+            val levels = DoubleArray(words.size) { LevelSpeakers.levelDb(samples, words[it]) }
 
-            val level = LevelSpeakers.analyse(samples, transcript.words)
-            if (level != null) {
-                var me = 0
-                var check = if (owner == null) "no voice sample" else "voice sample not used"
-                val d = if (owner != null && pack) embedder() else null
-                if (owner != null && d != null) {
-                    val voices = (0..1).mapNotNull { s ->
-                        d.embed(LevelSpeakers.samplesOf(samples, transcript.words, level.labels, s))?.let { s to it }
-                    }.toMap()
-                    val who = Voice.whichIsMe(owner, voices)
-                    // A wide level gap means the phone was at the owner's ear: louder IS the owner,
-                    // and the earpiece leak's fingerprint is too distorted to overrule that. Only a
-                    // narrow gap (speakerphone louder than the owner) lets the voice sample decide.
-                    val trustVoice = level.separationDb < HANDSET_GAP_DB
-                    if (who == 1 && trustVoice) me = 1
-                    check = "voice sample says ${who ?: "?"}${if (trustVoice) "" else " (ignored: handset gap)"}" +
-                        voices.entries.joinToString("") { " (${it.key}: %.2f)".format(Voice.cosine(owner, it.value)) }
+            // A fingerprint per word, from short overlapping windows (voice model needed).
+            val d = if (pack) embedder() else null
+            val voices: List<FloatArray?> = if (d != null && words.isNotEmpty()) {
+                val eq = LevelSpeakers.equalise(samples)
+                val track = VoiceTrack.windows(words)
+                val prints = track.map { r ->
+                    currentCoroutineContext().ensureActive()
+                    if (call.id in cancelled) throw CancellationException("cancelled")
+                    val from = (r.first * 16).toInt().coerceIn(0, eq.size)
+                    val to = (r.last * 16).toInt().coerceIn(from, eq.size)
+                    d.embed(eq.copyOfRange(from, to))
                 }
-                val windows = VoiceClusters.windows(transcript.words)
-                // A window's side: the side most of its words were given.
-                val sides = IntArray(windows.size) { k ->
-                    val w = windows[k]
-                    val ones = (w.firstWord..w.lastWord).count { level.labels[it] == 1 }
-                    if (ones * 2 > w.lastWord - w.firstWord + 1) 1 else 0
-                }
-                val fingerprints = if (pack && Prefs(host).filterBackground) embedder()?.let { d ->
-                    embedWindows(call, d, LevelSpeakers.equalise(samples), windows)
-                } else null
-                val aside = background(call, samples, windows, sides, fingerprints, me, owner)
-                val lines = SpeakerAligner.align(transcript, LevelSpeakers.turns(transcript.words, level.labels), aside)
-                log("call ${call.id}: speakers by loudness in ${secs(started)} · louder " +
-                    "%.1f dB, quieter %.1f dB (%.1f dB apart), quieter share %d%% · me=%d · %s · %d lines".format(
-                        level.loudDb, level.quietDb, level.separationDb, (level.quietShare * 100).toInt(), me, check, lines.size))
-                return Speakers(lines, emptyMap(), me)
-            }
+                VoiceTrack.perWord(words, track, prints)
+            } else List(words.size) { null }
 
-            if (!pack) {
-                log("call ${call.id}: speakers: loudness doesn't separate them and the voice model isn't installed")
-                return null
-            }
-            val d = embedder() ?: return null
-            val windows = VoiceClusters.windows(transcript.words)
-            val embeddings = embedWindows(call, d, LevelSpeakers.equalise(samples), windows)
-            val result = VoiceClusters.cluster(windows, embeddings)
+            val result = SpeakerDecoder.decode(words, levels, voices)
             if (result == null) {
-                log("call ${call.id}: speakers by voice in ${secs(started)} · ${windows.size} windows, " +
-                    "${embeddings.count { it != null }} fingerprinted · one voice or too little speech → no split")
+                log("call ${call.id}: speakers: not separated in ${secs(started)} (${words.size} words, " +
+                    "${voices.count { it != null }} with a voice${if (!pack) ", voice model not installed" else ""}) — one voice, or too little speech")
                 return null
             }
-            val me = if (owner != null) Voice.whichIsMe(owner, result.centroids) else null
-            val aside = if (Prefs(host).filterBackground) background(call, samples, windows, result.labels, embeddings, me, owner) else emptyList()
-            val lines = SpeakerAligner.align(transcript, VoiceClusters.turns(windows, result.labels), aside)
-            log("call ${call.id}: speakers by voice in ${secs(started)} · ${windows.size} windows, " +
-                "${embeddings.count { it != null }} fingerprinted · voices %.2f alike · speaker 1 share %d%% · ".format(
-                    result.similarity, (result.shareOf1 * 100).toInt()) +
-                "me=${me ?: "?"}${if (owner == null) " (no voice sample)" else
-                    result.centroids.entries.joinToString("") { " (${it.key}: %.2f)".format(Voice.cosine(owner, it.value)) }
-                } · ${lines.size} lines")
-            Speakers(lines, result.centroids, me)
+            val speakerOn = call.speakerResult == com.callnotes.data.SpeakerResult.ON
+            val voiceSays = if (owner != null) Voice.whichIsMe(owner, result.centroids) else null
+            val (me, why) = SpeakerDecoder.whoIsMe(
+                result, speakerOn, voiceSays, firstSpeaker = result.labels.firstOrNull(),
+                incoming = call.incoming.takeIf { call.kind == com.callnotes.data.CallKind.CELLULAR },
+            )
+
+            // Background speech, on the word groups (a window's side = most of its words).
+            val groups = VoiceClusters.windows(words)
+            val sides = IntArray(groups.size) { k ->
+                val w = groups[k]
+                val ones = (w.firstWord..w.lastWord).count { result.labels[it] == 1 }
+                if (ones * 2 > w.lastWord - w.firstWord + 1) 1 else 0
+            }
+            val groupVoices = groups.map { w ->
+                val vs = (w.firstWord..w.lastWord).mapNotNull { voices[it] }
+                if (vs.isEmpty() || w.durationMs < VoiceClusters.MIN_EMBED_MS) null else VoiceTrack.unit(VoiceTrack.mean(vs))
+            }
+            val aside = background(call, samples, groups, sides, groupVoices.takeIf { d != null }, me, owner)
+            val lines = SpeakerAligner.align(transcript, LevelSpeakers.turns(words, result.labels), aside)
+
+            log("call ${call.id}: speakers in ${secs(started)} · " +
+                (result.level?.let { "loudness %.1f / %.1f dB (%.1f apart)".format(it.loudDb, it.quietDb, it.separationDb) } ?: "loudness not used") +
+                " · " + (result.voiceSimilarity?.let { "voices %.2f alike".format(it) } ?: "voice not used") +
+                " · speaker 1 share ${(result.shareOf1 * 100).toInt()}% · speaker ${if (speakerOn) "on" else "off"} · " +
+                "me=${me ?: "?"} ($why)" +
+                (if (owner != null) result.centroids.entries.joinToString("") { " (${it.key}: %.2f)".format(Voice.cosine(owner, it.value)) } else " (no voice sample)") +
+                " · ${lines.size} lines")
+            // Voices kept for re-labelling after a new voice sample — not for calls held to
+            // the ear, where loudness decides and the earpiece voice is too distorted.
+            val handset = !speakerOn && (result.level?.separationDb ?: 0.0) >= SpeakerDecoder.HANDSET_GAP_DB
+            Speakers(lines, if (handset) emptyMap() else result.centroids, me)
         } catch (e: Throwable) {
             if (e is CancellationException) throw e
             log("call ${call.id}: speaker separation FAILED, keeping plain transcript: ${describe(e)}")
             null
         }
     }
-
-    /** Voice fingerprints of the windows long enough for one (null for the others). */
-    private suspend fun embedWindows(call: CallEntity, d: VoiceEmbedder, eq: FloatArray, windows: List<VoiceClusters.Window>): List<FloatArray?> =
-        windows.map { w ->
-            currentCoroutineContext().ensureActive()
-            if (call.id in cancelled) throw CancellationException("cancelled")
-            if (w.durationMs < VoiceClusters.MIN_EMBED_MS) null else {
-                val from = ((w.startMs - 50) * 16).toInt().coerceIn(0, eq.size)
-                val to = ((w.endMs + 50) * 16).toInt().coerceIn(from, eq.size)
-                d.embed(eq.copyOfRange(from, to))
-            }
-        }
 
     /**
      * Speech of people not on the call, as time ranges to set aside ([BackgroundSpeech]).
@@ -553,10 +539,6 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
         }
     }
 
-    private companion object {
-        /** Level gap above which a call was certainly held to the ear (louder = owner). */
-        const val HANDSET_GAP_DB = 15.0
-    }
 
     private fun embedder(): VoiceEmbedder? {
         if (!embedderTried) {

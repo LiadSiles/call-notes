@@ -1,8 +1,8 @@
 package com.callnotes.inference.speakers
 
 /**
- * Most likely sequence of two speakers (0/1) over [n] steps — the smoothing step shared by
- * [LevelSpeakers] (per word) and [VoiceClusters] (per window).
+ * Most likely sequence of two speakers (0/1) over [n] steps — the smoothing step of
+ * [SpeakerDecoder] (per word, loudness and voice together).
  *
  * [emit] is the log-evidence for speaker s at step i (0.0 = no evidence either way).
  * [switchCost] is the log-odds of changing speaker *into* step i (negative: switching is
