@@ -111,7 +111,7 @@ Java_com_callnotes_inference_whisper_WhisperNative_systemInfo(JNIEnv *env, jobje
 JNIEXPORT jobjectArray JNICALL
 Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
         JNIEnv *env, jobject, jlong handle, jfloatArray jsamples, jstring jlang,
-        jint threads, jint beamSize, jstring jprompt, jobject listener) {
+        jint threads, jint beamSize, jstring jprompt, jboolean keepQuiet, jobject listener) {
     auto *h = reinterpret_cast<Holder *>(handle);
     if (!h || !h->ctx) return nullptr;
     h->abort.store(false);
@@ -141,6 +141,12 @@ Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
     p.print_timestamps = false;
     p.print_special = false;
     if (beamSize > 1) p.beam_search.beam_size = beamSize;
+    if (keepQuiet) {
+        // Second look at audio that has speech energy but got no words: never judge the
+        // window "no speech" (that drops all of it), and no random-temperature retries.
+        p.no_speech_thold = 1.0f;
+        p.temperature_inc = 0.0f;
+    }
     if (!prompt.empty()) {
         p.initial_prompt = prompt.c_str();
         p.carry_initial_prompt = true; // every window, not just the first

@@ -53,6 +53,8 @@ object WhisperNative {
         beamSize: Int,
         /** Words to expect, or "" ([WhisperPrompt]). */
         prompt: String,
+        /** Never drop a window as "no speech" (re-reading missed speech, [SpeechGaps]). */
+        keepQuiet: Boolean,
         listener: ProgressListener?,
     ): Array<Any>?
 }

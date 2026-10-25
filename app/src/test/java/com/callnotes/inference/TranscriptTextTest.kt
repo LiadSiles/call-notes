@@ -7,10 +7,17 @@ import org.junit.Test
 
 class TranscriptTextTest {
 
-    @Test fun detectsLoops() {
-        assertTrue(TranscriptText.looksLikeLoop("כן כן כן כן כן כן"))
-        assertTrue(TranscriptText.looksLikeLoop("אני לא יודע אני לא יודע אני לא יודע אני לא יודע"))
-        assertFalse(TranscriptText.looksLikeLoop("כן כן, בסדר, נדבר מחר"))
+    @Test fun dropsOnlyTheRepeatsOfALoop() {
+        assertEquals("כן כן", TranscriptText.withoutRepeats("כן כן כן כן כן כן"))
+        assertEquals("שלום, הגעת למרפאה אני לא יודע אני לא יודע",
+            TranscriptText.withoutRepeats("שלום, הגעת למרפאה אני לא יודע אני לא יודע אני לא יודע אני לא יודע"))
+        assertEquals("כן כן, בסדר, נדבר מחר", TranscriptText.withoutRepeats("כן כן, בסדר, נדבר מחר"))
+        assertEquals("מה שלומך? טוב, טוב, תודה", TranscriptText.withoutRepeats("מה שלומך? טוב, טוב, תודה"))
+    }
+
+    @Test fun fillers() {
+        assertTrue(TranscriptText.isFiller("תודה רבה."))
+        assertFalse(TranscriptText.isFiller("תודה רבה, אשלח לך מחר"))
     }
 
     @Test fun normalizesPunctuationNiqqudAndFinals() {

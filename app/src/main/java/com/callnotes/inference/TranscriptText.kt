@@ -7,25 +7,56 @@ package com.callnotes.inference
  */
 object TranscriptText {
 
-    /** Same word 6+ times in a row, or the same 3-word phrase 4+ times: a decoding loop. */
-    fun looksLikeLoop(text: String): Boolean {
-        val w = text.split(WS).map(::normalize).filter { it.isNotEmpty() }
-        var run = 1
-        for (i in 1 until w.size) {
-            run = if (w[i] == w[i - 1]) run + 1 else 1
-            if (run >= 6) return true
-        }
-        if (w.size >= 12) {
-            val counts = HashMap<String, Int>()
-            for (i in 0..w.size - 3) {
-                val key = "${w[i]} ${w[i + 1]} ${w[i + 2]}"
-                val c = (counts[key] ?: 0) + 1
-                if (c >= 4) return true
-                counts[key] = c
+    /**
+     * Whisper's loops ("אני לא יודע אני לא יודע אני לא יודע…", one word over and over):
+     * marks every block of 1–4 tokens that repeats the two blocks before it. A phrase said
+     * twice stays; from the third time on it goes. Only the repeats are dropped, never
+     * the real words around them (until 0.17 a whole line with a loop was dropped).
+     */
+    fun repeats(tokens: List<String>): BooleanArray {
+        val norm = tokens.map(::normalize)
+        val drop = BooleanArray(tokens.size)
+        var i = 0
+        while (i < tokens.size) {
+            var n = 4
+            var found = 0
+            while (n >= 1) {
+                if (i - 2 * n >= 0 && i + n <= tokens.size) {
+                    val cur = norm.subList(i, i + n)
+                    if (cur.any { it.isNotEmpty() } && cur == norm.subList(i - n, i) && cur == norm.subList(i - 2 * n, i - n)) {
+                        found = n; break
+                    }
+                }
+                n--
             }
+            if (found > 0) { for (k in i until i + found) drop[k] = true; i += found } else i++
         }
-        return false
+        return drop
     }
+
+    /** [text] without its looping repeats. */
+    fun withoutRepeats(text: String): String {
+        val tokens = text.split(WS).filter { it.isNotEmpty() }
+        val drop = repeats(tokens)
+        return tokens.filterIndexed { i, _ -> !drop[i] }.joinToString(" ")
+    }
+
+    /** Words without looping repeats (same rule as [withoutRepeats]). */
+    fun withoutRepeatedWords(words: List<Transcript.Word>): List<Transcript.Word> {
+        val drop = repeats(words.map { it.text })
+        return words.filterIndexed { i, _ -> !drop[i] }
+    }
+
+    /**
+     * Whisper's stock phrases for audio without speech (music, noise): a line that is only
+     * one of these, in a stretch read a second time, is not kept.
+     */
+    fun isFiller(text: String): Boolean = normalizeText(text) in FILLERS
+
+    private val FILLERS = setOf(
+        "תודה", "תודה רבה", "תודה שצפיתמ", "תודה על הצפייה", "תודה רבה על הצפייה", "כתוביות", "תרגומ", "מוזיקה",
+        "thank you", "thanks for watching", "music",
+    )
 
     /** [normalize] applied word by word, joined with single spaces. */
     fun normalizeText(text: String): String =

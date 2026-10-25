@@ -389,6 +389,10 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 if (audioSec > 0) Prefs(host).addSpeedSample(s.name, audioSec * 1000, asrMs)
                 log("call ${call.id}: speech recognition ${"%.2f".format(asrMs / 1000.0 / audioSec.coerceAtLeast(1))}× call length (preset ${s.name})")
             }
+            if (transcript.secondLook > 0) {
+                log("call ${call.id}: second look at ${transcript.secondLook} stretch(es) with speech but no words · " +
+                    "%.1f s recovered".format(transcript.recoveredMs / 1000.0))
+            }
             host.showWork(this, title, "מזהה מי אמר מה…", callId = call.id)
             val speakers = separateSpeakers(call, audio, transcript)
             if (call.id in cancelled) throw CancellationException("cancelled")

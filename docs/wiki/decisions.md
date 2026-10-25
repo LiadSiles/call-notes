@@ -3,6 +3,23 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-25 — Second look at speech Whisper skipped; trim loops, keep lines (0.17.1)
+Owner report: incoming call with hold music, then a receptionist; her first ~15 s were
+missing (trace: audio present the whole time, faint −48 dBFS through the earpiece).
+- Cause 1: whisper.cpp judges each 30 s window: `no_speech_prob > 0.6` (music at the
+  start) and `avg_logprob < −1` (faint speech) → the whole window's text is discarded and
+  decoding jumps to the last timestamp. Turning the gate off globally was rejected: it also
+  turns on temperature-fallback retries in every doubtful window (slower, more invention).
+  Instead `SpeechGaps` finds 100 ms frames ≥ 12 dB over the recording's floor (10th
+  percentile) with no word near them (≥ 1 s of sound, joined within 1.5 s, ±0.4 s, pieces
+  ≤ 28 s) and re-reads each alone with `no_speech_thold = 1`, `temperature_inc = 0`
+  (JNI `keepQuiet`). Lines that are only Whisper's stock filler ("תודה רבה", "כתוביות"…)
+  from those pieces are not kept. Logged per call.
+- Cause 2: a line containing a decoding loop was dropped whole — with the real words
+  next to the loop. Now only the repeats go (a 1–4-token block repeating the two before
+  it; a phrase said twice stays), in lines and in the word list alike (the word list was
+  not filtered before, so loops came back through the speaker step).
+
 ### 2026-10-24 — Background speech set aside, not deleted (0.17.0)
 Owner: other people talking in the background (on either side) hurt transcripts most;
 filter it on both sides, but a side may really have two people on the call — keep them;
