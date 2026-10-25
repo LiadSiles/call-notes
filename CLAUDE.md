@@ -40,16 +40,18 @@ decisions already taken and why).
 app/src/main/java/com/callnotes/
   audio/      WAV I/O, decoding to the working format, AAC compression
   capture/    call detection, recording, speakerphone, call-log lookup
-  data/       Room (CallEntity, CallDao, AppDatabase)
-  inference/  Transcriber / Analyzer interfaces, model catalog + downloads, Whisper
-              (whisper/: JNI, presets, quantization), speakers (speakers/), Gemma, prompt
+  data/       Room (calls, segments, tasks, voice_memos; CallDao, AppDatabase + migrations)
+  inference/  Transcriber / Analyzer interfaces, model catalog + downloads;
+              whisper/ (JNI, presets, quantization, expected words, second look at missed speech);
+              speakers/ (loudness + voice per word, background speech);
+              summaries (CallSummarizer, prompts, date checks), voice-note task prompt, Gemma
   processing/ foreground service with two parallel workers (transcribe, summary), log
   security/   optional extra encryption (Keystore-wrapped key, SQLCipher, sealed files)
-  ui/         Compose UI (design system in Design.kt + theme/), settings pages, app lock
-  util/       prefs, notifications, reminders, retention, energy, hashing
+  ui/         Compose UI (design system in Design.kt + theme/), settings pages, tasks, app lock
+  util/       prefs, notifications, task reminders/actions, voice notes, retention, energy
 app/src/main/java/com/k2fsa/sherpa/onnx/  sherpa-onnx Kotlin API (verbatim copy)
 app/src/main/cpp/   JNI bridge to whisper.cpp (third_party/whisper.cpp submodule)
-scripts/fetch-sherpa-onnx.sh  prebuilt diarization runtime (run before building)
+scripts/fetch-sherpa-onnx.sh  prebuilt sherpa-onnx runtime for voice fingerprints (run before building)
 ```
 
 ## Working agreements

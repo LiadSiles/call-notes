@@ -1,20 +1,30 @@
 # Models
 
-_Last verified: 2026-10-20 (code at 0.3.0)._
+_Last verified: 2026-10-25 (code at 0.18.2)._
 
-## Where things are (0.10.1)
+## Where things are (0.18.2)
 
 | Piece | Where |
 |---|---|
-| Catalog with pinned files | `inference/Models.kt` → `ModelCatalog` |
+| Catalog with pinned files; `Transcriber` / `Analyzer` interfaces | `inference/Models.kt` → `ModelCatalog` |
 | Device choice, download, SHA-256 check | `inference/ModelManager.kt` |
 | Any audio → 16 kHz mono WAV | `audio/AudioDecoder.kt` |
-| Whisper (JNI, presets, on-device quantization) | `inference/whisper/`, `app/src/main/cpp/` |
-| Loop detection, announcement filter, text normalisation | `inference/TranscriptText.kt` (+ unit tests) |
-| Who said what (loudness, voice clusters, alignment) | `inference/speakers/` |
-| Summary prompt, parsing and checks | `inference/AnalysisPrompt.kt`, `SourceFinder.kt`, `TaskMatcher.kt` |
-| Gemma via LiteRT-LM (summaries only) | `inference/GemmaAnalyzer.kt` |
+| Whisper: JNI, presets, on-device quantization | `inference/whisper/` (`WhisperTranscriber`, `WhisperSpeed`), `app/src/main/cpp/` |
+| Whisper: expected words (initial prompt) | `inference/whisper/WhisperPrompt.kt` |
+| Whisper: second look at missed speech (short answers, overlapped, "no speech" windows) | `inference/whisper/MissedSpeech.kt` |
+| Loop trimming, announcement and filler filters, text normalisation | `inference/TranscriptText.kt` |
+| Who said what: loudness + voice per word, "me", line building | `inference/speakers/SpeakerDecoder.kt`, `LevelSpeakers.kt`, `VoiceTrack.kt`, `SpeakerAligner.kt`, `Voice*.kt` |
+| Background speech set aside | `inference/speakers/BackgroundSpeech.kt` (windows from `VoiceClusters.kt`) |
+| Summary: order of steps, long calls in parts, merge, task de-dup | `inference/CallSummarizer.kt` |
+| Summary prompts: shared context + quick (`AnalysisPrompt`), precise and merge (`SummaryPrompts`), parsing and checks | `inference/AnalysisPrompt.kt`, `SummaryPrompts.kt`, `SourceFinder.kt` |
+| Dates checked against the words said | `inference/DueWords.kt` |
+| Repeats of a task across calls | `inference/TaskMatcher.kt` |
+| Voice note → task prompt | `inference/TaskPrompt.kt` (see [tasks.md](tasks.md)) |
+| Gemma via LiteRT-LM (text; multi-question conversations) | `inference/GemmaAnalyzer.kt` |
 | Two parallel workers in a foreground service | `processing/` |
+
+All of the above except the JNI/LiteRT-LM/ONNX wrappers is pure Kotlin with unit tests in
+`app/src/test` (fake analyzer for the summarizer).
 
 The Gemma *transcription* path of 0.3 (28 s chunks, overlap merge, level
 normalisation) was removed in 0.10.1; see git history before that version.
