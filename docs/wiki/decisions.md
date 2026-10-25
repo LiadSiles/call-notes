@@ -3,6 +3,24 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-25 — Never lose a word: second look at short and overlapped speech (0.18.1)
+Owner: short answers of his still disappear; losing anything said is not acceptable.
+Audit of every place text could go:
+- Whisper itself skips short backchannel answers ("כן", "בסדר" — it is trained on cleaned
+  subtitles) and, on a call held to the ear, keeps one voice where the owner's "כן" lands on
+  the other side's sentence. The 0.17.1 second look needed ≥ 1 s of uncovered sound, so a
+  0.4 s answer was never re-read. `MissedSpeech` (replaces `SpeechGaps`): uncovered sound
+  ≥ 0.2 s, plus frames at the owner's level (2-means on word medians, ≥ 10 dB apart) inside
+  a word whose median is the quiet level. Stretches ±0.3 s are packed with 0.8 s silence
+  into ≤ 28 s buffers (whisper.cpp costs a full 30 s window per run, so one run per pack,
+  not per answer); words map back to the recording, kept only inside a looked-at stretch
+  and only if no word with the same text is within 0.4 s.
+- Loop trimming (0.17.1) dropped the 3rd+ repeat of any 1–4-token block — including
+  "כן / כן / כן" across turns. Now only runs of ≥ 5 repeats are loops, 3 kept.
+- The stock-phrase filter ("תודה רבה"…) applied to every second-look line; now only to
+  lines from stretches ≥ 3 s (music on hold) — a short "תודה" is a real answer.
+- Background speech is hidden, not removed (toggle in the call screen) — unchanged.
+
 ### 2026-10-25 — Speakers: loudness and voice together, per word (0.18.0)
 Owner: who-said-what is still often confused. Two structural causes found in the code
 (no per-call log was available): (1) voice windows of up to 3 s cut only at pauses
@@ -22,7 +40,7 @@ missing (trace: audio present the whole time, faint −48 dBFS through the earpi
   start) and `avg_logprob < −1` (faint speech) → the whole window's text is discarded and
   decoding jumps to the last timestamp. Turning the gate off globally was rejected: it also
   turns on temperature-fallback retries in every doubtful window (slower, more invention).
-  Instead `SpeechGaps` finds 100 ms frames ≥ 12 dB over the recording's floor (10th
+  Instead `SpeechGaps` (now `MissedSpeech`, 0.18.1) finds 100 ms frames ≥ 12 dB over the recording's floor (10th
   percentile) with no word near them (≥ 1 s of sound, joined within 1.5 s, ±0.4 s, pieces
   ≤ 28 s) and re-reads each alone with `no_speech_thold = 1`, `temperature_inc = 0`
   (JNI `keepQuiet`). Lines that are only Whisper's stock filler ("תודה רבה", "כתוביות"…)

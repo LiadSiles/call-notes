@@ -8,10 +8,11 @@ import org.junit.Test
 class TranscriptTextTest {
 
     @Test fun dropsOnlyTheRepeatsOfALoop() {
-        assertEquals("כן כן", TranscriptText.withoutRepeats("כן כן כן כן כן כן"))
-        assertEquals("שלום, הגעת למרפאה אני לא יודע אני לא יודע",
-            TranscriptText.withoutRepeats("שלום, הגעת למרפאה אני לא יודע אני לא יודע אני לא יודע אני לא יודע"))
-        assertEquals("כן כן, בסדר, נדבר מחר", TranscriptText.withoutRepeats("כן כן, בסדר, נדבר מחר"))
+        assertEquals("כן כן כן", TranscriptText.withoutRepeats("כן כן כן כן כן כן כן"))
+        assertEquals("שלום, הגעת למרפאה אני לא יודע אני לא יודע אני לא יודע מה",
+            TranscriptText.withoutRepeats("שלום, הגעת למרפאה " + "אני לא יודע ".repeat(7) + "מה"))
+        // Said up to four times — kept as said.
+        assertEquals("כן כן כן כן, בסדר", TranscriptText.withoutRepeats("כן כן כן כן, בסדר"))
         assertEquals("מה שלומך? טוב, טוב, תודה", TranscriptText.withoutRepeats("מה שלומך? טוב, טוב, תודה"))
     }
 

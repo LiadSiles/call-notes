@@ -8,31 +8,39 @@ package com.callnotes.inference
 object TranscriptText {
 
     /**
-     * Whisper's loops ("אני לא יודע אני לא יודע אני לא יודע…", one word over and over):
-     * marks every block of 1–4 tokens that repeats the two blocks before it. A phrase said
-     * twice stays; from the third time on it goes. Only the repeats are dropped, never
-     * the real words around them (until 0.17 a whole line with a loop was dropped).
+     * Whisper's loops (one word or phrase over and over, far past anything said): marks the
+     * repeats of a block of 1–4 tokens that occurs [LOOP_RUN] or more times in a row, keeping
+     * the first [LOOP_KEEP]. Anything said up to four times in a row ("כן כן כן כן") is left
+     * alone, and so are the real words around a loop.
      */
     fun repeats(tokens: List<String>): BooleanArray {
         val norm = tokens.map(::normalize)
         val drop = BooleanArray(tokens.size)
         var i = 0
         while (i < tokens.size) {
-            var n = 4
-            var found = 0
-            while (n >= 1) {
-                if (i - 2 * n >= 0 && i + n <= tokens.size) {
-                    val cur = norm.subList(i, i + n)
-                    if (cur.any { it.isNotEmpty() } && cur == norm.subList(i - n, i) && cur == norm.subList(i - 2 * n, i - n)) {
-                        found = n; break
-                    }
+            var advanced = false
+            for (n in 1..4) {
+                if (i + n > tokens.size) break
+                val block = norm.subList(i, i + n)
+                if (block.all { it.isEmpty() }) continue
+                var reps = 1
+                while (i + (reps + 1) * n <= tokens.size && norm.subList(i + reps * n, i + (reps + 1) * n) == block) reps++
+                if (reps >= LOOP_RUN) {
+                    for (k in i + LOOP_KEEP * n until i + reps * n) drop[k] = true
+                    i += reps * n
+                    advanced = true
+                    break
                 }
-                n--
             }
-            if (found > 0) { for (k in i until i + found) drop[k] = true; i += found } else i++
+            if (!advanced) i++
         }
         return drop
     }
+
+    /** A block repeated this many times in a row is a decoding loop… */
+    const val LOOP_RUN = 5
+    /** …of which this many are kept. */
+    const val LOOP_KEEP = 3
 
     /** [text] without its looping repeats. */
     fun withoutRepeats(text: String): String {

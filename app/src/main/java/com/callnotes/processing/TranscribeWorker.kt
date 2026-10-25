@@ -392,8 +392,8 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Notifications.
                 log("call ${call.id}: speech recognition ${"%.2f".format(asrMs / 1000.0 / audioSec.coerceAtLeast(1))}× call length (preset ${s.name})")
             }
             if (transcript.secondLook > 0) {
-                log("call ${call.id}: second look at ${transcript.secondLook} stretch(es) with speech but no words · " +
-                    "%.1f s recovered".format(transcript.recoveredMs / 1000.0))
+                log("call ${call.id}: second look at ${transcript.secondLook} stretch(es) of missed speech · " +
+                    "%.1f s of words added".format(transcript.recoveredMs / 1000.0))
             }
             host.showWork(this, title, "מזהה מי אמר מה…", callId = call.id)
             val speakers = separateSpeakers(call, audio, transcript)

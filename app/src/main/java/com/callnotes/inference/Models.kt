@@ -64,7 +64,7 @@ data class Transcript(
     val segments: List<Segment>,
     /** Word timing when the engine provides it (Whisper); used to split speakers by word. */
     val words: List<Word> = emptyList(),
-    /** Stretches with speech but no words that were read a second time, and how much of them gave text. */
+    /** Stretches of missed speech read a second time, and how much speech that added. */
     val secondLook: Int = 0,
     val recoveredMs: Long = 0,
 ) {
