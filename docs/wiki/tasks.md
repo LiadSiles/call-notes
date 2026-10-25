@@ -15,7 +15,10 @@ Where a task comes from, how it is stored, and how it reminds.
 Tasks without a call have `callId = 0` (`TaskEntity.NO_CALL`); the task list LEFT JOINs
 the calls. A call task the user edits is marked `edited`: a new summary of its call keeps
 it and drops its own version of it (same title or quote). Deleting a call task: a later
-re-summary may bring it back (the confirm dialog says so).
+re-summary may bring it back (the confirm dialog says so). The editor also turns the
+"לא בטוח" mark (`certain = false`, set by Gemma or by the date-words check) off once the
+user has checked the task, or on (0.19.1); it is saved like any edit, so a re-summary
+keeps the user's choice.
 
 ## Voice notes (`voice_memos`)
 

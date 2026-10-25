@@ -21,7 +21,7 @@ change that made it stale.
 The owner's Hebrew planning document (claude.ai artifact "אפליקציית סיכום שיחות –
 תכנון מקצה לקצה") is the product-level source; this wiki is the engineering one.
 
-## UI map (0.18.2)
+## UI map (0.19.1)
 
 `ui/MainActivity.kt` (three tabs, notification taps, app lock) →
 - **Calls:** `CallsScreen` (list, search via `SearchResults`) → `CallDetailScreen` (player,

@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -56,8 +57,9 @@ import java.time.format.DateTimeFormatter
 /**
  * Adds a task by typing ([task] null) or edits one. Title, an optional day (today,
  * tomorrow or any date) and an optional time of day — the reminder pops up then, or at
- * the morning hour when only a day is set. A call's task also has who it is for. Delete
- * asks first. Nothing is saved until "שמירה".
+ * the morning hour when only a day is set. A call's task also has who it is for. An
+ * existing task's "לא בטוח" mark can be turned off once checked (or on). Delete asks
+ * first. Nothing is saved until "שמירה".
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +78,7 @@ fun TaskEditorDialog(
     var date by rememberSaveable { mutableStateOf(task?.dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }) }
     var time by rememberSaveable { mutableStateOf(task?.dueTime?.let { runCatching { LocalTime.parse(it) }.getOrNull() }) }
     var owner by rememberSaveable { mutableStateOf(task?.owner ?: "me") }
+    var unsure by rememberSaveable { mutableStateOf(task?.certain == false) }
     var pickDate by remember { mutableStateOf(false) }
     var pickTime by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -98,6 +101,7 @@ fun TaskEditorDialog(
                 date, { date = it; if (it == null) time = null },
                 time, { time = it },
                 owner = owner.takeIf { fromCall }, onOwner = { owner = it },
+                unsure = unsure.takeIf { task != null }, onUnsure = { unsure = it },
                 voiceText = task?.quote?.takeIf { task.source == TaskSource.VOICE } ?: voiceText,
                 onPickDate = { pickDate = true },
                 onPickTime = { pickTime = true },
@@ -110,7 +114,7 @@ fun TaskEditorDialog(
                     val clean = title.trim().replace(Regex("\\s+"), " ")
                     val due = date?.toString()
                     val at = time?.takeIf { date != null }?.format(HOUR_MIN)
-                    val saved = task?.copy(title = clean, dueDate = due, dueTime = at, owner = owner,
+                    val saved = task?.copy(title = clean, dueDate = due, dueTime = at, owner = owner, certain = !unsure,
                         // A date the user set is theirs: drop the call's words for it.
                         duePhrase = task.duePhrase.takeIf { due == task.dueDate })
                         ?: TaskEntity(callId = TaskEntity.NO_CALL, idx = 0, title = clean, owner = "me", dueDate = due,
@@ -189,7 +193,8 @@ fun TaskEditorDialog(
 
 /**
  * The editor's fields (stateless, so they can be rendered on their own): title, day chips,
- * time, the reminder this gives, and who it is for ([owner] null = not asked).
+ * time, the reminder this gives, who it is for ([owner] null = not asked) and the
+ * "לא בטוח" mark ([unsure] null = not shown, for a new task).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -202,6 +207,8 @@ internal fun TaskEditorFields(
     onTime: (LocalTime?) -> Unit,
     owner: String?,
     onOwner: (String) -> Unit,
+    unsure: Boolean?,
+    onUnsure: (Boolean) -> Unit,
     voiceText: String?,
     onPickDate: () -> Unit,
     onPickTime: () -> Unit,
@@ -246,6 +253,19 @@ internal fun TaskEditorFields(
                 Choice("שלי", owner == "me") { onOwner("me") }
                 Choice("הצד השני", owner == "other") { onOwner("other") }
                 Choice("לא ידוע", owner == "unknown") { onOwner("unknown") }
+            }
+        }
+        if (unsure != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("לא בטוח", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (unsure) "Gemma לא היה בטוח במשימה או בפרטים שלה. כבה אחרי שבדקת." else "המשימה מוצגת בלי סימון \"לא בטוח\".",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = unsure, onCheckedChange = onUnsure, modifier = Modifier.padding(start = 12.dp))
             }
         }
         if (!voiceText.isNullOrBlank()) {
