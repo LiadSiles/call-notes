@@ -25,19 +25,20 @@ object SummaryPrompts {
         parts: Int,
     ): String = buildString {
         appendLine("You will answer several questions about one phone call, one at a time. Write every text value in Hebrew.")
-        appendLine("Return only JSON, no markdown. Accuracy matters more than completeness. " +
-            "Never guess names, numbers, places or dates.")
+        appendLine("Return only JSON, no markdown. Cover everything that was said, accurately: leave nothing out, " +
+            "and never guess names, numbers, places or dates.")
         appendLine()
         append(AnalysisPrompt.context(lines, call, ownerLabel, otherLabel, zone, firstLine, part, parts))
         appendLine()
         appendLine("Question 1 — what " + (if (parts > 1) "this part of the call" else "the call") + " was about:")
-        appendLine("{\"summary\": \"2-4 sentences\", \"summary_certain\": true, " +
+        appendLine("{\"summary\": \"${AnalysisPrompt.summaryLength(lines)}\", \"summary_certain\": true, " +
             "\"key_points\": [{\"lines\": [3], \"text\": \"...\", \"certain\": true}], " +
             "\"decisions\": [{\"lines\": [7], \"text\": \"...\", \"certain\": true}], " +
             "\"follow_ups\": [{\"lines\": [9], \"text\": \"...\", \"certain\": true}], " +
             "\"title\": \"up to 8 words\"}")
         appendLine("Rules:")
-        appendLine("- key_points: information that was exchanged. decisions: only what both sides agreed on. " +
+        appendLine(AnalysisPrompt.DETAILS)
+        appendLine("- decisions: only what both sides agreed on. " +
             "follow_ups: open questions or things left to check, that nobody took on yet.")
         appendLine("- Cite in \"lines\" only lines that really say it. \"certain\": false if those lines are unclear " +
             "or you are inferring rather than reading.")
@@ -61,9 +62,9 @@ object SummaryPrompts {
             "\"due\": \"YYYY-MM-DD or null\", \"due_time\": \"HH:MM or null\", \"certain\": true}]}")
         appendLine("Rules:")
         appendLine("- Fill the fields in this order: first copy \"quote\" word for word from the line, then decide everything else from it.")
-        appendLine("- \"owner\" is who has to do it. \"me\" = the phone's owner. A task for someone who is not in the call " +
-            "counts only if one of the speakers took it on (then it is theirs).")
-        appendLine("- \"title\": the action, starting with a verb, up to 10 words (\"לשלוח את הצעת המחיר\").")
+        appendLine(AnalysisPrompt.OWNER)
+        appendLine("- A task for someone who is not in the call counts only if one of the speakers took it on (then it is theirs).")
+        appendLine(AnalysisPrompt.TASK_TITLE)
         appendLine("- \"due_phrase\": the words about when, copied as said, or null.")
         appendLine("- \"due\": only if a day was said; take it from the calendar. \"עד יום שלישי\" → that Tuesday.")
         appendLine("- \"due_time\": only a clock time that was said, 24-hour (\"בחמש\" in the afternoon → 17:00).")
@@ -73,11 +74,16 @@ object SummaryPrompts {
         appendLine("[1] אני: תוכל לשלוח לי את החוזה עד מחר?")
         appendLine("[2] יוסי: אין בעיה, אשלח בבוקר")
         appendLine("[3] יוסי: אולי נקפוץ פעם לבקר")
+        appendLine("[4] יוסי: ומה עם המחיר של ההובלה?")
+        appendLine("[5] אני: אני אבדוק ואחזור אליך")
         appendLine("Answer:")
         appendLine("{\"tasks\": [{\"quote\": \"אין בעיה, אשלח בבוקר\", \"lines\": [1, 2], \"kind\": \"request\", " +
-            "\"owner\": \"other\", \"title\": \"לשלוח את החוזה\", \"due_phrase\": \"עד מחר\", " +
-            "\"due\": \"${callDate.plusDays(1)}\", \"due_time\": null, \"certain\": true}]}")
-        appendLine("Line 3 is not a task: it is hypothetical.")
+            "\"owner\": \"other\", \"title\": \"לשלוח לי את החוזה\", \"due_phrase\": \"עד מחר\", " +
+            "\"due\": \"${callDate.plusDays(1)}\", \"due_time\": null, \"certain\": true}, " +
+            "{\"quote\": \"אני אבדוק ואחזור אליך\", \"lines\": [4, 5], \"kind\": \"promise\", \"owner\": \"me\", " +
+            "\"title\": \"לבדוק את מחיר ההובלה ולחזור ליוסי\", \"due_phrase\": null, \"due\": null, " +
+            "\"due_time\": null, \"certain\": true}]}")
+        appendLine("Line 3 is not a task: it is hypothetical. Line 5's title says what it is about, taken from line 4.")
     }
 
     /** Question 3 — the model checks its own list against the transcript. */
@@ -86,7 +92,9 @@ object SummaryPrompts {
         appendLine("- remove it if it is not really a commitment (only mentioned, hypothetical, already done, refused, " +
             "or changed later in the call);")
         appendLine("- merge duplicates: the same action said more than once → one task citing all its lines;")
-        appendLine("- fix \"owner\" if the lines show the other person has to do it;")
+        appendLine("- fix \"owner\": \"me\" only if the phone's owner has to do it; what the other side will do is \"other\";")
+        appendLine("- rewrite a title the owner would not understand without the call: add what it is about and who it involves " +
+            "from the lines around it; if the call never says, set \"certain\": false;")
         appendLine("- fix \"due\" / \"due_time\" if they don't match \"due_phrase\" and the calendar;")
         appendLine("- set \"certain\": false where the words look misrecognised.")
         appendLine("Return the final list in the same format, plus what you removed:")
@@ -113,14 +121,15 @@ object SummaryPrompts {
         listItems("Decisions", "D", notes.flatMap { it.decisions })
         listItems("Follow-ups", "F", notes.flatMap { it.followUps })
         appendLine("Return:")
-        appendLine("{\"summary\": \"3-6 sentences about the whole call\", \"summary_certain\": true, " +
+        appendLine("{\"summary\": \"${if (notes.size <= 2) "5-8" else "7-10"} sentences about the whole call\", \"summary_certain\": true, " +
             "\"key_points\": [{\"ids\": [\"P1\", \"P4\"], \"text\": \"...\"}], " +
             "\"decisions\": [{\"ids\": [\"D1\"], \"text\": \"...\"}], " +
             "\"follow_ups\": [{\"ids\": [\"F1\"], \"text\": \"...\"}], \"title\": \"up to 8 words\"}")
         appendLine("Rules:")
         appendLine("- Keep every item. Only items that say the same thing are merged into one, listing all their ids.")
         appendLine("- Never add an item without ids. \"text\" keeps the meaning; you may shorten it. Do not add facts.")
-        appendLine("- The summary covers the whole call, the most important first — not only the first part.")
+        appendLine("- The summary covers the whole call, topic by topic, the most important first — not only the first part — " +
+            "and keeps the concrete details (names, amounts, dates).")
         appendLine("- \"summary_certain\": false if parts of the call were unclear.")
         appendLine(AnalysisPrompt.ACRONYMS)
     }

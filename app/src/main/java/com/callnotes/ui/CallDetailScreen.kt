@@ -131,6 +131,14 @@ fun CallDetailScreen(
     /** Lines set aside as background speech are hidden until the user asks to see them. */
     var showBackground by remember(callId) { mutableStateOf(false) }
     val backgroundCount = segments.count { it.background }
+    /** Who is the owner wasn't found: a recognisable line of each speaker, to ask. */
+    val speakerSamples = remember(segments, call?.meSpeaker) {
+        if (call?.meSpeaker != null) null
+        else listOf(0, 1).map { k ->
+            val said = segments.filter { it.speaker == k && !it.background }
+            (said.firstOrNull { it.text.trim().length >= 12 } ?: said.firstOrNull())?.text?.trim()
+        }.takeIf { it.all { t -> !t.isNullOrEmpty() } }?.filterNotNull()
+    }
 
     val c = call ?: return
     /** This call's place in the transcription / summary queue (null = not waiting). */
@@ -247,6 +255,14 @@ fun CallDetailScreen(
                     onShowLine = showLine,
                     speakersEdited = speakersEdited,
                     lineTexts = segments.map { it.text },
+                    speakerSamples = speakerSamples,
+                    onSetMe = { me ->
+                        scope.launch(Dispatchers.IO) {
+                            dao.setMeSpeaker(c.id, me)
+                            dao.clearAnalysis(c.id)
+                            TranscriptionService.start(context, analyseId = c.id)
+                        }
+                    },
                 )
             }
 

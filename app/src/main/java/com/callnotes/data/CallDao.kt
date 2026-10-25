@@ -96,7 +96,7 @@ abstract class CallDao {
     /** Calls older than [before] that aren't being transcribed and have no open task. */
     @Query(
         "SELECT * FROM calls WHERE startedAt < :before AND status != 'transcribing' " +
-            "AND NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.callId = calls.id AND tasks.done = 0)"
+            "AND NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.callId = calls.id AND tasks.done = 0 AND tasks.owner != 'other')"
     )
     abstract suspend fun callsToExpire(before: Long): List<CallEntity>
 
@@ -187,9 +187,10 @@ abstract class CallDao {
     /**
      * Open tasks with a reminder still to show: dated and not reminded yet, or snoozed.
      * When each is due is worked out in code (date + time of day in the phone's time zone).
+     * The other side's commitments have no reminder.
      */
     @Query(
-        "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND dueDate IS NOT NULL " +
+        "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND dueDate IS NOT NULL AND owner != 'other' " +
             "AND (remindedAt IS NULL OR snoozedUntil IS NOT NULL)"
     )
     abstract suspend fun reminderCandidates(): List<TaskEntity>
@@ -262,7 +263,8 @@ abstract class CallDao {
 
     /** Open, original tasks from other calls since [since], to spot repeats. */
     @Query(
-        "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND callId != :callId AND createdAt >= :since"
+        "SELECT * FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND callId != :callId AND createdAt >= :since " +
+            "AND owner != 'other'"
     )
     abstract suspend fun openTasksOtherCalls(callId: Long, since: Long): List<TaskEntity>
 
@@ -276,19 +278,20 @@ abstract class CallDao {
     abstract suspend fun tasksOf(callId: Long): List<TaskEntity>
 
     /**
-     * All tasks with their call (none for tasks the user added): open first, then by due
-     * date and time (none last), newest first.
+     * The owner's tasks with their call (none for tasks the user added): open first, then by
+     * due date and time (none last), newest first. The other side's commitments stay in
+     * their call's summary.
      */
     @Query(
         "SELECT tasks.*, calls.startedAt AS callStartedAt, calls.contactName AS callContactName, " +
             "calls.number AS callNumber, calls.kind AS callKind, calls.incoming AS callIncoming " +
-            "FROM tasks LEFT JOIN calls ON calls.id = tasks.callId " +
+            "FROM tasks LEFT JOIN calls ON calls.id = tasks.callId WHERE tasks.owner != 'other' " +
             "ORDER BY tasks.done, CASE WHEN tasks.dueDate IS NULL THEN 1 ELSE 0 END, tasks.dueDate, " +
             "COALESCE(tasks.dueTime, '09:00'), tasks.createdAt DESC, tasks.idx"
     )
     abstract fun observeAllTasks(): Flow<List<TaskListItem>>
 
-    @Query("SELECT COUNT(*) FROM tasks WHERE done = 0 AND duplicateOf IS NULL")
+    @Query("SELECT COUNT(*) FROM tasks WHERE done = 0 AND duplicateOf IS NULL AND owner != 'other'")
     abstract fun observeOpenTaskCount(): Flow<Int>
 
     @Query("UPDATE segments SET speaker = :speaker WHERE id = :id")

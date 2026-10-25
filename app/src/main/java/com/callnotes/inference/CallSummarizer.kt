@@ -25,6 +25,8 @@ class CallSummarizer(
     private val analyzer: Analyzer,
     private val precise: Boolean,
     private val listener: Listener = object : Listener {},
+    /** The model reasons before answering: smaller parts, so the reasoning fits in its context. */
+    private val thinking: Boolean = false,
 ) {
 
     /** Progress, for the notification and the log (never the call's words). */
@@ -57,7 +59,7 @@ class CallSummarizer(
         val numbers = lines.mapIndexed { i, l -> AnalysisPrompt.numberOf(l, i, 1) }
         val texts = MutableList(numbers.maxOrNull() ?: 0) { "" }
         lines.forEachIndexed { i, l -> texts[numbers[i] - 1] = l.text }
-        val parts = split(lines)
+        val parts = if (thinking) split(lines, THINKING_SINGLE_MAX_CHARS, THINKING_PART_CHARS) else split(lines)
         if (parts.size > 1) listener.log("long call: ${lines.size} lines in ${parts.size} parts")
         val notes = parts.mapIndexed { i, p ->
             if (precise) precisePart(p, i + 1, parts.size, call, ownerLabel, otherLabel, zone, callDate, texts)
@@ -172,6 +174,9 @@ class CallSummarizer(
         const val SINGLE_MAX_CHARS = 9_000
         /** Size of each part of a longer call. */
         const val PART_CHARS = 6_000
+        /** The same with thinking on (the reasoning takes room in the context too). */
+        const val THINKING_SINGLE_MAX_CHARS = 6_000
+        const val THINKING_PART_CHARS = 4_500
         /** Lines repeated at the start of the next part, so a sentence across the cut is seen whole. */
         const val OVERLAP_LINES = 2
         /** Longest merge prompt; more parts are merged in rounds. */
@@ -179,15 +184,19 @@ class CallSummarizer(
 
         private fun size(l: AnalysisPrompt.Line) = l.speaker.length + l.text.length + 8
 
-        /** The call in one part if it fits, else in parts of about [PART_CHARS] with a small overlap. */
-        fun split(lines: List<AnalysisPrompt.Line>): List<Part> {
-            if (lines.sumOf(::size) <= SINGLE_MAX_CHARS) return listOf(Part(lines, 1))
+        /** The call in one part if it fits, else in parts of about [partChars] with a small overlap. */
+        fun split(
+            lines: List<AnalysisPrompt.Line>,
+            singleMax: Int = SINGLE_MAX_CHARS,
+            partChars: Int = PART_CHARS,
+        ): List<Part> {
+            if (lines.sumOf(::size) <= singleMax) return listOf(Part(lines, 1))
             val parts = mutableListOf<Part>()
             var start = 0
             while (start < lines.size) {
                 var end = start
                 var chars = 0
-                while (end < lines.size && (end == start || chars + size(lines[end]) <= PART_CHARS)) {
+                while (end < lines.size && (end == start || chars + size(lines[end]) <= partChars)) {
                     chars += size(lines[end]); end++
                 }
                 parts += Part(lines.subList(start, end), start + 1)

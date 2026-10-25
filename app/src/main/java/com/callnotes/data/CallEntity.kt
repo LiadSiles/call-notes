@@ -131,7 +131,10 @@ data class TaskEntity(
     val callId: Long,
     val idx: Int,
     val title: String,
-    /** "me", "other" or "unknown". */
+    /**
+     * "me", "other" or "unknown". The other side's commitments ([othersSide]) are shown in
+     * their call's summary as "waiting for", not in the tasks screen and without reminders.
+     */
     val owner: String,
     /** ISO date (yyyy-MM-dd), already checked against the call date, or null. */
     val dueDate: String?,
@@ -164,9 +167,14 @@ data class TaskEntity(
     /** Added by the user, not found in a call. */
     val standalone: Boolean get() = callId == NO_CALL
 
+    /** Something the other side took on: the owner is waiting for it, it isn't the owner's task. */
+    val othersSide: Boolean get() = owner == OTHER
+
     companion object {
         /** [callId] of a task the user added (no call has id 0). */
         const val NO_CALL = 0L
+        /** [owner] of the other side's commitments. */
+        const val OTHER = "other"
     }
 }
 

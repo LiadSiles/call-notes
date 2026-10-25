@@ -1,5 +1,6 @@
 package com.callnotes.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,6 +58,12 @@ fun SummarySection(
     speakersEdited: Boolean,
     /** Transcript lines, to find an item's place when the summary didn't cite one. */
     lineTexts: List<String>,
+    /**
+     * Not known which speaker is the owner: a line of each speaker, so the user can say
+     * which is them ([onSetMe] then summarises again). Null when known (or no speakers).
+     */
+    speakerSamples: List<String>? = null,
+    onSetMe: (Int) -> Unit = {},
 ) {
     val cs = MaterialTheme.colorScheme
     val running = processing.running && processing.callId == c.id &&
@@ -97,6 +104,7 @@ fun SummarySection(
         }
 
         c.analysisStatus == AnalysisStatus.DONE && analysis != null -> Panel {
+            if (speakerSamples != null) WhoIsMe(speakerSamples, onSetMe)
             if (speakersEdited) {
                 Text("תיקנת מי אמר מה — הסיכום נוצר לפני התיקון.", style = MaterialTheme.typography.bodySmall, color = cs.error)
                 TextButton(onClick = onSummarise) { Text("סכם מחדש לפי התיקון") }
@@ -114,15 +122,25 @@ fun SummarySection(
                 Points("עיקרי הדברים", analysis.keyPoints, lineTexts, onShowLine)
                 Points("החלטות", analysis.decisions, lineTexts, onShowLine)
             }
-            if (tasks.isNotEmpty()) {
-                Text("משימות", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 14.dp))
-                tasks.forEach { t ->
-                    val target = remember(t.id, lineTexts.size) {
-                        t.firstSegment ?: SourceFinder.bestLine(t.quote ?: t.title, lineTexts)
-                    }
-                    TaskRow(t, ownerLabel(c, t.owner), Notifications.callLabel(c),
-                        target?.let { line -> { onShowLine(line) } }) { onTaskDone(t, it) }
+            @Composable
+            fun Tasks(list: List<TaskEntity>) = list.forEach { t ->
+                val target = remember(t.id, lineTexts.size) {
+                    t.firstSegment ?: SourceFinder.bestLine(t.quote ?: t.title, lineTexts)
                 }
+                TaskRow(t, if (t.owner == "unknown") "לא ברור של מי" else null, Notifications.callLabel(c),
+                    target?.let { line -> { onShowLine(line) } }) { onTaskDone(t, it) }
+            }
+            val (theirs, mine) = tasks.partition { it.othersSide }
+            if (mine.isNotEmpty()) {
+                Text("המשימות שלי", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 14.dp))
+                Tasks(mine)
+            }
+            if (theirs.isNotEmpty()) {
+                val other = c.contactName ?: "הצד השני"
+                Text("ממתין מ$other", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 14.dp))
+                Text("מה ש$other התחייב לעשות. לא נכנס למשימות שלך ואין לזה תזכורת; אם זה בעצם שלך, אפשר לשנות בעריכה.",
+                    style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
+                Tasks(theirs)
             }
             Points("להמשך", analysis.followUps, lineTexts, onShowLine)
             Text("לחיצה על פריט מראה את המקום בשיחה שממנו הוא נלקח.", style = MaterialTheme.typography.bodySmall,
@@ -231,9 +249,27 @@ private fun TaskRow(t: TaskEntity, owner: String?, callLabel: String, onOpen: ((
     Spacer(Modifier.size(2.dp))
 }
 
-private fun ownerLabel(c: CallEntity, owner: String): String? = when (owner) {
-    "me" -> "באחריותי"
-    "other" -> "באחריות ${c.contactName ?: "הצד השני"}"
-    else -> null
+/**
+ * Asks which speaker is the owner when the app couldn't tell: without it, whose task is
+ * whose was a guess (those tasks are marked "לא בטוח"). Answering summarises again.
+ */
+@Composable
+private fun WhoIsMe(samples: List<String>, onSetMe: (Int) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            .clip(MaterialTheme.shapes.small)
+            .background(cs.errorContainer)
+            .padding(12.dp),
+    ) {
+        Text("לא זוהה מי מהדוברים הוא אתה", style = MaterialTheme.typography.titleSmall, color = cs.onErrorContainer)
+        Text("לכן לא ברור אילו משימות שלך, והן מסומנות \"לא בטוח\". מי מהם אתה? הסיכום ייעשה מחדש.",
+            style = MaterialTheme.typography.bodySmall, color = cs.onErrorContainer)
+        samples.forEachIndexed { k, line ->
+            OutlinedButton(onClick = { onSetMe(k) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Text("דובר ${k + 1} הוא אני · \"${line.take(40)}${if (line.length > 40) "…" else ""}\"", maxLines = 2)
+            }
+        }
+    }
 }
 

@@ -115,4 +115,21 @@ class AnalysisPromptRepairTest {
         val json = "{\"title\": \"a \\\"b\\\" c\"}"
         assertEquals(json, AnalysisPrompt.repairQuotes(json))
     }
+
+    @Test fun longerCallsGetLongerSummaries() {
+        fun of(chars: Int) = AnalysisPrompt.summaryLength(listOf(AnalysisPrompt.Line("", "א".repeat(chars))))
+        assertEquals("1-2 sentences", of(300))
+        assertEquals("2-4 sentences", of(2_000))
+        assertEquals("4-6 sentences", of(4_000))
+        assertEquals("6-8 sentences", of(7_000))
+    }
+
+    @Test fun taskQuestionAsksForTitlesThatStandAlone() {
+        val q = SummaryPrompts.tasks(callDate)
+        assertTrue(q.contains("a week later without the call"))
+        assertTrue(q.contains("\"other\" if the other side has to do it"))
+        // The worked example shows a promise titled with what it is about.
+        assertTrue(q.contains("לבדוק את מחיר ההובלה ולחזור ליוסי"))
+        assertTrue(SummaryPrompts.review().contains("would not understand without the call"))
+    }
 }

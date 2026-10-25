@@ -48,12 +48,12 @@ object AnalysisPrompt {
         val date = Instant.ofEpochMilli(call.startedAt).atZone(zone).toLocalDate()
         return buildString {
             appendLine("You read the transcript of a phone call and return a single JSON object. Write every text value in Hebrew.")
-            appendLine("Accuracy matters more than completeness: a short correct answer is better than a long one with guesses.")
+            appendLine("Cover everything that was said, accurately: leave nothing out, and never guess.")
             appendLine()
             append(context(lines, call, ownerLabel, otherLabel, zone, firstLine, part, parts))
             appendLine()
             appendLine("Return only JSON, no markdown, with exactly these keys:")
-            appendLine("{\"title\": \"up to 8 words\", \"summary\": \"2-4 sentences\", \"summary_certain\": true, " +
+            appendLine("{\"title\": \"up to 8 words\", \"summary\": \"${summaryLength(lines)}\", \"summary_certain\": true, " +
                 "\"key_points\": [{\"text\": \"...\", \"lines\": [3, 4], \"certain\": true}], " +
                 "\"decisions\": [{\"text\": \"...\", \"lines\": [7], \"certain\": true}], " +
                 "\"tasks\": [{\"title\": \"what has to be done\", \"owner\": \"me|other|unknown\", " +
@@ -65,9 +65,12 @@ object AnalysisPrompt {
             appendLine("- \"certain\": false when the supporting lines are unclear, look misrecognised, contradict each other, " +
                 "or you are inferring rather than reading it. Never guess names, numbers, places or dates — if unclear, mark false.")
             appendLine("- \"summary_certain\": false if large parts of the transcript are unintelligible.")
+            appendLine(DETAILS)
             appendLine(ARE_TASKS)
             appendLine(NOT_TASKS)
-            appendLine("- \"me\" = the phone's owner. \"quote\" must be copied word for word from the cited line.")
+            appendLine(OWNER)
+            appendLine(TASK_TITLE)
+            appendLine("- \"quote\" must be copied word for word from the cited line.")
             appendLine("- \"due\": take the day from the calendar (\"מחר\" is ${date.plusDays(1)}). null if no day was mentioned.")
             appendLine("- \"due_time\": 24-hour time only when a clock time was said (\"בחמש\" in the afternoon is 17:00), else null.")
             appendLine("- Do not invent facts that are not in the transcript. Empty lists are fine.")
@@ -84,6 +87,33 @@ object AnalysisPrompt {
         "\"אם יהיה זמן\"); wishes without a commitment (\"הייתי רוצה\"); things already done, before or during the call " +
         "(\"שלחתי לך\"); requests that were declined; questions nobody took on; polite closings without a time " +
         "(\"נדבר\", \"נהיה בקשר\", \"נתראה\")."
+
+    /** Who a task belongs to — shared by both summary modes. */
+    internal const val OWNER = "- \"owner\": \"me\" if the phone's owner has to do it; \"other\" if the other side has to do it " +
+        "(the owner is waiting for it); \"unknown\" only if it really can't be told."
+
+    /** How a task's title is written — shared by both summary modes. */
+    internal const val TASK_TITLE = "- \"title\": what has to be done, written so the phone's owner understands it a week later " +
+        "without the call: a verb, what it is about, and who it involves (by name when said), up to 14 words — not " +
+        "\"להחזיר תשובה\" but \"להחזיר לדני תשובה לגבי מחיר השיפוץ\". For a promise like \"אחזור אליך\" or \"אבדוק\", " +
+        "find in the lines before it what it is about. If the call never says what it is about, \"certain\": false. " +
+        "Never write speaker labels such as \"דובר 1\" in a title."
+
+    /** What the summary and the key points must hold — shared by both summary modes. */
+    internal const val DETAILS = "- \"summary\": what the call was about, what was said on each topic, and how it ended. " +
+        "\"key_points\": every concrete detail that was said, each its own item with its context — names, amounts and " +
+        "prices, dates and times, places and addresses, phone numbers, product or model names."
+
+    /** Summary length for a transcript (or part) of [lines]: longer calls get more. */
+    internal fun summaryLength(lines: List<Line>): String {
+        val chars = lines.sumOf { it.text.length }
+        return when {
+            chars < 800 -> "1-2 sentences"
+            chars < 2_500 -> "2-4 sentences"
+            chars < 5_000 -> "4-6 sentences"
+            else -> "6-8 sentences"
+        }
+    }
 
     /** The rule that keeps Hebrew acronyms from breaking the JSON. */
     internal const val ACRONYMS = "- Hebrew acronyms and abbreviations (נתב״ג, צה״ל, ת״א) must use the Hebrew gershayim ״ or geresh ׳, " +

@@ -24,9 +24,11 @@ import kotlin.coroutines.resumeWithException
 
 /**
  * Summary + tasks with Gemma 4 on the device (LiteRT-LM, CPU, text only). Answers in JSON
- * (prompts and checks in [CallSummarizer]). Greedy decoding and thinking off: this is
- * extraction, not creative writing. A [conversation] keeps its history on the native side,
- * so follow-up questions about a transcript don't make the model read it again.
+ * (prompts and checks in [CallSummarizer]). Greedy decoding: this is extraction, not
+ * creative writing. [thinking]: the model reasons before each answer (more careful, much
+ * slower; the reasoning is not part of the answer) — it gets a larger context and longer
+ * answers for it. A [conversation] keeps its history on the native side, so follow-up
+ * questions about a transcript don't make the model read it again.
  *
  * Streams each answer (progress = characters written) so a cancel stops generation at
  * once through `Conversation.cancelProcess()` instead of waiting for the full answer.
@@ -35,6 +37,7 @@ class GemmaAnalyzer(
     private val context: Context,
     private val spec: ModelSpec,
     private val modelFile: File,
+    private val thinking: Boolean = false,
 ) : Analyzer {
 
     override val modelId: String get() = spec.id
@@ -42,24 +45,45 @@ class GemmaAnalyzer(
     private var engine: Engine? = null
     @Volatile private var active: Conversation? = null
 
+    /** Context the engine was opened with (tokens: transcript part + questions + answers). */
+    var contextTokens = 0
+        private set
+
     override suspend fun load() = withContext(Dispatchers.IO) {
         if (engine != null) return@withContext
-        engine = Engine(
+        engine = if (thinking) {
+            // Reasoning needs room; fall back to the usual size if the model file refuses it.
+            runCatching { open(THINKING_CONTEXT) }.getOrElse { open(CONTEXT) }
+        } else {
+            open(CONTEXT)
+        }
+    }
+
+    private fun open(tokens: Int): Engine {
+        val e = Engine(
             EngineConfig(
                 modelPath = modelFile.absolutePath,
                 backend = Backend.CPU(),
-                maxNumTokens = 8192,
+                maxNumTokens = tokens,
                 cacheDir = context.cacheDir.absolutePath,
             )
-        ).also { it.initialize() }
+        )
+        try {
+            e.initialize()
+        } catch (t: Throwable) {
+            runCatching { e.close() }
+            throw t
+        }
+        contextTokens = tokens
+        return e
     }
 
     override suspend fun <T> conversation(block: suspend (Analyzer.Chat) -> T): T = withContext(Dispatchers.IO) {
         load()
         val config = ConversationConfig(
             samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),
-            maxOutputToken = 1536,
-            thinkingConfig = ThinkingConfig(enableThinking = false),
+            maxOutputToken = if (thinking) 4096 else 2048,
+            thinkingConfig = ThinkingConfig(enableThinking = thinking),
         )
         val conversation = engine!!.createConversation(config)
         /** The answer being written now, if any. */
@@ -111,5 +135,10 @@ class GemmaAnalyzer(
     override fun close() {
         engine?.close()
         engine = null
+    }
+
+    private companion object {
+        const val CONTEXT = 8192
+        const val THINKING_CONTEXT = 16384
     }
 }

@@ -13,7 +13,9 @@ Where a task comes from, how it is stored, and how it reminds.
 | `voice` | Said into the record button; Whisper → Gemma | `util/VoiceMemos.kt`, `ui/VoiceTask.kt`, both workers, `inference/TaskPrompt.kt` |
 
 Tasks without a call have `callId = 0` (`TaskEntity.NO_CALL`); the task list LEFT JOINs
-the calls. A call task the user edits is marked `edited`: a new summary of its call keeps
+the calls. A call task with `owner = other` (`TaskEntity.othersSide`, 0.20.0) is the other
+side's commitment: shown only in its call's summary under "ממתין מ…", never in the tasks
+screen or count, without reminders or new-task notifications. A call task the user edits is marked `edited`: a new summary of its call keeps
 it and drops its own version of it (same title or quote). Deleting a call task: a later
 re-summary may bring it back (the confirm dialog says so). The editor also turns the
 "לא בטוח" mark (`certain = false`, set by Gemma or by the date-words check) off once the

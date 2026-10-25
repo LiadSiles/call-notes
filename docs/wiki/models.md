@@ -2,7 +2,7 @@
 
 _Last verified: 2026-10-25 (code at 0.18.3)._
 
-## Where things are (0.19.0)
+## Where things are (0.20.0)
 
 | Piece | Where |
 |---|---|
@@ -176,7 +176,7 @@ The log line per call: loudness levels and gap (or "not used"), voices' similari
 | Shared prompt context (call date + weekday, direction, who is who, 15-day Hebrew calendar, part k of n, globally numbered lines), the one-question "quick" prompt, tolerant JSON parsing, due-date validation (call date −1 day … +2 years) | `inference/AnalysisPrompt.kt` (+ tests, real org.json in tests) |
 | "Precise" prompts (3 questions in one conversation) and the merge prompt for long calls | `inference/SummaryPrompts.kt` |
 | Order of steps: split long calls (≤ 9k chars in one piece, else ~6k-char parts, 2 lines overlap), per part quick or precise, merge rounds (≤ 10k-char prompts), in-call task de-duplication, date-word check | `inference/CallSummarizer.kt`, `DueWords.kt` (+ tests with a fake analyzer) |
-| Model call: LiteRT-LM `Engine` text only (no audio backend), CPU, `maxNumTokens` 8192 (whole conversation), greedy, thinking off, ≤ 1536 output tokens per answer; `Analyzer.conversation` keeps one `Conversation` open for several questions (history stays native-side, the transcript is prefilled once); streamed with `sendMessageAsync` (chunks are deltas; cancel → `onError(CancellationException)`), `abort()` = `cancelProcess()`; a conversation is closed only after the native side reported done | `inference/GemmaAnalyzer.kt` |
+| Model call: LiteRT-LM `Engine` text only (no audio backend), CPU, `maxNumTokens` 8192 (whole conversation), greedy, ≤ 2048 output tokens per answer; optional thinking (`Prefs.summaryThinking`): context 16384 (fallback 8192), ≤ 4096 per answer, smaller parts; `Analyzer.conversation` keeps one `Conversation` open for several questions (history stays native-side, the transcript is prefilled once); streamed with `sendMessageAsync` (chunks are deltas; cancel → `onError(CancellationException)`), `abort()` = `cancelProcess()`; a conversation is closed only after the native side reported done | `inference/GemmaAnalyzer.kt` |
 | Worker running in parallel with transcription: requests in order (calls to summarise, voice notes becoming tasks), then (auto on) newest unanalysed; waits for the next transcript while transcription runs | `processing/SummaryWorker.kt` |
 | Storage: `calls.analysisStatus/analysisJson/summaryTitle/analysisModel/analysisError`, `tasks` table (DB v6) | `data/` |
 

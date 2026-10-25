@@ -116,6 +116,32 @@ class ScreenshotTest {
         }
     }
 
+    @Test fun callSummary() = shot("call_summary") {
+        val analysis = com.callnotes.inference.CallAnalysis(
+            title = "הובלה לדירה החדשה", summary = "דני מהחברה התקשר לתאם את ההובלה. סוכם על יום שלישי בבוקר, " +
+                "ודני ישלח הצעת מחיר מעודכנת. נשארה שאלה על פירוק הארונות.",
+            keyPoints = listOf(com.callnotes.inference.CallAnalysis.Point("המחיר: 3,200 ₪ כולל מנוף", listOf(3))),
+            decisions = emptyList(), tasks = emptyList(), followUps = emptyList(),
+        )
+        val c = call(1, "דני כהן", 30, 412, analysis = com.callnotes.data.AnalysisStatus.DONE)
+            .copy(analysisJson = com.callnotes.inference.AnalysisPrompt.toJson(analysis))
+        fun task(id: Long, title: String, owner: String, certain: Boolean = false) = TaskEntity(
+            id = id, callId = 1, idx = id.toInt(), title = title, owner = owner, dueDate = null, duePhrase = null,
+            quote = null, certain = certain)
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
+            item {
+                SummarySection(
+                    c, listOf(task(1, "לבדוק עם בעל הבית אם מותר מנוף ולחזור לדני", "me"),
+                        task(2, "לשלוח הצעת מחיר מעודכנת להובלה", "other")),
+                    ProcessingStatus.State(), queuePlace = null, modelInstalled = true, autoOn = true,
+                    onSummarise = {}, onCancel = {}, onTaskDone = { _, _ -> }, onShowLine = {},
+                    speakersEdited = false, lineTexts = emptyList(),
+                    speakerSamples = listOf("הלו, מדבר דני מהובלות", "כן, היי, תודה שחזרת אליי"),
+                )
+            }
+        }
+    }
+
     @Test fun settingsWords() = shot("settings_words") {
         val prefs = Prefs(LocalContext.current).apply { ownerName = "ליעד"; vocabulary = "נתב״ג, הצעת מחיר, משה לוי" }
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {

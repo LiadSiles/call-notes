@@ -132,4 +132,13 @@ class CallSummarizerTest {
         assertTrue(batches.all { it.size >= 2 })
         assertEquals(10, batches.sumOf { it.size })
     }
+
+    @Test fun thinkingUsesSmallerParts() {
+        val long = List(400) { AnalysisPrompt.Line("אני", "שורה ארוכה למדי של שיחה $it") }
+        val usual = CallSummarizer.split(long)
+        val thinking = CallSummarizer.split(long, CallSummarizer.THINKING_SINGLE_MAX_CHARS, CallSummarizer.THINKING_PART_CHARS)
+        assertTrue(thinking.size > usual.size)
+        // Nothing left out either way.
+        assertEquals(long.size, thinking.last().let { it.firstLine - 1 + it.lines.size })
+    }
 }

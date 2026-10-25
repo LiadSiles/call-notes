@@ -39,7 +39,8 @@ object TaskActions {
                 remindedAt = if (moved) null else task.remindedAt,
                 snoozedUntil = if (moved) null else task.snoozedUntil,
             ))
-            if (moved) Notifications.cancelTask(context, task.id)
+            // A new time, or now the other side's (no reminder for those): any shown one goes.
+            if (moved || task.othersSide) Notifications.cancelTask(context, task.id)
             task.id
         }
         TaskReminders.plan(context)

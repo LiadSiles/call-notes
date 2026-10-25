@@ -3,6 +3,38 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-25 — Only the owner's tasks; titles that stand alone; fuller summaries; thinking option (0.20.0)
+Owner: summaries too short and inaccurate, many tasks pointless — e.g. "דובר 1 told דובר 2
+he'll get back to him with an answer": about what? and not the owner's task at all. Asked
+whether Gemma 4 E4B is the strongest model: it is the largest Gemma 4 that LiteRT-LM runs
+on phones (26B A4B / 31B are not supported on phones and don't fit 12 GB); a Hebrew model
+(DictaLM 3.0 12B via llama.cpp) lost to Gemma 3 12B in Dicta's own summary evaluation and
+would take minutes per part on the phone — rejected for now. Fine-tuning discussed:
+possible only on the owner's own GPU computer (no cloud with personal calls), the
+Gemma 4 E4B → .litertlm conversion is not documented yet; deferred until corrections
+collected in the app can serve as data. Causes found and fixed:
+- The example's labels show the owner's speaker was unknown, so whose task it was could
+  only be guessed. Tasks of such a call are now "לא בטוח", and the call screen asks
+  "which speaker is you?" with a line of each; answering sets `meSpeaker` and summarises
+  again.
+- Every commitment became a task, the other side's too. Tasks with `owner = other` stay in
+  the table but are "ממתין מ…" in their call's summary only: not in the tasks screen or its
+  count, no reminder, no new-task notification, not used as an original for repeats, and
+  they don't keep a call from retention. Changing the owner in the editor moves a task.
+- Titles: "a verb, up to 10 words" allowed "להחזיר תשובה". Now: understandable a week
+  later without the call — what it is about and who it involves (from the lines before a
+  promise like "אחזור אליך"); `certain: false` if the call never says; no speaker labels.
+  The worked example shows it; the review question rewrites titles that fail it and
+  checks the owner.
+- Length: "2-4 sentences" for every call and "accuracy over completeness" made summaries
+  thin. Now 1–2 … 6–8 sentences by transcript length (5–10 for merged long calls), topic by
+  topic, and key points list every concrete detail (names, amounts, dates, places,
+  numbers). Answers up to 2048 tokens (was 1536).
+- Thinking (Gemma 4 reasons before answering), off by default, in settings → summaries:
+  engine context 16384 tokens (falls back to 8192 if the model file refuses), answers up
+  to 4096 tokens, parts of ~4.5k characters instead of ~6k. Expected 2–4× slower. Not
+  verified on the device yet: the log line "thinking on, context N tokens" says what ran.
+
 ### 2026-10-25 — Requests queue up; nothing in progress is interrupted (0.19.0)
 Owner: several requests at once — each new one joins a queue and waits its turn, the next
 starts when one finishes, each request has its own row in the notification shade, and the

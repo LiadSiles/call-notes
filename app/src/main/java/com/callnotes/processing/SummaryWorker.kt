@@ -48,6 +48,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
 
     override val tag = "summary"
     @Volatile private var analyzer: Analyzer? = null
+    /** The loaded model reasons before answering (setting read when it is loaded). */
+    private var thinking = false
     @Volatile private var currentRequested = false
 
     /** The call being summarised now was asked for by the user (not picked automatically). */
@@ -231,11 +233,13 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
         host.showWork(this, title, "טוען את מודל הסיכום…")
         step("loading analysis model ${spec.id} · ${ProcessingLog.freeRam(host)}")
         val started = System.currentTimeMillis()
-        val g = GemmaAnalyzer(host, spec, file)
+        thinking = Prefs(host).summaryThinking
+        val g = GemmaAnalyzer(host, spec, file, thinking)
         return try {
             g.load()
             modelLoaded = true
-            log("analysis model loaded in ${secs(started)} · ${ProcessingLog.freeRam(host)}")
+            log("analysis model loaded in ${secs(started)} · ${ProcessingLog.freeRam(host)} · " +
+                "thinking ${if (thinking) "on" else "off"}, context ${g.contextTokens} tokens")
             g
         } catch (e: Throwable) {
             runCatching { g.close() }
@@ -271,7 +275,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 "${lines.size} lines, ${lines.sumOf { it.text.length }} chars")
             var lastShown = 0L
             var doing = "קורא את השיחה…"
-            val summarizer = CallSummarizer(analyzer, precise, object : CallSummarizer.Listener {
+            val summarizer = CallSummarizer(analyzer, precise, thinking = thinking, listener = object : CallSummarizer.Listener {
                 override fun step(step: CallSummarizer.Step, part: Int, parts: Int) {
                     val of = if (parts > 1) " · חלק $part מתוך $parts" else ""
                     doing = when (step) {
@@ -309,10 +313,12 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
             )
             if (call.id in cancelled) throw CancellationException("cancelled")
             val now = System.currentTimeMillis()
+            // Without knowing which speaker is the owner, whose task it is was a guess: "לא בטוח"
+            // until the user says who is who (the call screen asks) and summarises again.
             val tasks = result.tasks.mapIndexed { i, t ->
                 TaskEntity(callId = call.id, idx = i, title = t.title, owner = t.owner, dueDate = t.dueDate,
                     duePhrase = t.duePhrase, quote = t.sourceQuote, lines = t.lines.joinToString(",").ifEmpty { null },
-                    certain = t.certain, createdAt = now, dueTime = t.dueTime)
+                    certain = t.certain && known, createdAt = now, dueTime = t.dueTime)
             }
             // Re-summarising shouldn't announce tasks the user has already seen (or ticked off).
             val existing = dao.tasksOf(call.id)
@@ -333,14 +339,16 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                     ?.let { dao.setDuplicate(r.id, it.id) }
             }
             val repeats = linkRepeats(call, saved)
-            val fresh = saved.filter { taskKey(it.title) !in before && !it.done && it.id !in repeats }
+            // Announced: the owner's own new tasks (what the other side took on is shown in the call).
+            val fresh = saved.filter { taskKey(it.title) !in before && !it.done && it.id !in repeats && !it.othersSide }
             fresh.forEach { Notifications.newTask(host, it, label(call)) }
             TaskReminders.plan(host)
             val used = Energy.percentUsed(battery, Energy.read(host))
             dao.setAnalyzeCost(call.id, used, System.currentTimeMillis() - started)
             log("call ${call.id}: summary done in ${secs(started)} · ${summarizer.charsOut} chars out · " +
                 "${result.keyPoints.size} points (${result.keyPoints.count { !it.certain }} unsure), " +
-                "${tasks.size} tasks (${tasks.count { !it.certain }} unsure, ${fresh.size} new, ${repeats.size} repeats) · battery " +
+                "${tasks.size} tasks (${tasks.count { it.othersSide }} the other side's, ${tasks.count { !it.certain }} unsure, " +
+                "${fresh.size} new, ${repeats.size} repeats)${if (!known) " · who is the owner unknown" else ""} · battery " +
                 (used?.let { "%.2f%%".format(it) } ?: "not measured"))
             true
         } catch (e: Throwable) {
@@ -363,7 +371,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
         val candidates = open.map { TaskMatcher.Candidate(it.title, it.owner, it.dueDate) }
         val marked = mutableSetOf<Long>()
         for (t in saved) {
-            if (t.done || t.edited) continue
+            if (t.done || t.edited || t.othersSide) continue
             val i = TaskMatcher.findOriginal(TaskMatcher.Candidate(t.title, t.owner, t.dueDate), candidates) ?: continue
             val original = open[i]
             // Only an earlier task can be the original, so two calls never point at each other:

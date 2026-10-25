@@ -110,6 +110,7 @@ fun AutoTranscribeSettings(prefs: Prefs) {
 @Composable
 fun SummaryModeSettings(prefs: Prefs) {
     var precise by remember { mutableStateOf(prefs.preciseSummary) }
+    var thinking by remember { mutableStateOf(prefs.summaryThinking) }
     CardGroup {
         ChipChoice(
             "אופן הסיכום",
@@ -119,6 +120,13 @@ fun SummaryModeSettings(prefs: Prefs) {
             precise,
             label = { if (it) "מדויק" else "מהיר" },
         ) { precise = it; prefs.preciseSummary = it }
+        RowDivider(inset = false)
+        SwitchRow(
+            "חשיבה לפני תשובה (ניסיוני)",
+            "Gemma חושב לפני כל תשובה, כמו טיוטה שלא מוצגת. יכול לדייק יותר, אבל כל סיכום לוקח פי 2–4 זמן וסוללה — " +
+                "מתאים במיוחד עם \"רק בזמן טעינה\".",
+            thinking,
+        ) { thinking = it; prefs.summaryThinking = it }
     }
     Note("כל השיחה נלקחת בחשבון: שיחה ארוכה מחולקת לחלקים, כל חלק מסוכם, והחלקים מאוחדים לסיכום אחד בלי לאבד פרטים. " +
         "שינוי חל על הסיכומים הבאים; שיחה שכבר סוכמה אפשר לסכם מחדש במסך שלה.")
