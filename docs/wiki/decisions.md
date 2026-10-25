@@ -3,6 +3,26 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-25 — Patch whisper.cpp: no DTW on windows under 160 ms (0.18.3)
+Owner sent a native crash from 0.17.1 (`abort` inside `WhisperNative.transcribe`). The
+library is stripped, so it was traced by disassembly: the abort is
+`WHISPER_ASSERT(filter_width < a->ne[2])` in whisper.cpp's DTW `median_filter`
+(src/whisper.cpp:9136, reached through ggml's custom-op dispatch). `whisper_full` runs DTW
+on every window that produced a segment with `n_frames = min(seek_delta, seek_end − seek)`;
+the median filter has width 7 and asserts more than 7 audio tokens (20 ms each), so a
+window whose last timestamp — or the audio left — is ≤ 150 ms kills the whole process.
+Rare per window, but every call and every second-look run is many windows; it is still in
+upstream v1.9.5, and 0.18.2 ships the same library (same build ID). The process died, so
+the call was marked "stopped midway — maybe out of memory" and a retry hit it again.
+- Fix: `app/src/main/cpp/patches/whisper-dtw-short-window.patch` skips DTW for such a
+  window; its tokens keep `t_dtw = -1`, and `WhisperOutput` already falls back to token
+  timing. CMake applies the patch to the submodule before building (skipped if already
+  applied; a patch that no longer fits after a submodule bump stops the build).
+  Rejected: padding the audio with silence (covers only the end of the audio, not a short
+  last timestamp); a SIGABRT handler (no safe way back into the JVM).
+- The restart message now uses Android's exit reason (`ApplicationExitInfo`, Android 11+):
+  a native crash says so instead of blaming memory, and the log line records the reason.
+
 ### 2026-10-25 — Never lose a word: second look at short and overlapped speech (0.18.1)
 Owner: short answers of his still disappear; losing anything said is not acceptable.
 Audit of every place text could go:

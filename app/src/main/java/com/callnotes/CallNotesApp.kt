@@ -114,10 +114,16 @@ class CallNotesApp : Application() {
      * error and a retry button instead of an endless "transcribing…".
      */
     private fun recoverDeadRun() {
-        val stage = ProcessingLog.recoverIfDied(this) ?: return
-        TranscriptionService.note(this, "התמלול נעצר באמצע ($stage). ייתכן שחסר זיכרון למודל.")
-        appScope.launch {
-            database.calls().failInterrupted("התמלול נעצר באמצע: $stage. ייתכן שחסר זיכרון — נסה לסגור אפליקציות אחרות או לבחור את המודל הקטן.")
+        val death = ProcessingLog.recoverIfDied(this) ?: return
+        val stage = death.stage
+        val (note, error) = if (death.nativeCrash) {
+            "העיבוד קרס באמצע ($stage)." to
+                "העיבוד קרס באמצע: $stage. אפשר לנסות שוב; אם זה חוזר, שלח את יומן התמלול (כפתור \"יומן\")."
+        } else {
+            "התמלול נעצר באמצע ($stage). ייתכן שחסר זיכרון למודל." to
+                "התמלול נעצר באמצע: $stage. ייתכן שחסר זיכרון — נסה לסגור אפליקציות אחרות או לבחור את המודל הקטן."
         }
+        TranscriptionService.note(this, note)
+        appScope.launch { database.calls().failInterrupted(error) }
     }
 }

@@ -1,6 +1,7 @@
 package com.callnotes.processing
 
 import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 import android.os.PowerManager
@@ -63,16 +64,43 @@ object ProcessingLog {
         return "free RAM ${gb(mem.availMem)} GB"
     }
 
+    /** A run the process died in: the stage it was at, and whether Android reports a native crash. */
+    data class Death(val stage: String, val nativeCrash: Boolean)
+
     /**
      * Called once per process start. A stage left over means the previous process died
-     * in the middle of a run; returns that stage (and logs it), else null.
+     * in the middle of a run; returns it (and logs it with Android's exit reason), else null.
      */
-    fun recoverIfDied(context: Context): String? {
+    fun recoverIfDied(context: Context): Death? {
         val prefs = Prefs(context)
         val stage = prefs.processingStage ?: return null
-        write(context, "!! previous run stopped abruptly during: $stage (process killed — likely out of memory or a native crash)")
+        val exit = lastExit(context)
+        val why = exit?.let { "${reasonName(it.reason)}${it.description?.let { d -> ": $d" } ?: ""}" }
+            ?: "likely out of memory or a native crash"
+        write(context, "!! previous run stopped abruptly during: $stage (process killed — $why)")
         prefs.processingStage = null
-        return stage
+        return Death(stage, exit?.reason == ApplicationExitInfo.REASON_CRASH_NATIVE)
+    }
+
+    /** How the previous process of this app ended (Android 11+; the description holds no call content). */
+    private fun lastExit(context: Context): ApplicationExitInfo? {
+        if (Build.VERSION.SDK_INT < 30) return null
+        return runCatching {
+            context.getSystemService(ActivityManager::class.java)
+                .getHistoricalProcessExitReasons(context.packageName, 0, 1).firstOrNull()
+        }.getOrNull()
+    }
+
+    private fun reasonName(reason: Int) = when (reason) {
+        ApplicationExitInfo.REASON_CRASH_NATIVE -> "native crash"
+        ApplicationExitInfo.REASON_CRASH -> "crash"
+        ApplicationExitInfo.REASON_LOW_MEMORY -> "low memory"
+        ApplicationExitInfo.REASON_ANR -> "not responding"
+        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "excessive resource use"
+        ApplicationExitInfo.REASON_SIGNALED -> "killed by signal"
+        ApplicationExitInfo.REASON_USER_REQUESTED -> "stopped by the user"
+        ApplicationExitInfo.REASON_OTHER -> "killed by the system"
+        else -> "exit reason $reason"
     }
 
     private fun gb(bytes: Long) = "%.1f".format(Locale.US, bytes / 1_000_000_000.0)
