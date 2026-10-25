@@ -50,7 +50,7 @@ app/src/main/java/com/callnotes/
   ui/         Compose UI (design system in Design.kt + theme/), settings pages, tasks, app lock
   util/       prefs, notifications, task reminders/actions, voice notes, retention, energy
 app/src/main/java/com/k2fsa/sherpa/onnx/  sherpa-onnx Kotlin API (verbatim copy)
-app/src/main/cpp/   JNI bridge to whisper.cpp (third_party/whisper.cpp submodule)
+app/src/main/cpp/   JNI bridge to whisper.cpp (third_party/whisper.cpp submodule; local fixes in patches/)
 scripts/fetch-sherpa-onnx.sh  prebuilt sherpa-onnx runtime for voice fingerprints (run before building)
 ```
 

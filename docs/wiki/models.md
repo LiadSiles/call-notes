@@ -1,8 +1,8 @@
 # Models
 
-_Last verified: 2026-10-25 (code at 0.18.2)._
+_Last verified: 2026-10-25 (code at 0.18.3)._
 
-## Where things are (0.18.2)
+## Where things are (0.18.3)
 
 | Piece | Where |
 |---|---|
@@ -71,6 +71,7 @@ Facts about Gemma 4 below come from Google's model cards and the LiteRT-LM docs.
 |---|---|
 | Catalog entry (pinned commit 2130c78, SHA-256, 1,624,555,275 bytes, Apache-2.0) | `ModelCatalog.WHISPER_HE_TURBO` |
 | Native build (whisper.cpp v1.9.5 submodule, static, JNI) | `app/src/main/cpp/`, `third_party/whisper.cpp` |
+| Local whisper.cpp patches (applied by CMake before the build) | `app/src/main/cpp/patches/` |
 | Kotlin JNI surface, CPU feature gate | `inference/whisper/WhisperNative.kt` |
 | Parse result (UTF-8 bytes → words with times) | `inference/whisper/WhisperOutput.kt` (+ tests) |
 | Transcriber (`abort()` sets whisper's abort flag, checked between graph nodes) | `inference/whisper/WhisperTranscriber.kt` |
@@ -96,6 +97,11 @@ Facts and choices:
 - JNI returns text as raw UTF-8 bytes: BPE tokens can split a 2-byte Hebrew letter and
   `NewStringUTF` aborts on invalid input. Words = tokens joined until a token starting
   with a space; word start = DTW time when available.
+- Patched (0.18.3, `patches/whisper-dtw-short-window.patch`): upstream aborts the process
+  when DTW runs on a window of ≤ 150 ms (median filter of width 7 needs > 7 audio
+  tokens); such a window now skips DTW and keeps token timing. The submodule shows as
+  dirty locally once built (`ignore = dirty` in `.gitmodules`). When bumping whisper.cpp,
+  check whether upstream fixed it and drop the patch.
 - Cancellation: a watcher coroutine calls `abort()` → whisper's abort callback.
 - Model files per role: `Prefs.modelFor(role)`; the analysis role keeps the old
   `model_id` key (the user's Gemma choice).
