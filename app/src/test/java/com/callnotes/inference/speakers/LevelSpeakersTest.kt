@@ -45,7 +45,8 @@ class LevelSpeakersTest {
         val (samples, labelled) = call(plan)
         val r = byLoudness(samples, labelled.map { it.first })!!
         assertArrayEquals(labelled.map { it.second }.toIntArray(), r.labels)
-        assertTrue("separation ${r.level!!.separationDb}", r.level!!.separationDb > 15)
+        val gap = r.level!!.separationDb
+        assertTrue("separation $gap", gap > 15)
     }
 
     @Test fun oneSoftWordInsidePhraseDoesNotFlipSpeaker() {
