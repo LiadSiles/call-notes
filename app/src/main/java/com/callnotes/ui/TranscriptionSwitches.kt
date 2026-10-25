@@ -123,7 +123,7 @@ fun SummaryModeSettings(prefs: Prefs) {
         RowDivider(inset = false)
         SwitchRow(
             "חשיבה לפני תשובה (ניסיוני)",
-            "Gemma חושב לפני כל תשובה, כמו טיוטה שלא מוצגת. יכול לדייק יותר, אבל כל סיכום לוקח פי 2–4 זמן וסוללה — " +
+            "Gemma חושב לפני כל תשובה, כמו טיוטה שלא מוצגת. יכול לדייק יותר, אבל כל סיכום לוקח פי 2 עד 4 זמן וסוללה — " +
                 "מתאים במיוחד עם \"רק בזמן טעינה\".",
             thinking,
         ) { thinking = it; prefs.summaryThinking = it }
