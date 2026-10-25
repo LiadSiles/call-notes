@@ -70,7 +70,7 @@ fun SummarySection(
     when {
         waiting -> Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(queueLabel("לסיכום", queuePlace ?: 1),
+                Text(queueLabel("לסיכום", queuePlace),
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = onCancel) { Text("ביטול") }
             }
