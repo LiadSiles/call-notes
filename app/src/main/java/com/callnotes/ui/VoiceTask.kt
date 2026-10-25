@@ -179,12 +179,12 @@ internal fun MemoCard(
     }
     val (status, tone) = when (memo.state) {
         MemoState.RECORDED -> when (active?.phase) {
-            null -> (if (place != null) "בתור לתמלול · ${if (place == 1) "הבא בתור" else "מקום $place"}" else "ממתין לתמלול") to Tone.Neutral
+            null -> (if (place != null) queueLabel("לתמלול", place) else "ממתין לתמלול") to Tone.Neutral
             Phase.LOADING, Phase.PREPARING_MODEL -> "טוען את מודל התמלול…" to Tone.Busy
             else -> (if (active.progressMax > 0) "מתמלל · ${active.progress * 100 / active.progressMax}%" else "מתמלל…") to Tone.Busy
         }
         MemoState.TRANSCRIBED -> when (active?.phase) {
-            null -> (if (place != null) "בתור ליצירת המשימה · ${if (place == 1) "הבא בתור" else "מקום $place"}" else "ממתין למודל הסיכום") to Tone.Neutral
+            null -> (if (place != null) queueLabel("ליצירת המשימה", place) else "ממתין למודל הסיכום") to Tone.Neutral
             Phase.LOADING_ANALYZER -> "טוען את מודל הסיכום…" to Tone.Busy
             Phase.WAITING_MEMORY -> "ממתין לזיכרון פנוי…" to Tone.Busy
             else -> "כותב את המשימה…" to Tone.Busy

@@ -79,20 +79,24 @@ object ProcessingLog {
             ?: "likely out of memory or a native crash"
         write(context, "!! previous run stopped abruptly during: $stage (process killed — $why)")
         prefs.processingStage = null
-        return Death(stage, exit?.reason == ApplicationExitInfo.REASON_CRASH_NATIVE)
+        return Death(stage, exit?.reason == REASON_CRASH_NATIVE)
     }
 
+    /** Android's record of how a process ended ([ApplicationExitInfo], read on Android 11+). */
+    private class Exit(val reason: Int, val description: String?)
+
     /** How the previous process of this app ended (Android 11+; the description holds no call content). */
-    private fun lastExit(context: Context): ApplicationExitInfo? {
+    private fun lastExit(context: Context): Exit? {
         if (Build.VERSION.SDK_INT < 30) return null
         return runCatching {
             context.getSystemService(ActivityManager::class.java)
                 .getHistoricalProcessExitReasons(context.packageName, 0, 1).firstOrNull()
+                ?.let { Exit(it.reason, it.description) }
         }.getOrNull()
     }
 
     private fun reasonName(reason: Int) = when (reason) {
-        ApplicationExitInfo.REASON_CRASH_NATIVE -> "native crash"
+        REASON_CRASH_NATIVE -> "native crash"
         ApplicationExitInfo.REASON_CRASH -> "crash"
         ApplicationExitInfo.REASON_LOW_MEMORY -> "low memory"
         ApplicationExitInfo.REASON_ANR -> "not responding"
@@ -102,6 +106,9 @@ object ProcessingLog {
         ApplicationExitInfo.REASON_OTHER -> "killed by the system"
         else -> "exit reason $reason"
     }
+
+    /** ApplicationExitInfo.REASON_CRASH_NATIVE (API 30). */
+    private const val REASON_CRASH_NATIVE = 5
 
     private fun gb(bytes: Long) = "%.1f".format(Locale.US, bytes / 1_000_000_000.0)
     private fun stamp() = SimpleDateFormat("dd.MM HH:mm:ss", Locale.US).format(Date())

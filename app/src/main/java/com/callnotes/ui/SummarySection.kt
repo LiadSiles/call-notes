@@ -63,14 +63,14 @@ fun SummarySection(
         processing.phase in setOf(Phase.LOADING_ANALYZER, Phase.ANALYZING, Phase.WAITING_MEMORY)
     val queued = queuePlace != null
     // Summarising something else (another call or a voice note), so this one waits its turn.
-    val waiting = queued && !running && (processing.running && processing.phase.isNotEmpty() || (queuePlace ?: 0) > 1)
+    val waiting = queued && !running && (processing.running && processing.phase.isNotEmpty() || queuePlace > 1)
     val analysis = remember(c.analysisJson) { AnalysisPrompt.fromJson(c.analysisJson) }
 
     SectionHeader("סיכום ומשימות")
     when {
         waiting -> Panel {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (queuePlace == 1) "בתור לסיכום · הבא בתור" else "בתור לסיכום · מקום $queuePlace",
+                Text(queueLabel("לסיכום", queuePlace ?: 1),
                     style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 OutlinedButton(onClick = onCancel) { Text("ביטול") }
             }

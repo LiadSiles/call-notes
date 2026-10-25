@@ -512,8 +512,8 @@ private fun TranscriptState(
         queued && processing.phase == Phase.WAITING_THERMAL -> Progress(
             "הטלפון חם — התמלול יתחיל כשיתקרר", null, null,
         )
-        queued && (busyElsewhere || (queuePlace ?: 0) > 1) -> Waiting(
-            if (queuePlace == 1) "בתור לתמלול · הבא בתור" else "בתור לתמלול · מקום $queuePlace",
+        queued && (busyElsewhere || queuePlace > 1) -> Waiting(
+            queueLabel("לתמלול", queuePlace),
             "יתחיל כשמה שלפניו בתור יסתיים. אפשר לבקש עוד שיחות — כל בקשה נכנסת לתור לפי הסדר.",
         )
         queued -> Progress("מתחיל תמלול…", null, null)
