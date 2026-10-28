@@ -10,6 +10,7 @@ import com.callnotes.data.MemoState
 import com.callnotes.data.SegmentEntity
 import com.callnotes.data.SpeakerResult
 import com.callnotes.data.VoiceMemoEntity
+import com.callnotes.inference.InferenceThreads
 import com.callnotes.inference.ModelCatalog
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
@@ -305,7 +306,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
         host.showWork(this, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)…")
         preparing = true
         val err = try {
-            withContext(Dispatchers.IO) {
+            withContext(InferenceThreads.dispatcher) {
                 val finished = java.util.concurrent.atomic.AtomicBoolean(false)
                 coroutineScope {
                     val watcher = launch {

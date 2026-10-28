@@ -47,12 +47,14 @@ jobs:
 
       # Compiler and resource errors are re-emitted as annotations so they can be read
       # through the checks API (raw job logs aren't reachable from every environment).
-      - name: Build debug APK
+      # Tests run on the debug variant; the published APK is the optimised release build
+      # (R8, not debuggable), signed with the same committed key.
+      - name: Build release APK
         run: |
           chmod +x gradlew
           set -o pipefail
-          if ! ./gradlew testDebugUnitTest assembleDebug --console=plain 2>&1 | tee build.log; then
-            grep -E '^e: |error:|ERROR:|AAPT|What went wrong|FAILED|Test.*>' -A3 build.log | head -40 | while IFS= read -r line; do
+          if ! ./gradlew testDebugUnitTest assembleRelease --console=plain 2>&1 | tee build.log; then
+            grep -E '^e: |error:|ERROR:|AAPT|What went wrong|FAILED|Test.*>|Missing class|R8:' -A3 build.log | head -60 | while IFS= read -r line; do
               echo "::error::${line}"
             done
             exit 1
@@ -61,7 +63,7 @@ jobs:
       # The transcription engine is native: fail loudly if it didn't make it into the APK.
       - name: Check native libraries
         run: |
-          APK=app/build/outputs/apk/debug/app-debug.apk
+          APK=app/build/outputs/apk/release/app-release.apk
           unzip -l "$APK" | grep -E '\.so$' | while read -r size _ _ name; do echo "::notice::$name $((size/1024)) KB"; done
           for lib in libcallnotes_whisper.so libsherpa-onnx-jni.so libonnxruntime.so libsqlcipher.so; do
             unzip -l "$APK" | grep -q "lib/arm64-v8a/$lib" || { echo "::error::$lib missing from APK"; exit 1; }
@@ -72,7 +74,7 @@ jobs:
         run: |
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           echo "TAG=v${VERSION}-build.${{ github.run_number }}" >> "$GITHUB_ENV"
-          cp app/build/outputs/apk/debug/app-debug.apk "call-notes-${VERSION}-build.${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "call-notes-${VERSION}-build.${{ github.run_number }}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -88,4 +90,4 @@ jobs:
           gh release create "$TAG" call-notes-*.apk \
             --prerelease \
             --title "$TAG" \
-            --notes "Debug build from ${GITHUB_SHA::7}. Download the APK on the phone and install it."
+            --notes "Build from ${GITHUB_SHA::7}. Download the APK on the phone and install it."

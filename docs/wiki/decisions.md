@@ -3,6 +3,34 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-28 — Release build, lighter list, storage page; tasks of unknown speakers stay visible (0.20.1)
+Owner: tasks don't reach the tasks screen after a summary; the app is slow (scrolling);
+it takes almost 90 GB.
+- Tasks: since 0.20.0 the other side's commitments are hidden from the tasks screen. When
+  it isn't known which speaker is the owner, "owner" is the model's guess — a task of the
+  owner guessed as "other" disappeared. Such calls now store every task as owner
+  "unknown" (and "לא בטוח") until the user answers "which one is you?" and the call is
+  summarised again. The log line counts the model's owners separately.
+- Speed: the published APK was the debug build (debuggable: no ahead-of-time
+  compilation, Compose debug checks, no R8). CI now builds `assembleRelease` — R8
+  shrinking and optimisation with `-dontobfuscate` (stack traces in the log stay readable;
+  JNI-reached classes of sherpa-onnx, LiteRT-LM, SQLCipher and our Whisper bridge are kept),
+  resource shrinking, signed with the same committed key so it installs over earlier
+  builds. Unit tests still run on debug. The call list drew a whole day as one lazy item
+  and every progress tick recomposed it: now one item per call (`CardSlice` keeps the
+  card look), grouping remembered, and each row gets only its own stage label so other
+  rows skip. Processing threads run at nice +5 (`InferenceThreads`; native engines'
+  threads inherit it) so the screen wins the CPU while a call is processed; not
+  THREAD_PRIORITY_BACKGROUND, which may pin threads to the slow cores.
+- Storage: the models are about 6–9 GB (Whisper 1.6 + its fast copies 0.6–0.9 each,
+  Gemma 3.7 or 2.6, LiteRT's working copy in the cache); nothing in the code explains
+  90 GB, so the app now measures itself: settings → privacy → אחסון lists sizes by kind
+  and the largest files, and frees only what is unused or re-creatable (models not in use,
+  fast copies of other presets, stale cache files, leftovers of stopped downloads), after
+  a confirm, not while processing. Start-up removes temp audio and half-made model copies
+  a stopped run left. To find the real cause, the owner's numbers from that page are
+  needed.
+
 ### 2026-10-25 — Only the owner's tasks; titles that stand alone; fuller summaries; thinking option (0.20.0)
 Owner: summaries too short and inaccurate, many tasks pointless — e.g. "דובר 1 told דובר 2
 he'll get back to him with an answer": about what? and not the owner's task at all. Asked

@@ -12,6 +12,7 @@ import com.callnotes.util.Energy
 import com.callnotes.util.Notifications
 import com.callnotes.util.Prefs
 import com.callnotes.util.Retention
+import com.callnotes.util.Storage
 import com.callnotes.util.TaskReminders
 import com.callnotes.util.VoiceMemos
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,8 @@ class CallNotesApp : Application() {
         // The restart helper's own process must not touch the database or schedule anything.
         if (getProcessName().endsWith(":restart")) return
         DataProtection.clearCache(this)
+        // Before any processing can start in this process (two small folder listings).
+        Storage.cleanLeftovers(this)
         Notifications.createChannels(this)
         recoverDeadRun()
         TaskReminders.reschedule(this)

@@ -17,8 +17,8 @@ android {
         applicationId = "com.callnotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 45
-        versionName = "0.20.0"
+        versionCode = 46
+        versionName = "0.20.1"
 
         // LiteRT-LM ships native libraries; phones are arm64. Keeps the APK small.
         ndk { abiFilters += "arm64-v8a" }
@@ -40,8 +40,8 @@ android {
         }
     }
 
-    // One fixed debug key (committed on purpose) so every build — from Android Studio
-    // or from GitHub Actions — installs as an update over the previous one.
+    // One fixed key (committed on purpose) so every build — debug or release, from Android
+    // Studio or from GitHub Actions — installs as an update over the previous one.
     signingConfigs {
         getByName("debug") {
             storeFile = rootProject.file("keystore/debug.keystore")
@@ -52,8 +52,13 @@ android {
     }
 
     buildTypes {
+        // The APK that is published (0.20.1): optimised by R8 and not debuggable — a debug
+        // build runs the UI several times slower (no ahead-of-time compilation, Compose's
+        // debug checks). Same key as debug builds, so it installs over them as an update.
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

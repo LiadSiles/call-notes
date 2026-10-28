@@ -13,7 +13,6 @@ import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ThinkingConfig
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -49,7 +48,7 @@ class GemmaAnalyzer(
     var contextTokens = 0
         private set
 
-    override suspend fun load() = withContext(Dispatchers.IO) {
+    override suspend fun load() = withContext(InferenceThreads.dispatcher) {
         if (engine != null) return@withContext
         engine = if (thinking) {
             // Reasoning needs room; fall back to the usual size if the model file refuses it.
@@ -78,7 +77,7 @@ class GemmaAnalyzer(
         return e
     }
 
-    override suspend fun <T> conversation(block: suspend (Analyzer.Chat) -> T): T = withContext(Dispatchers.IO) {
+    override suspend fun <T> conversation(block: suspend (Analyzer.Chat) -> T): T = withContext(InferenceThreads.dispatcher) {
         load()
         val config = ConversationConfig(
             samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),

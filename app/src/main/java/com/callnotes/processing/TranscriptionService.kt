@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import com.callnotes.CallNotesApp
 import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.MemoState
+import com.callnotes.inference.InferenceThreads
 import com.callnotes.inference.ModelRole
 import com.callnotes.util.BatterySaver
 import com.callnotes.util.Energy
@@ -131,7 +132,7 @@ class TranscriptionService : Service() {
         }
         w.requestsSeen = ProcessingStatus.enqueued
         lateinit var job: Job
-        job = scope.launch {
+        job = scope.launch(InferenceThreads.dispatcher) {
             try { w.loop() } finally { main.post { onWorkerDone(w, job) } }
         }
         w.job = job

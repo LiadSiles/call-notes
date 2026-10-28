@@ -196,7 +196,7 @@ class ScreenshotTest {
                         CardGroup {
                             list.forEachIndexed { i, c ->
                                 if (i > 0) RowDivider()
-                                CallRow(c, processing, ProcessingStatus.State(), manualOnly = c.call.id == 5L, queue = queue) {}
+                                CallRow(c, callStage(c.call, processing, ProcessingStatus.State(), c.call.id == 5L, queue)) {}
                             }
                         }
                     }

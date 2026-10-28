@@ -1,12 +1,12 @@
 package com.callnotes.inference.whisper
 
 import com.callnotes.audio.Wav
+import com.callnotes.inference.InferenceThreads
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
 import com.callnotes.inference.Transcript
 import com.callnotes.inference.TranscriptText
 import com.callnotes.util.CpuInfo
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -37,7 +37,7 @@ class WhisperTranscriber(
     /** Threads used, for the log. */
     val threads: Int = CpuInfo.inferenceThreads()
 
-    override suspend fun load() = withContext(Dispatchers.IO) {
+    override suspend fun load() = withContext(InferenceThreads.dispatcher) {
         if (handle != 0L) return@withContext
         WhisperNative.load()
         var h = WhisperNative.init(modelFile.absolutePath, true, WhisperNative.AHEADS_LARGE_V3_TURBO)
@@ -51,7 +51,7 @@ class WhisperTranscriber(
         languageHint: String,
         vocabulary: String,
         onProgress: (Int, Int) -> Unit,
-    ): Transcript = withContext(Dispatchers.IO) {
+    ): Transcript = withContext(InferenceThreads.dispatcher) {
         load()
         val samples = Wav.readFloats(audio)
         onProgress(0, 100)

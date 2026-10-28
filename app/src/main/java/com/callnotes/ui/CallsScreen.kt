@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Call
@@ -47,7 +48,6 @@ import com.callnotes.data.SearchHit
 import com.callnotes.inference.ModelManager
 import com.callnotes.processing.Phase
 import com.callnotes.processing.ProcessingStatus
-import com.callnotes.processing.Request
 import com.callnotes.processing.TranscriptionService
 import com.callnotes.util.BatterySaver
 import com.callnotes.util.Energy
@@ -69,6 +69,8 @@ fun CallsScreen(
     val app = context.applicationContext as CallNotesApp
     val loaded by app.callList.collectAsStateWithLifecycle()
     val items = loaded.orEmpty()
+    /** Calls by day ("היום", "אתמול", a date), grouped once per list change, not per frame. */
+    val days = remember(items) { items.groupBy { dayLabel(it.call.startedAt) } }
     val service by ServiceStatus.state.collectAsStateWithLifecycle()
     val processing by ProcessingStatus.state.collectAsStateWithLifecycle()
     val summaryState by ProcessingStatus.summary.collectAsStateWithLifecycle()
@@ -251,16 +253,15 @@ fun CallsScreen(
                 )
             }
 
-            // One card per day, calls as rows inside it.
-            items.groupBy { dayLabel(it.call.startedAt) }.forEach { (day, calls) ->
-                item(key = "day_$day") {
-                    Column {
-                        GroupLabel(day, Modifier.padding(top = 4.dp))
-                        CardGroup {
-                            calls.forEachIndexed { i, entry ->
-                                if (i > 0) RowDivider(inset = true)
-                                CallRow(entry, processing, summaryState, manualOnly = manualOnly(entry.call), queue = queue, onClick = { onOpen(entry.call.id) })
-                            }
+            // One card per day, each call its own list item (drawn only when on screen; a
+            // progress update redraws only the row whose label changed).
+            days.forEach { (day, calls) ->
+                item(key = "day_$day") { GroupLabel(day, Modifier.padding(top = 4.dp)) }
+                itemsIndexed(calls, key = { _, e -> e.call.id }) { i, entry ->
+                    CardSlice(first = i == 0, last = i == calls.lastIndex) {
+                        if (i > 0) RowDivider(inset = true)
+                        CallRow(entry, callStage(entry.call, processing, summaryState, manualOnly(entry.call), queue)) {
+                            onOpen(entry.call.id)
                         }
                     }
                 }
@@ -293,17 +294,10 @@ internal fun CallsHeader(status: Pair<String, Tone>, canSearch: Boolean, onSearc
     }
 }
 
+/** One call in the list; [stage] is its label ([callStage]), so other rows skip redrawing. */
 @Composable
-internal fun CallRow(
-    item: CallListItem,
-    processing: ProcessingStatus.State,
-    summary: ProcessingStatus.State,
-    manualOnly: Boolean = false,
-    queue: List<Request> = emptyList(),
-    onClick: () -> Unit,
-) {
+internal fun CallRow(item: CallListItem, stage: Pair<String, Tone>, onClick: () -> Unit) {
     val call = item.call
-    val stage = callStage(call, processing, summary, manualOnly, queue)
     Surface(
         color = androidx.compose.ui.graphics.Color.Transparent,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),

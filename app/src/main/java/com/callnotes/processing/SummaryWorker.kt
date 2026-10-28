@@ -313,11 +313,13 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
             )
             if (call.id in cancelled) throw CancellationException("cancelled")
             val now = System.currentTimeMillis()
-            // Without knowing which speaker is the owner, whose task it is was a guess: "לא בטוח"
-            // until the user says who is who (the call screen asks) and summarises again.
+            // Without knowing which speaker is the owner, whose task it is was only a guess: it
+            // must not hide a task from the tasks screen as "the other side's". Owner unknown and
+            // "לא בטוח" until the user says who is who (the call screen asks) and summarises again.
             val tasks = result.tasks.mapIndexed { i, t ->
-                TaskEntity(callId = call.id, idx = i, title = t.title, owner = t.owner, dueDate = t.dueDate,
-                    duePhrase = t.duePhrase, quote = t.sourceQuote, lines = t.lines.joinToString(",").ifEmpty { null },
+                TaskEntity(callId = call.id, idx = i, title = t.title, owner = if (known) t.owner else "unknown",
+                    dueDate = t.dueDate, duePhrase = t.duePhrase, quote = t.sourceQuote,
+                    lines = t.lines.joinToString(",").ifEmpty { null },
                     certain = t.certain && known, createdAt = now, dueTime = t.dueTime)
             }
             // Re-summarising shouldn't announce tasks the user has already seen (or ticked off).
@@ -347,7 +349,9 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
             dao.setAnalyzeCost(call.id, used, System.currentTimeMillis() - started)
             log("call ${call.id}: summary done in ${secs(started)} · ${summarizer.charsOut} chars out · " +
                 "${result.keyPoints.size} points (${result.keyPoints.count { !it.certain }} unsure), " +
-                "${tasks.size} tasks (${tasks.count { it.othersSide }} the other side's, ${tasks.count { !it.certain }} unsure, " +
+                "${tasks.size} tasks (model: ${result.tasks.count { it.owner == "me" }} mine, " +
+                "${result.tasks.count { it.owner == TaskEntity.OTHER }} the other side's, " +
+                "${result.tasks.count { it.owner != "me" && it.owner != TaskEntity.OTHER }} unknown; ${tasks.count { !it.certain }} unsure, " +
                 "${fresh.size} new, ${repeats.size} repeats)${if (!known) " · who is the owner unknown" else ""} · battery " +
                 (used?.let { "%.2f%%".format(it) } ?: "not measured"))
             true

@@ -341,6 +341,7 @@ private fun LazyListScope.privacyItems(prefs: Prefs, resetKey: Int) {
     item { GroupLabel("שמירה ומחיקה") }
     item { key(resetKey) { RetentionSection(prefs) } }
     item { GroupLabel("אחסון") }
+    item { StorageSection() }
     item { key(resetKey) { CompressionSection(prefs) } }
     item { GroupLabel("הצפנה") }
     item { EncryptionSection(prefs) }
