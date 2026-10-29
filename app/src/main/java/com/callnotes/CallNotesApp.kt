@@ -56,6 +56,10 @@ class CallNotesApp : Application() {
             previous?.uncaughtException(t, e)
         }
         ProcessingLog.logExits(this)
+        Prefs(this).let { p ->
+            ProcessingLog.write(this, "app started · ${p.switchesLine()}")
+            p.logSwitchChanges { ProcessingLog.write(this, it) }
+        }
         DataProtection.clearCache(this)
         // Before any processing can start in this process (two small folder listings).
         Storage.cleanLeftovers(this)

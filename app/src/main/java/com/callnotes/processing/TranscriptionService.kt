@@ -414,6 +414,7 @@ class TranscriptionService : Service() {
          * nothing starts again on the next app open. Calls in progress go back to the queue.
          */
         fun stopAll(context: Context) {
+            ProcessingLog.write(context, "stop all: automatic transcription and summaries turned off")
             Prefs(context).apply { autoTranscribe = false; autoSummarize = false }
             ProcessingStatus.clearQueue()
             ProcessingStatus.set(ProcessingStatus.State())

@@ -45,6 +45,26 @@ class Prefs(context: Context) {
     /** Either automatic step is on (worth starting the background service for). */
     val anyAuto: Boolean get() = autoTranscribe || autoSummarize
 
+    /** The switches that decide whether things happen by themselves, for the processing log. */
+    fun switchesLine(): String = "recording ${onOff(recordingEnabled)} · auto transcription ${onOff(autoTranscribe)}" +
+        " · auto summary ${onOff(autoSummarize)} · battery-saver pause ${onOff(pauseInBatterySaver)}"
+
+    private fun onOff(b: Boolean) = if (b) "on" else "off"
+
+    /**
+     * Writes each change of those switches to the processing log, whoever makes it (a
+     * setting, "stop all", a banner) — the owner saw them turn off by themselves.
+     * Main process, once; the listener is kept so it isn't collected.
+     */
+    fun logSwitchChanges(onChange: (String) -> Unit) {
+        val watched = setOf(KEY_RECORDING, KEY_AUTO, KEY_AUTO_SUMMARY, KEY_SAVER)
+        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key in watched) onChange("settings changed: ${switchesLine()}")
+        }
+        listener = l
+        sp.registerOnSharedPreferenceChangeListener(l)
+    }
+
     /**
      * Calls longer than this many minutes are not transcribed or summarised automatically
      * (the user starts them by hand); 0 = no limit.
@@ -237,6 +257,9 @@ class Prefs(context: Context) {
         private const val KEY_WIFI = "wifi_only"
         private const val KEY_AUTO_MAX = "auto_max_minutes"
         private const val KEY_AUTO_SUMMARY = "auto_summarize"
+
+        /** The one switch-change listener (SharedPreferences holds listeners weakly). */
+        private var listener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
         /** What "restore defaults" resets. */
         private val RESETTABLE = listOf(
