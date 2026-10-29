@@ -466,11 +466,8 @@ class TranscriptionService : Service() {
                 instance?.transcribe?.cancelled?.remove(callId)
             }
             return try {
-                val intent = Intent(context, TranscriptionService::class.java).putExtra(EXTRA_AFTER_CALL, afterCall)
-                // Already running (in the foreground): a plain start, which Android allows from
-                // the background too; otherwise a foreground start.
-                if (instance != null) context.startService(intent)
-                else ContextCompat.startForegroundService(context, intent)
+                ContextCompat.startForegroundService(context,
+                    Intent(context, TranscriptionService::class.java).putExtra(EXTRA_AFTER_CALL, afterCall))
                 true
             } catch (e: Exception) {
                 // e.g. background start not allowed; the user can ask again from the app.
@@ -478,26 +475,6 @@ class TranscriptionService : Service() {
                 ProcessingLog.write(context, "service start refused: ${describe(e)}")
                 note(context, "העיבוד לא הופעל (${e.javaClass.simpleName}). ינסה שוב כשהאפליקציה תיפתח.")
                 false
-            }
-        }
-
-        /**
-         * From the recording process, which outlives the main one: starts processing in the
-         * main process. [afterCall]: a call just ended (and the service is still in the
-         * foreground, so Android allows the start) — the main process waits a few seconds for
-         * the call to arrive ([com.callnotes.capture.PendingCalls]). Otherwise the charger was
-         * plugged in or battery saver ended. Only the light checks here — the models and
-         * queues live in the main process.
-         */
-        fun wakeFromRecorder(context: Context, afterCall: Boolean) {
-            if (BatterySaver.paused(context)) return
-            val allowed = Energy.autoTranscribeAllowed(context) || !afterCall && Energy.autoSummaryAllowed(context)
-            if (!allowed) return
-            try {
-                ContextCompat.startForegroundService(context,
-                    Intent(context, TranscriptionService::class.java).putExtra(EXTRA_AFTER_CALL, afterCall))
-            } catch (e: Exception) {
-                ProcessingLog.write(context, "service start refused (from the recording process): ${describe(e)}")
             }
         }
 

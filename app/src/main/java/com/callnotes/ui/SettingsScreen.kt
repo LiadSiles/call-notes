@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
+import com.callnotes.capture.CallRecorderService
 import com.callnotes.capture.ServiceStatus
 import com.callnotes.inference.ModelRole
 import com.callnotes.inference.speakers.VoiceProfile
@@ -221,7 +222,7 @@ private fun SettingsSubPage(
     val setup = rememberSetupState(resumeTick + tick)
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         tick++
-        ServiceStatus.refresh(context)
+        CallRecorderService.refreshFromUi()
     }
 
     LazyColumn(

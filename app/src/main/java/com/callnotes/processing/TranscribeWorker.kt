@@ -3,7 +3,6 @@ package com.callnotes.processing
 import com.callnotes.audio.AudioCompressor
 import com.callnotes.audio.AudioDecoder
 import com.callnotes.audio.Wav
-import com.callnotes.capture.PendingCalls
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
@@ -83,8 +82,6 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
         step("start · ${ProcessingLog.deviceLine(host)}")
         if (delayFirst && ProcessingStatus.first(stage) == null) delay(6_000) // let a just-ended call land
         delayFirst = false
-        // Calls the recording process finished meanwhile (normally added at once).
-        PendingCalls.importAll(host)
         dao.failInterrupted()
         var done = 0
         var failed = 0

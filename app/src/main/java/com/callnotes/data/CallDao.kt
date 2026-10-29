@@ -30,10 +30,6 @@ abstract class CallDao {
     @Insert
     abstract suspend fun insert(call: CallEntity): Long
 
-    /** Calls of [kind] that started at [startedAt] (0 or 1): a recorded call isn't added twice. */
-    @Query("SELECT COUNT(*) FROM calls WHERE startedAt = :startedAt AND kind = :kind")
-    abstract suspend fun countAt(startedAt: Long, kind: String): Int
-
     @Query("DELETE FROM calls WHERE id = :id")
     abstract suspend fun deleteCall(id: Long)
 

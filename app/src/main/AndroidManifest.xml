@@ -75,7 +75,6 @@
 
         <service
             android:name=".capture.CallRecorderService"
-            android:process=":recorder"
             android:exported="true"
             android:label="@string/a11y_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
@@ -89,7 +88,6 @@
 
         <service
             android:name=".capture.RecordingService"
-            android:process=":recorder"
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
@@ -113,11 +111,6 @@
         <!-- "Done" / "Snooze" on a task reminder; only our own notifications can reach it. -->
         <receiver
             android:name=".util.TaskReminders$ActionReceiver"
-            android:exported="false" />
-
-        <!-- A call finished in the recording process: add it to the database (main process). -->
-        <receiver
-            android:name=".capture.PendingCalls$Receiver"
             android:exported="false" />
 
         <!-- Optional GPU acceleration for LiteRT-LM (CPU is used today). -->
