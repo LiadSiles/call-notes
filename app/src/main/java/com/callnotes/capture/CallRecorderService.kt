@@ -14,7 +14,6 @@ import android.os.Looper
 import android.os.PowerManager
 import android.view.accessibility.AccessibilityEvent
 import androidx.core.content.ContextCompat
-import com.callnotes.CallNotesApp
 import com.callnotes.data.CallEntity
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
@@ -36,6 +35,11 @@ import java.io.File
 /**
  * Records every call from the microphone — phone calls (telephony state) and,
  * if enabled, internet calls (audio mode, see [AudioModeMonitor]).
+ *
+ * Runs in its own process (`:recorder`): it hands each finished call to the main process
+ * as a file ([PendingCalls]) and reports its state as a broadcast ([ServiceStatus]), so it
+ * keeps running when the main process — processing with Whisper and Gemma — is closed.
+ * Settings are read fresh for each call (the main process writes them).
  *
  * It is an accessibility service because Android delivers microphone audio to an
  * ordinary app as silence while a call is active; accessibility services are the
@@ -59,7 +63,8 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         var foreground = false
     }
 
-    private lateinit var prefs: Prefs
+    /** Read anew each time: written by the main process ([Prefs] reloads across processes here). */
+    private val prefs: Prefs get() = Prefs(this)
     private lateinit var monitor: CallStateMonitor
     private lateinit var modeMonitor: AudioModeMonitor
     private lateinit var speaker: SpeakerController
@@ -68,17 +73,26 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
     private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var session: Session? = null
 
+    /** The main process asking for the state (on each return to its screen). */
+    private val asked = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            // A permission granted meanwhile: start call detection now.
+            ensureMonitoring()
+            ServiceStatus.publish(this@CallRecorderService)
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
-        prefs = Prefs(this)
         speaker = SpeakerController(this)
         monitor = CallStateMonitor(this, this)
         modeMonitor = AudioModeMonitor(this, this)
         modeMonitor.start() // no permission needed; the pref is checked per call
-        instance = this
+        ContextCompat.registerReceiver(this, asked, IntentFilter(ServiceStatus.ACTION_ASK), ContextCompat.RECEIVER_NOT_EXPORTED)
         ServiceStatus.update { it.copy(connected = true) }
         ProcessingLog.write(this, "recording service connected")
         ensureMonitoring()
+        ServiceStatus.publish(this)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit // subscribes to none
@@ -87,33 +101,29 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
 
     override fun onDestroy() {
         ProcessingLog.write(this, "recording service stopped (turned off in accessibility settings, or the app was updated)")
-        if (instance === this) instance = null
         session?.let { finish(it, System.currentTimeMillis()) }
         if (::monitor.isInitialized) monitor.stop()
         if (::modeMonitor.isInitialized) modeMonitor.stop()
+        runCatching { unregisterReceiver(asked) }
         main.removeCallbacksAndMessages(null)
         ServiceStatus.update { ServiceStatus.State() }
+        ServiceStatus.publish(this)
         super.onDestroy()
         // Let the final database write finish before cancelling the scope.
         io.launch { delay(10_000); io.cancel() }
     }
 
+    /**
+     * Starts call detection if it isn't running. The service receives no events, so a
+     * permission granted after it connected is picked up when the app's screen comes back
+     * ([ServiceStatus.refresh] asks).
+     */
     private fun ensureMonitoring() {
         if (ServiceStatus.state.value.monitoring) return
         if (monitor.start()) ServiceStatus.update { it.copy(monitoring = true) }
     }
 
     companion object {
-        @Volatile private var instance: CallRecorderService? = null
-
-        /**
-         * The service receives no events, so a permission granted after it connected
-         * is picked up when the app UI comes back to the foreground.
-         */
-        fun refreshFromUi() {
-            instance?.let { svc -> svc.main.post { svc.ensureMonitoring() } }
-        }
-
         private val SPEAKER_CHECKS_MS = listOf(1_000L, 2_200L, 3_800L, 6_000L)
 
         /** Shorter internet "calls" are usually voice messages played via the earpiece. */
@@ -172,6 +182,7 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         session = current
         watchDevice(current)
         ServiceStatus.update { it.copy(recordingNow = recorder != null) }
+        ServiceStatus.publish(this)
 
         if (recorder == null) {
             RecordingService.stop(this)
@@ -204,12 +215,13 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         // Start transcription while still in the foreground state (background FGS starts
         // can be refused); it waits a few seconds for this call to be saved.
         if (prefs.autoTranscribe && current.recorder != null && !prefs.tooLongForAuto(endedAt - current.startedAt)) {
-            TranscriptionService.start(this, afterCall = true)
+            TranscriptionService.wakeFromRecorder(this, afterCall = true)
         }
         RecordingService.stop(this)
         speaker.restore()
         Notifications.cancelSpeakerPrompt(this)
         ServiceStatus.update { it.copy(recordingNow = false) }
+        ServiceStatus.publish(this)
 
         io.launch { save(current, endedAt) }
     }
@@ -257,7 +269,8 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
             foreground = current.foreground,
         )
         if (recorder == null) current.file.delete()
-        (application as CallNotesApp).database.calls().insert(entity)
+        // To the main process, which adds it to the database (see PendingCalls).
+        PendingCalls.save(this, entity)
     }
 
     // ---- Speakerphone -----------------------------------------------------------

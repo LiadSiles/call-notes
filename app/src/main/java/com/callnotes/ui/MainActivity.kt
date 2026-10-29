@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.callnotes.CallNotesApp
-import com.callnotes.capture.CallRecorderService
+import com.callnotes.capture.ServiceStatus
 import com.callnotes.inference.ModelRole
 import com.callnotes.processing.TranscriptionService
 import com.callnotes.ui.theme.CallNotesTheme
@@ -155,7 +155,7 @@ private fun AppRoot() {
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         resumeTick++
-        CallRecorderService.refreshFromUi()
+        ServiceStatus.refresh(context)
         app.models.refresh()
         kickQueue()
     }

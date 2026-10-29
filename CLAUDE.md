@@ -41,7 +41,9 @@ decisions already taken and why).
 ```
 app/src/main/java/com/callnotes/
   audio/      WAV I/O, decoding to the working format, AAC compression
-  capture/    call detection, recording, speakerphone, call-log lookup
+  capture/    call detection, recording, speakerphone, call-log lookup — runs in its own
+              process ":recorder" (no database there: calls go to the main process as files,
+              status as broadcasts; see PendingCalls, ServiceStatus)
   data/       Room (calls, segments, tasks, voice_memos; CallDao, AppDatabase + migrations)
   inference/  Transcriber / Analyzer interfaces, model catalog + downloads;
               whisper/ (JNI, presets, quantization, expected words, second look at missed speech);

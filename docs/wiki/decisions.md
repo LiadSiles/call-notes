@@ -3,6 +3,34 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-29 — Recording in its own process (0.22.0)
+Owner's report pinned it down: accessibility had to be turned on again after a summary ran
+in the background for a while and he came back from the recent-apps list. The main process
+— Whisper and Gemma, gigabytes — was closed by the system; the accessibility service lived
+in it, and Android does not bind a service again after its process died (0.21.1). Moving
+the heavy processing out was rejected (its status, queue and cancel are used by every
+screen); the recorder is small and has few ties, so it moved instead:
+- `CallRecorderService` and `RecordingService` run in `:recorder`. `CallNotesApp.onCreate`
+  there only sets the crash log and channels — no database, models or schedules.
+- No database in `:recorder` (opening it may convert its encryption — must stay in one
+  process): a finished call is written as `files/pending_calls/<start>.json` and an explicit
+  app-internal broadcast reaches `PendingCalls.Receiver` in the main process, which inserts
+  it (not twice: `countAt(startedAt, kind)`) and starts processing. Pending files are also
+  imported at every main start and when the transcription worker starts, so a call ends
+  up in the list even if the main process wasn't running. The after-call wake is sent from
+  `:recorder` while its microphone service is still in the foreground, as before.
+- Settings are written only by the main process; `:recorder` reads them with
+  MODE_MULTI_PROCESS (deprecated, still reloads a changed file) and builds `Prefs` per use.
+- Status for the UI: `:recorder` broadcasts its state (`ServiceStatus.publish`); the main
+  process listens, and on every resume asks for it (which also makes the recorder start
+  call detection after a permission was granted — formerly a direct call) and checks with
+  AccessibilityManager whether the service is bound now (the bound list, not the "enabled"
+  setting, which stays on after a death).
+- The main process was kept alive by the bound service; now it may not run. Plugging in
+  (steps "only while charging") and battery saver ending are watched in `:recorder` too and
+  wake the main process (`TranscriptionService.wakeFromRecorder`).
+- The exit log covers both processes.
+
 ### 2026-10-29 — Why accessibility must be turned on again: log every process death (0.21.1)
 Owner: since today the accessibility permission has to be given again on every visit.
 Mechanism: the recording (accessibility) service runs in the app's process. When that

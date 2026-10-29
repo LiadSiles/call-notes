@@ -5,6 +5,7 @@ import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 import android.os.PowerManager
+import com.callnotes.CallNotesApp
 import com.callnotes.util.Prefs
 import java.io.File
 import java.text.SimpleDateFormat
@@ -94,14 +95,16 @@ object ProcessingLog {
         val exits = runCatching {
             context.getSystemService(ActivityManager::class.java)
                 .getHistoricalProcessExitReasons(context.packageName, 0, 10)
-                .filter { it.processName == context.packageName && it.timestamp > prefs.lastExitLogged }
+                .filter { it.timestamp > prefs.lastExitLogged &&
+                    (it.processName == context.packageName || it.processName.endsWith(CallNotesApp.RECORDER_SUFFIX)) }
         }.getOrNull() ?: return
         if (exits.isEmpty()) return
         prefs.lastExitLogged = exits.maxOf { it.timestamp }
         val time = SimpleDateFormat("dd.MM HH:mm:ss", Locale.US)
         exits.sortedBy { it.timestamp }.forEach { e ->
             if (e.reason == ApplicationExitInfo.REASON_EXIT_SELF) return@forEach // closed normally
-            write(context, "app process ended at ${time.format(Date(e.timestamp))}: ${reasonName(e.reason)}" +
+            val which = if (e.processName.endsWith(CallNotesApp.RECORDER_SUFFIX)) "recording process" else "app process"
+            write(context, "$which ended at ${time.format(Date(e.timestamp))}: ${reasonName(e.reason)}" +
                 (e.description?.let { ": $it" } ?: "") +
                 " · was ${importanceName(e.importance)} · memory ${e.pss / 1024} MB")
         }

@@ -2,6 +2,7 @@ package com.callnotes.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.callnotes.CallNotesApp
 import com.callnotes.inference.ModelRole
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
@@ -13,7 +14,15 @@ import kotlin.reflect.KProperty
  */
 class Prefs(context: Context) {
 
-    private val sp = context.applicationContext.getSharedPreferences("prefs", Context.MODE_PRIVATE)
+    /**
+     * In the recording process ([com.callnotes.CallNotesApp.inRecorderProcess]) the file is
+     * re-read if the main process changed it since (MODE_MULTI_PROCESS: deprecated, but it
+     * still reloads a changed file on every `getSharedPreferences`). That process only reads.
+     */
+    @Suppress("DEPRECATION")
+    private val sp = context.applicationContext.getSharedPreferences(
+        "prefs", if (CallNotesApp.inRecorderProcess) Context.MODE_MULTI_PROCESS else Context.MODE_PRIVATE,
+    )
 
     // ---- Recording ---------------------------------------------------------------------
 
