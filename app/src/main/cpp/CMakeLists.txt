@@ -43,3 +43,9 @@ add_library(callnotes_whisper SHARED whisper_jni.cpp quantize_jni.cpp)
 target_link_libraries(callnotes_whisper PRIVATE whisper log android)
 target_compile_options(callnotes_whisper PRIVATE -O3 -fvisibility=hidden)
 target_link_options(callnotes_whisper PRIVATE -Wl,--gc-sections -Wl,--exclude-libs,ALL)
+
+# Releasing pages of a memory-mapped model file (madvise), for the summary's memory guard.
+# Plain C++, no CPU extensions: loaded on any phone.
+add_library(callnotes_memory SHARED memory_jni.cpp)
+target_link_libraries(callnotes_memory PRIVATE log)
+target_compile_options(callnotes_memory PRIVATE -O2 -fvisibility=hidden)

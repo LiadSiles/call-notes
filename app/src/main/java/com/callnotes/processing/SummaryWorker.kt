@@ -52,6 +52,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
     /** The loaded model reasons before answering (setting read when it is loaded). */
     private var thinking = false
     @Volatile private var currentRequested = false
+    /** File name of the loaded model (its pages may be handed back, see [MemoryGuard]). */
+    private var modelFile: String? = null
     /** The last summary was stopped for memory: unload Gemma before the next one. */
     private var unloadAfter = false
 
@@ -73,6 +75,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 val next = next()
                 if (next is Item.Memo) {
                     if (!memoToTasks(next.memo, spec, file)) break
+                    unloadIfStopped()
                     continue
                 }
                 if (next == null) {
@@ -112,11 +115,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 }
                 // It ended inside this process: earlier deaths of the app on it no longer count.
                 if (outcome != null) Prefs(host).clearSummaryDeaths(call.id)
-                if (unloadAfter) {
-                    unloadAfter = false
-                    analyzer?.close(); analyzer = null
-                    modelLoaded = false
-                }
+                unloadIfStopped()
                 end()
             }
             if (done + failed > 0) TranscriptionService.note(host, if (failed == 0) "סוכמו $done" else "סוכמו $done, נכשלו $failed")
@@ -126,6 +125,14 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
             end()
             publish(ProcessingStatus.State())
         }
+    }
+
+    /** After an answer stopped for memory: unload Gemma (its pages too); the next item loads it again. */
+    private fun unloadIfStopped() {
+        if (!unloadAfter) return
+        unloadAfter = false
+        analyzer?.close(); analyzer = null
+        modelLoaded = false
     }
 
     /**
@@ -153,7 +160,15 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 try {
                     val zone = ZoneId.systemDefault()
                     val recordedAt = java.time.LocalDateTime.ofInstant(Instant.ofEpochMilli(memo.createdAt), zone)
-                    val answer = a.ask(TaskPrompt.build(memo.text.orEmpty(), recordedAt))
+                    val guard = MemoryGuard(modelFile)
+                    val answer = guard.watch(
+                        onRelease = { _, _, _ -> },
+                        onOver = { used ->
+                            log("voice note ${memo.id}: memory ${MemoryGuard.gb(used)} GB (${MemoryGuard.breakdown(modelFile)}) — stopping before the phone closes the app")
+                            a.abort()
+                            unloadAfter = true
+                        },
+                    ) { a.ask(TaskPrompt.build(memo.text.orEmpty(), recordedAt)) }
                     if (memo.id in cancelledMemos) throw CancellationException("deleted")
                     val found = try {
                         TaskPrompt.parse(answer, recordedAt)
@@ -246,6 +261,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
         val started = System.currentTimeMillis()
         thinking = Prefs(host).summaryThinking
         val g = GemmaAnalyzer(host, spec, file, thinking)
+        modelFile = file.name
         return try {
             g.load()
             modelLoaded = true
@@ -278,7 +294,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
 
     private suspend fun analyse(call: CallEntity, analyzer: Analyzer): Boolean {
         val started = System.currentTimeMillis()
-        val guard = MemoryGuard()
+        val guard = MemoryGuard(modelFile)
         val battery = Energy.read(host)
         val title = "מסכם: ${label(call)}"
         publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.ANALYZING))
@@ -328,10 +344,17 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 }
                 override fun log(text: String) = this@SummaryWorker.log("call ${call.id}: $text")
             })
-            val result = guard.watch({ used ->
-                log("call ${call.id}: memory ${MemoryGuard.gb(used)} GB while \"$doing\" — stopping before the phone closes the app")
-                analyzer.abort()
-            }) { summarizer.summarize(
+            val result = guard.watch(
+                onRelease = { before, after, result ->
+                    if (guard.releases == 1) log("call ${call.id}: memory ${MemoryGuard.gb(before)} → ${MemoryGuard.gb(after)} GB after handing " +
+                        "the model file's pages back (" + (if (result >= 0) "${MemoryGuard.gb(result)} GB mapped" else "failed: error ${-result}") +
+                        ") · now ${MemoryGuard.breakdown(modelFile)}")
+                },
+                onOver = { used ->
+                    log("call ${call.id}: memory ${MemoryGuard.gb(used)} GB while \"$doing\" (${MemoryGuard.breakdown(modelFile)}) — stopping before the phone closes the app")
+                    analyzer.abort()
+                },
+            ) { summarizer.summarize(
                 lines,
                 CallContext(
                     // An imported file's name is the file's, not a contact's.
@@ -389,11 +412,11 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 "${result.tasks.count { it.owner == TaskEntity.OTHER }} the other side's, " +
                 "${result.tasks.count { it.owner != "me" && it.owner != TaskEntity.OTHER }} unknown; ${tasks.count { !it.certain }} unsure, " +
                 "${fresh.size} new, ${repeats.size} repeats)${if (!ownerKnown) " · who is the owner unknown" else ""} · battery " +
-                (used?.let { "%.2f%%".format(it) } ?: "not measured") + " · peak memory ${MemoryGuard.gb(guard.peak)} GB")
+                (used?.let { "%.2f%%".format(it) } ?: "not measured") + " · ${guard.summary()}")
             true
         } catch (e: Throwable) {
             if (e is CancellationException || call.id in cancelled) throw (e as? CancellationException ?: CancellationException("cancelled"))
-            log("call ${call.id}: summary FAILED after ${secs(started)}: ${describe(e)} · peak memory ${MemoryGuard.gb(guard.peak)} GB")
+            log("call ${call.id}: summary FAILED after ${secs(started)}: ${describe(e)} · ${guard.summary()}")
             val why = if (e is MemoryGuard.TooMuchMemory) {
                 unloadAfter = true
                 "הסיכום נעצר: מודל הסיכום הגיע ל-${MemoryGuard.gb(e.bytes)} GB זיכרון, ומעל 6 GB הטלפון סוגר את האפליקציה (וגם מכבה את הנגישות). אפשר לנסות שוב ממסך השיחה."

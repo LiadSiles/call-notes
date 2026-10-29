@@ -13,6 +13,9 @@ accessibility services — this, not Play Protect or the build type, is why acce
 "reset" again and again. The summary then restarted on the next open: a loop. Earlier
 summaries on this phone (25–27.10) finished; why this one went past 6 GB is not known yet
 (0.22.2 logs the working copy LiteRT-LM keeps in the cache folder and the peak memory).
+0.22.2: the guard stopped a 3-line summary at 6.0 GB; the storage page showed LiteRT-LM's
+working copy present (2.3 GB) next to the 3.7 GB model file → 0.23.0 releases the model
+file's pages near the line.
 "SwipeUpClean" (clearing recent apps) also kills the app with its foreground service.
 `mediaProcessing` foreground services hit Android's daily time limit ("Time limit already
 exhausted"); the fallback to `dataSync` works.

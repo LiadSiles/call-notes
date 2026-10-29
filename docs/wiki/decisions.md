@@ -3,6 +3,20 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-29 — Hand the model file's pages back instead of failing the summary (0.23.0)
+0.22.2's guard did its job (the app was not stopped) but the summary of a 3-line voice
+message failed at 6 GB. The length of the call barely matters: the memory is the mapped
+model file (3.7 GB) plus LiteRT-LM's working copy of the weights (2.3 GB on the owner's
+phone, present — so not a rebuild). PSS counts every touched page of both that is still in
+RAM; with RAM to spare the kernel keeps them (the summaries that died started with ~6 GB
+free, those that finished with 3–4 GB). Near the line (4.8 GB PSS, at most every 5 s) the
+guard now asks the kernel to drop this process's pages of the model file
+(`madvise(MADV_PAGEOUT)`, native `callnotes_memory`); they are read again from storage if
+needed. The working copy is left alone (every token uses all of it). Only if memory still
+passes 5.8 GB is the answer stopped. The log shows where the memory is (model file,
+working copy, other files, the rest) the first time pages are handed back and at a stop,
+and each summary's peak and releases. Voice-note tasks get the same guard.
+
 ### 2026-10-29 — Stay under HyperOS's 6 GB line; no summary restart loop; stop keeps settings (0.22.2)
 The 0.22.1 log showed the real cause of the "accessibility resets" (devices.md): HyperOS
 force-stops the app when its memory passes 6 GB, which happened during one summary, and
