@@ -186,6 +186,9 @@ class Prefs(context: Context) {
     /** Active DownloadManager id for the model, or -1. */
     var downloadId by long("download_id", -1L)
 
+    /** Time of the newest process exit already written to the log ([com.callnotes.processing.ProcessingLog.logExits]). */
+    var lastExitLogged by long("last_exit_logged", 0L)
+
     /** Model ids still to download after the current one (comma-separated), for packs. */
     var downloadQueue by string("download_queue", "")
 

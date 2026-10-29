@@ -102,6 +102,10 @@ internal fun SetupSection(
     onAutostart: () -> Unit,
 ) {
     val a11yOn = setup.a11yOn
+    val service by ServiceStatus.state.collectAsStateWithLifecycle()
+    // On in accessibility settings but not running: the app's process ended (a crash, or
+    // Android closing it), and Android doesn't start the service again by itself.
+    val stopped = a11yOn && !service.connected
     Panel {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             
@@ -118,9 +122,11 @@ internal fun SetupSection(
                 TextButton(onClick = onAppDetails) { Text("לא נפתח חלון? אשר מפרטי האפליקציה ← הרשאות") }
             }
             SetupRow(
-                done = a11yOn,
+                done = a11yOn && !stopped,
                 title = "2. שירות ההקלטה",
-                body = "בהגדרות הנגישות: אפליקציות מותקנות ← \"סיכומי שיחות – הקלטה\" ← הפעלה. " +
+                body = if (stopped) "השירות מופעל בהגדרות אבל לא רץ: האפליקציה נסגרה, ואנדרואיד לא מפעיל אותו מחדש " +
+                    "לבד. בהגדרות הנגישות: \"סיכומי שיחות – הקלטה\" ← כיבוי והפעלה. הסיבה נרשמת ביומן העיבוד."
+                else "בהגדרות הנגישות: אפליקציות מותקנות ← \"סיכומי שיחות – הקלטה\" ← הפעלה. " +
                     "אנדרואיד מתיר הקלטה בזמן שיחה רק לשירות כזה.",
                 action = "פתיחת הגדרות נגישות",
                 onAction = onAccessibility,

@@ -82,6 +82,49 @@ object ProcessingLog {
         return Death(stage, exit?.reason == REASON_CRASH_NATIVE)
     }
 
+    /**
+     * Once per process start: every way the app's process ended since the last start, as
+     * Android recorded it (Android 11+) — a crash, a kill for memory, "stop" from settings…
+     * When the process dies, Android does not bring the recording (accessibility) service
+     * back by itself, so this is how to tell why it had to be turned on again.
+     */
+    fun logExits(context: Context) {
+        if (Build.VERSION.SDK_INT < 30) return
+        val prefs = Prefs(context)
+        val exits = runCatching {
+            context.getSystemService(ActivityManager::class.java)
+                .getHistoricalProcessExitReasons(context.packageName, 0, 10)
+                .filter { it.processName == context.packageName && it.timestamp > prefs.lastExitLogged }
+        }.getOrNull() ?: return
+        if (exits.isEmpty()) return
+        prefs.lastExitLogged = exits.maxOf { it.timestamp }
+        val time = SimpleDateFormat("dd.MM HH:mm:ss", Locale.US)
+        exits.sortedBy { it.timestamp }.forEach { e ->
+            if (e.reason == ApplicationExitInfo.REASON_EXIT_SELF) return@forEach // closed normally
+            write(context, "app process ended at ${time.format(Date(e.timestamp))}: ${reasonName(e.reason)}" +
+                (e.description?.let { ": $it" } ?: "") +
+                " · was ${importanceName(e.importance)} · memory ${e.pss / 1024} MB")
+        }
+    }
+
+    private fun importanceName(importance: Int) = when {
+        importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND -> "on screen"
+        importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND_SERVICE -> "running a foreground service"
+        importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE -> "visible"
+        importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_SERVICE -> "in the background (service)"
+        else -> "in the background (cached)"
+    }
+
+    /** A crash in the app's own code: what and where (class names stay readable in release builds). */
+    fun crash(context: Context, thread: String, e: Throwable) {
+        val frames = generateSequence(e) { it.cause }.take(3).joinToString(" | caused by ") { t ->
+            "${t.javaClass.name}: ${t.message} @ " + t.stackTrace.take(8).joinToString(" < ") {
+                "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}"
+            }
+        }
+        write(context, "!! app crashed (thread $thread): $frames")
+    }
+
     /** Android's record of how a process ended ([ApplicationExitInfo], read on Android 11+). */
     private class Exit(val reason: Int, val description: String?)
 

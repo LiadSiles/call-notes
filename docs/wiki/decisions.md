@@ -3,6 +3,25 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-29 — Why accessibility must be turned on again: log every process death (0.21.1)
+Owner: since today the accessibility permission has to be given again on every visit.
+Mechanism: the recording (accessibility) service runs in the app's process. When that
+process dies after the service connected — a Java or native crash, a kill for memory, a
+"force stop" — Android keeps the service "on" in settings but does not bind it again (it
+treats it as crashed) until the user switches it off and on, or the package is updated.
+So something now ends the process. Nothing in the code shows what (no reflection that
+R8 could break; JNI classes are kept), and the app logged only deaths during processing.
+- `ProcessingLog.logExits` at every start: each way the main process ended since the last
+  start (ApplicationExitInfo: reason, description, importance at the time, memory).
+- Uncaught exceptions are written to the log (class, message, 8 frames, causes) before
+  Android's handler runs; release builds keep class names (`-dontobfuscate`).
+- The service logs when it connects and when it is stopped cleanly.
+- Setup step 2 and the settings hub tell "on but not running" apart from "off".
+Next, once the log shows the cause: if it is memory or native crashes in processing, run
+the recording service in its own small process (`android:process`) so the heavy
+processing process can die without taking recording down — needs cross-process status
+and Room multi-instance invalidation (rejected in 0.3.5 for cost; reconsider).
+
 ### 2026-10-29 — Share audio to the app, including WhatsApp voice messages (0.21.0)
 Owner: accept ready recordings of any kind, WhatsApp's included; the app should appear in
 WhatsApp's share sheet and start producing the tasks as soon as something is shared.

@@ -48,6 +48,14 @@ class CallNotesApp : Application() {
         super.onCreate()
         // The restart helper's own process must not touch the database or schedule anything.
         if (getProcessName().endsWith(":restart")) return
+        // A crash takes the recording service down with the app (Android doesn't restart it):
+        // write what crashed where, then let Android handle it as usual.
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            runCatching { ProcessingLog.crash(this, t.name, e) }
+            previous?.uncaughtException(t, e)
+        }
+        ProcessingLog.logExits(this)
         DataProtection.clearCache(this)
         // Before any processing can start in this process (two small folder listings).
         Storage.cleanLeftovers(this)
