@@ -3,6 +3,32 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-29 — Back to the debug build and one process; log switch changes (0.22.1)
+Owner, on 0.22.0: accessibility still turns off by itself, a summary left running in the
+background disappears with its notification and starts over, and settings he had set
+(automatic summary) are back to their old values; Play Protect calls 0.21.1 and 0.22.0
+"not safe". None of this happened before 0.20.1.
+- The recording service's own process (0.22.0) is reverted. It read settings with
+  MODE_MULTI_PROCESS, which can restore the main process's backup file over a newer one
+  while that process writes (it commits `processing_stage` on every step) — settings can
+  jump back. And accessibility turning *off* (not just "on but not running") means the
+  whole package is stopped (Android removes a force-stopped package's services from the
+  enabled list), which a second process doesn't survive anyway.
+- What changed in 0.20.1 is the published APK: an R8 release build, not debuggable, still
+  signed with the committed key whose certificate is "CN=Android Debug". Play Protect's
+  flag and the package being stopped in the background started with it. The published APK
+  is the debug build again, the release build is attached as `-optimized-test` to compare.
+  If the debug build is fine, the next step is a proper release key (APK Signature Scheme
+  v3 key rotation, so it still installs as an update) before trying release builds again.
+- Diagnostics: every start logs the automatic switches; every change of them is logged
+  whoever makes it (a SharedPreferences listener), and "stop all" says so. Process exits
+  are logged since 0.21.1.
+
+### 2026-10-29 — (reverted in 0.22.1) Recording in its own process (0.22.0)
+`CallRecorderService` and `RecordingService` ran in `:recorder`; finished calls went to the
+main process as JSON files, status as app-internal broadcasts, settings were read with
+MODE_MULTI_PROCESS. Reverted: see above.
+
 ### 2026-10-29 — Why accessibility must be turned on again: log every process death (0.21.1)
 Owner: since today the accessibility permission has to be given again on every visit.
 Mechanism: the recording (accessibility) service runs in the app's process. When that

@@ -28,9 +28,11 @@ decisions already taken and why).
 
 - `./gradlew assembleDebug` — needs the Android SDK (Android Studio or CI).
 - Every push to `main` builds on GitHub Actions (`.github/workflows/build.yml`) and
-  publishes a prerelease with the APK — the R8-optimised **release** build (0.20.1),
-  signed with the committed key; unit tests run on debug. Classes reached from native code
-  need keep rules in `app/proguard-rules.pro`. **CI is the compile check** — if your session
+  publishes a prerelease with the APK — the **debug** build (again since 0.22.1; the R8
+  release build of 0.20.1–0.22.0 was flagged by Play Protect and closed in the background
+  on the owner's phone — see decisions.md). The release build is attached as
+  `-optimized-test` for comparison; classes reached from native code need keep rules in
+  `app/proguard-rules.pro`. **CI is the compile check** — if your session
   can't reach Google Maven, push and read the Actions result.
 - Debug signing uses the committed `keystore/debug.keystore` so builds install as
   updates of each other. Don't replace it.

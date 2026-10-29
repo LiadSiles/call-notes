@@ -17,8 +17,8 @@ android {
         applicationId = "com.callnotes"
         minSdk = 29
         targetSdk = 36
-        versionCode = 48
-        versionName = "0.21.1"
+        versionCode = 50
+        versionName = "0.22.1"
 
         // LiteRT-LM ships native libraries; phones are arm64. Keeps the APK small.
         ndk { abiFilters += "arm64-v8a" }
@@ -52,9 +52,9 @@ android {
     }
 
     buildTypes {
-        // The APK that is published (0.20.1): optimised by R8 and not debuggable — a debug
-        // build runs the UI several times slower (no ahead-of-time compilation, Compose's
-        // debug checks). Same key as debug builds, so it installs over them as an update.
+        // Optimised by R8 and not debuggable. Published 0.20.1–0.22.0; since 0.22.1 only
+        // attached as "-optimized-test" (Play Protect flagged it, see decisions.md). Same
+        // key as debug builds, so either installs over the other as an update.
         release {
             isMinifyEnabled = true
             isShrinkResources = true

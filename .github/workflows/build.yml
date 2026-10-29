@@ -63,7 +63,7 @@ jobs:
       # The transcription engine is native: fail loudly if it didn't make it into the APK.
       - name: Check native libraries
         run: |
-          APK=app/build/outputs/apk/release/app-release.apk
+          APK=app/build/outputs/apk/debug/app-debug.apk
           unzip -l "$APK" | grep -E '\.so$' | while read -r size _ _ name; do echo "::notice::$name $((size/1024)) KB"; done
           for lib in libcallnotes_whisper.so libsherpa-onnx-jni.so libonnxruntime.so libsqlcipher.so; do
             unzip -l "$APK" | grep -q "lib/arm64-v8a/$lib" || { echo "::error::$lib missing from APK"; exit 1; }
@@ -74,9 +74,11 @@ jobs:
         run: |
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           echo "TAG=v${VERSION}-build.${{ github.run_number }}" >> "$GITHUB_ENV"
-          cp app/build/outputs/apk/release/app-release.apk "call-notes-${VERSION}-build.${{ github.run_number }}.apk"
-          # Same code as a debug build, for a Play Protect comparison (temporary).
-          cp app/build/outputs/apk/debug/app-debug.apk "call-notes-${VERSION}-build.${{ github.run_number }}-debug.apk"
+          # The APK to install is the debug build again (0.22.1): since the switch to the
+          # release build (0.20.1) Play Protect flags the app and the app is closed in the
+          # background. The optimised release build stays next to it, only for comparison.
+          cp app/build/outputs/apk/debug/app-debug.apk "call-notes-${VERSION}-build.${{ github.run_number }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "call-notes-${VERSION}-build.${{ github.run_number }}-optimized-test.apk"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -92,4 +94,4 @@ jobs:
           gh release create "$TAG" call-notes-*.apk \
             --prerelease \
             --title "$TAG" \
-            --notes "Build from ${GITHUB_SHA::7}. Install the APK without '-debug' on the phone. The '-debug' APK is the same code as a debug build, only for comparing Play Protect results."
+            --notes "Build from ${GITHUB_SHA::7}. Install the APK without '-optimized-test' on the phone. The '-optimized-test' APK is the same code as an optimised release build, only for comparison."
