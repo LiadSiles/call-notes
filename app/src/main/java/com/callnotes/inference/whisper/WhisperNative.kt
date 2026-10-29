@@ -55,6 +55,8 @@ object WhisperNative {
         prompt: String,
         /** Never drop a window as "no speech" (re-reading missed speech, [MissedSpeech]). */
         keepQuiet: Boolean,
+        /** One decode per window, no retries at higher temperatures (re-run after a stall). */
+        noRetries: Boolean,
         listener: ProgressListener?,
     ): Array<Any>?
 }

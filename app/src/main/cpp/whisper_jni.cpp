@@ -111,7 +111,7 @@ Java_com_callnotes_inference_whisper_WhisperNative_systemInfo(JNIEnv *env, jobje
 JNIEXPORT jobjectArray JNICALL
 Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
         JNIEnv *env, jobject, jlong handle, jfloatArray jsamples, jstring jlang,
-        jint threads, jint beamSize, jstring jprompt, jboolean keepQuiet, jobject listener) {
+        jint threads, jint beamSize, jstring jprompt, jboolean keepQuiet, jboolean noRetries, jobject listener) {
     auto *h = reinterpret_cast<Holder *>(handle);
     if (!h || !h->ctx) return nullptr;
     h->abort.store(false);
@@ -147,6 +147,9 @@ Java_com_callnotes_inference_whisper_WhisperNative_transcribe(
         p.no_speech_thold = 1.0f;
         p.temperature_inc = 0.0f;
     }
+    // Re-run of a window that got stuck: one decode per window, no retries at higher
+    // temperatures (those are what turn a looping window into minutes).
+    if (noRetries) p.temperature_inc = 0.0f;
     if (!prompt.empty()) {
         p.initial_prompt = prompt.c_str();
         p.carry_initial_prompt = true; // every window, not just the first

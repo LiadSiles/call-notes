@@ -375,6 +375,9 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
                 if (audioSec > 0) Prefs(host).addSpeedSample(s.name, audioSec * 1000, asrMs)
                 log("call ${call.id}: speech recognition ${"%.2f".format(asrMs / 1000.0 / audioSec.coerceAtLeast(1))}× call length (preset ${s.name})")
             }
+            if (transcript.stuckRetried) {
+                log("call ${call.id}: Whisper got stuck (no progress for 4 min) — read again with one plain pass per window")
+            }
             if (transcript.secondLook > 0) {
                 log("call ${call.id}: second look at ${transcript.secondLook} stretch(es) of missed speech · " +
                     "%.1f s of words added".format(transcript.recoveredMs / 1000.0))

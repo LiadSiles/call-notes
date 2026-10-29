@@ -3,6 +3,14 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-30 — A stuck Whisper run is read again plainly (0.23.1)
+Call 39 (31 s) showed no progress for 5 minutes, twice; other calls the same evening took
+~1 min. With beam search and its retries at higher temperatures (up to 6 decodes of up to
+~220 tokens per window), a window Whisper loops on can take many minutes. If a run makes
+no progress for 4 minutes it is stopped and the call is read again greedy with no
+temperature retries (one bounded decode per window); the log says so. Repeats are trimmed
+as usual afterwards.
+
 ### 2026-10-29 — Hand the model file's pages back instead of failing the summary (0.23.0)
 0.22.2's guard did its job (the app was not stopped) but the summary of a 3-line voice
 message failed at 6 GB. The length of the call barely matters: the memory is the mapped

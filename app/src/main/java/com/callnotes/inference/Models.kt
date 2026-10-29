@@ -67,6 +67,8 @@ data class Transcript(
     /** Stretches of missed speech read a second time, and how much speech that added. */
     val secondLook: Int = 0,
     val recoveredMs: Long = 0,
+    /** The first pass got stuck (no progress for minutes) and was read again plainly. */
+    val stuckRetried: Boolean = false,
 ) {
     /**
      * [speaker]: 0/1 after speaker separation, null before / without it. [background]:
