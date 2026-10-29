@@ -53,7 +53,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          if ! ./gradlew testDebugUnitTest assembleRelease --console=plain 2>&1 | tee build.log; then
+          if ! ./gradlew testDebugUnitTest assembleRelease assembleDebug --console=plain 2>&1 | tee build.log; then
             grep -E '^e: |error:|ERROR:|AAPT|What went wrong|FAILED|Test.*>|Missing class|R8:' -A3 build.log | head -60 | while IFS= read -r line; do
               echo "::error::${line}"
             done
@@ -75,6 +75,8 @@ jobs:
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           echo "TAG=v${VERSION}-build.${{ github.run_number }}" >> "$GITHUB_ENV"
           cp app/build/outputs/apk/release/app-release.apk "call-notes-${VERSION}-build.${{ github.run_number }}.apk"
+          # Same code as a debug build, for a Play Protect comparison (temporary).
+          cp app/build/outputs/apk/debug/app-debug.apk "call-notes-${VERSION}-build.${{ github.run_number }}-debug.apk"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -90,4 +92,4 @@ jobs:
           gh release create "$TAG" call-notes-*.apk \
             --prerelease \
             --title "$TAG" \
-            --notes "Build from ${GITHUB_SHA::7}. Download the APK on the phone and install it."
+            --notes "Build from ${GITHUB_SHA::7}. Install the APK without '-debug' on the phone. The '-debug' APK is the same code as a debug build, only for comparing Play Protect results."
