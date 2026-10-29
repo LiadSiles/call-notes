@@ -3,6 +3,23 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-29 — Stay under HyperOS's 6 GB line; no summary restart loop; stop keeps settings (0.22.2)
+The 0.22.1 log showed the real cause of the "accessibility resets" (devices.md): HyperOS
+force-stops the app when its memory passes 6 GB, which happened during one summary, and
+the summary restarted on every start. The build type had nothing to do with it.
+- `MemoryGuard` watches memory during a summary (resident size every 0.5 s, the exact PSS
+  near the line) and stops it at 5.9 GiB — the summary fails with a clear message and
+  Gemma is unloaded, instead of the phone killing the app and turning accessibility off.
+- A summary the process died in twice in a row is marked failed and not picked up
+  automatically again (transcriptions already were, after one death); the user can retry.
+- "עצירת הכל" no longer turns the automatic switches off — that read as settings resetting.
+  It cancels what was running (not retried automatically) and empties the queue.
+- Logged: whether LiteRT-LM's working copy of the weights exists before each load and the
+  model file's time (LiteRT-LM names the copy after it; a whole-second time can make it
+  rebuild — LiteRT-LM issue 3772), and the peak memory of each summary.
+- The debug build stays the published APK for now; the R8 build is no longer suspected of
+  the force stops (debug was stopped the same way), only of Play Protect's flag.
+
 ### 2026-10-29 — Back to the debug build and one process; log switch changes (0.22.1)
 Owner, on 0.22.0: accessibility still turns off by itself, a summary left running in the
 background disappears with its notification and starts over, and settings he had set

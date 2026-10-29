@@ -64,8 +64,16 @@ object ProcessingLog {
         return "free RAM ${gb(mem.availMem)} GB"
     }
 
-    /** A run the process died in: the stage it was at, and whether Android reports a native crash. */
-    data class Death(val stage: String, val nativeCrash: Boolean)
+    /**
+     * A run the process died in: the stage it was at, whether Android reports a native crash
+     * or a stop for using too much memory, and the call being summarised, if it was a summary.
+     */
+    data class Death(val stage: String, val nativeCrash: Boolean, val memory: Boolean) {
+        val summaryCall: Long? get() = SUMMARY_STAGE.find(stage)?.groupValues?.get(1)?.toLongOrNull()
+    }
+
+    /** What [SummaryWorker] writes as its stage while it works on a call. */
+    private val SUMMARY_STAGE = Regex("""^\[summary] call (\d+):""")
 
     /**
      * Called once per process start. A stage left over means the previous process died
@@ -79,7 +87,10 @@ object ProcessingLog {
             ?: "likely out of memory or a native crash"
         write(context, "!! previous run stopped abruptly during: $stage (process killed — $why)")
         prefs.processingStage = null
-        return Death(stage, exit?.reason == REASON_CRASH_NATIVE)
+        // HyperOS: "[FORCE STOP] stop com.callnotes due to used too many pss resource …".
+        val memory = exit != null && (exit.reason == ApplicationExitInfo.REASON_LOW_MEMORY ||
+            exit.description?.contains("pss", ignoreCase = true) == true)
+        return Death(stage, exit?.reason == REASON_CRASH_NATIVE, memory)
     }
 
     /**

@@ -3,6 +3,20 @@
 One section per device actually tested. Record what was observed, not what was
 expected. Newest first.
 
+## POCO X6 Pro — HyperOS memory limit (2026-10-29)
+
+0.22.0/0.22.1 log: every summary attempt of one call ended with
+`[FORCE STOP] stop com.callnotes due to used too many pss resource, pss used: 8.5 GB,
+pss threshold: 6291456kb` (6 GiB), about 110 s into the first answer, on screen or in the
+background, debug and release builds alike. A force stop takes the app off the enabled
+accessibility services — this, not Play Protect or the build type, is why accessibility
+"reset" again and again. The summary then restarted on the next open: a loop. Earlier
+summaries on this phone (25–27.10) finished; why this one went past 6 GB is not known yet
+(0.22.2 logs the working copy LiteRT-LM keeps in the cache folder and the peak memory).
+"SwipeUpClean" (clearing recent apps) also kills the app with its foreground service.
+`mediaProcessing` foreground services hit Android's daily time limit ("Time limit already
+exhausted"); the fallback to `dataSync` works.
+
 ## POCO X6 Pro — HyperOS 3.0.304.0 (owner's phone)
 
 _Observed 2026-10-19, before installing 0.1._

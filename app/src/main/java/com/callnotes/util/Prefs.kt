@@ -131,6 +131,21 @@ class Prefs(context: Context) {
         @android.annotation.SuppressLint("ApplySharedPref") // must be on disk before a crash
         set(value) { sp.edit().putString("processing_stage", value).commit() }
 
+    /**
+     * How many times in a row the app's process died while summarising call [callId]
+     * (stored as "id:count"; one call at a time — see CallNotesApp.recoverDeadRun).
+     */
+    fun summaryDeaths(callId: Long): Int {
+        val (id, count) = sp.getString(KEY_SUMMARY_DEATHS, null)?.split(':')?.takeIf { it.size == 2 } ?: return 0
+        return if (id.toLongOrNull() == callId) count.toIntOrNull() ?: 0 else 0
+    }
+
+    fun setSummaryDeaths(callId: Long, count: Int) = sp.edit().putString(KEY_SUMMARY_DEATHS, "$callId:$count").apply()
+
+    fun clearSummaryDeaths(callId: Long) {
+        if (summaryDeaths(callId) > 0) sp.edit().remove(KEY_SUMMARY_DEATHS).apply()
+    }
+
     /** Set aside speech of people not on the call (background talk) after transcription. */
     var filterBackground by bool(KEY_BACKGROUND, true)
 
@@ -238,6 +253,7 @@ class Prefs(context: Context) {
     }
 
     companion object {
+        private const val KEY_SUMMARY_DEATHS = "summary_deaths"
         private const val KEY_RECORDING = "recording_enabled"
         private const val KEY_VOIP = "record_voip"
         private const val KEY_SPEAKER = "auto_speaker_v2"

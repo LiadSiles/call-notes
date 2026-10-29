@@ -284,7 +284,7 @@ class TranscriptionService : Service() {
         ProcessingLog.write(this, "stop requested by the user")
         transcribe.stopNow()
         summary.stopNow()
-        note("העיבוד נעצר. התמלול והסיכום האוטומטיים כבויים עד שתפעיל אותם שוב.")
+        note("העיבוד נעצר. מה שנעצר לא יעובד שוב אוטומטית; שיחות חדשות ימשיכו לפי ההגדרות.")
     }
 
     /** Main thread: like stop-all, but automatic processing stays on (resumes later). */
@@ -410,12 +410,15 @@ class TranscriptionService : Service() {
         }
 
         /**
-         * Stops all processing now and turns automatic transcription and summaries off, so
-         * nothing starts again on the next app open. Calls in progress go back to the queue.
+         * "עצירת הכל": stops what is running and empties the queue. What was running is
+         * cancelled like the call's own cancel button (not picked up automatically again).
+         * The automatic switches stay as the user set them — until 0.22.1 this turned them
+         * off, which read as settings resetting themselves.
          */
         fun stopAll(context: Context) {
-            ProcessingLog.write(context, "stop all: automatic transcription and summaries turned off")
-            Prefs(context).apply { autoTranscribe = false; autoSummarize = false }
+            ProcessingLog.write(context, "stop all: work in progress cancelled, queue emptied")
+            listOfNotNull(ProcessingStatus.state.value.callId, ProcessingStatus.summary.value.callId)
+                .distinct().forEach { cancelCall(context, it) }
             ProcessingStatus.clearQueue()
             ProcessingStatus.set(ProcessingStatus.State())
             ProcessingStatus.setSummary(ProcessingStatus.State())

@@ -1,6 +1,7 @@
 package com.callnotes
 
 import android.app.Application
+import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.AppDatabase
 import com.callnotes.data.CallListItem
 import com.callnotes.inference.ModelManager
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Process-wide objects (database, model manager, the warm call list) and start-up work:
@@ -130,15 +132,37 @@ class CallNotesApp : Application() {
      */
     private fun recoverDeadRun() {
         val death = ProcessingLog.recoverIfDied(this) ?: return
-        val stage = death.stage
-        val (note, error) = if (death.nativeCrash) {
-            "העיבוד קרס באמצע ($stage)." to
-                "העיבוד קרס באמצע: $stage. אפשר לנסות שוב; אם זה חוזר, שלח את יומן התמלול (כפתור \"יומן\")."
-        } else {
-            "התמלול נעצר באמצע ($stage). ייתכן שחסר זיכרון למודל." to
-                "התמלול נעצר באמצע: $stage. ייתכן שחסר זיכרון — נסה לסגור אפליקציות אחרות או לבחור את המודל הקטן."
+        val what = when {
+            death.nativeCrash -> "העיבוד קרס"
+            death.memory -> "הטלפון סגר את האפליקציה כי השתמשה ביותר מדי זיכרון"
+            else -> "האפליקציה נסגרה"
         }
-        TranscriptionService.note(this, note)
-        appScope.launch { database.calls().failInterrupted(error) }
+        // A call being transcribed when the process died is marked failed (one bad file must
+        // not take the app down on every start); the user can retry it by hand.
+        appScope.launch { database.calls().failInterrupted("$what באמצע התמלול. אפשר לנסות שוב ממסך השיחה.") }
+        val call = death.summaryCall
+        if (call == null) {
+            TranscriptionService.note(this, "$what באמצע התמלול.")
+            return
+        }
+        // A summary is otherwise picked up again on every start: when it is what kills the
+        // app, that is a loop, and each forced stop also turns accessibility off (0.22.2).
+        // One more try (the first death may have been the user clearing recent apps), then
+        // it is marked failed and only runs again when the user asks.
+        val prefs = Prefs(this)
+        val deaths = prefs.summaryDeaths(call) + 1
+        if (deaths < 2) {
+            prefs.setSummaryDeaths(call, deaths)
+            TranscriptionService.note(this, "$what באמצע סיכום. ינסה פעם אחת נוספת.")
+            return
+        }
+        prefs.clearSummaryDeaths(call)
+        ProcessingLog.write(this, "call $call: summary stopped ${deaths} times in a row with the app — marked failed, not retried automatically")
+        TranscriptionService.note(this, "$what באמצע סיכום, פעמיים ברצף. הסיכום לא ינסה שוב לבד.")
+        // Written before anything can start processing (the automatic summary would pick it up).
+        runBlocking(Dispatchers.IO) {
+            database.calls().setAnalysisStatus(call, AnalysisStatus.FAILED,
+                "$what באמצע הסיכום, פעמיים ברצף, ולכן הסיכום לא ינסה שוב לבד. אפשר לנסות שוב ממסך השיחה.")
+        }
     }
 }

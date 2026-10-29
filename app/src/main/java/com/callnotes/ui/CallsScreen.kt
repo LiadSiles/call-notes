@@ -237,10 +237,7 @@ fun CallsScreen(
                             LinearProgressIndicator(Modifier.fillMaxWidth())
                         }
                     }
-                    TextButton(onClick = {
-                        TranscriptionService.stopAll(context)
-                        autoOn = false
-                    }) { Text("עצירת הכל") }
+                    TextButton(onClick = { TranscriptionService.stopAll(context) }) { Text("עצירת הכל") }
                 }
             }
 
