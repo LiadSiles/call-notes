@@ -88,7 +88,7 @@ object ProcessingLog {
         write(context, "!! previous run stopped abruptly during: $stage (process killed — $why)")
         prefs.processingStage = null
         // HyperOS: "[FORCE STOP] stop com.callnotes due to used too many pss resource …".
-        val memory = exit != null && (exit.reason == ApplicationExitInfo.REASON_LOW_MEMORY ||
+        val memory = exit != null && (exit.reason == REASON_LOW_MEMORY ||
             exit.description?.contains("pss", ignoreCase = true) == true)
         return Death(stage, exit?.reason == REASON_CRASH_NATIVE, memory)
     }
@@ -163,6 +163,8 @@ object ProcessingLog {
 
     /** ApplicationExitInfo.REASON_CRASH_NATIVE (API 30). */
     private const val REASON_CRASH_NATIVE = 5
+    /** ApplicationExitInfo.REASON_LOW_MEMORY (API 30). */
+    private const val REASON_LOW_MEMORY = 3
 
     private fun gb(bytes: Long) = "%.1f".format(Locale.US, bytes / 1_000_000_000.0)
     private fun stamp() = SimpleDateFormat("dd.MM HH:mm:ss", Locale.US).format(Date())
