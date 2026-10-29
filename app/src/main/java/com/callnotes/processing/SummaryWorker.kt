@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import com.callnotes.CallNotesApp
 import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.CallEntity
+import com.callnotes.data.Caller
 import com.callnotes.data.CallKind
 import com.callnotes.data.CallStatus
 import com.callnotes.data.MemoState
@@ -259,7 +260,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
         return try {
             val segments = dao.segments(call.id)
             val known = call.meSpeaker != null
-            val other = call.contactName ?: call.number ?: "הצד השני"
+            val other = Caller.otherSide(call)
+            val imported = call.kind == CallKind.IMPORT
             // Background speech (people not on the call) is left out; lines keep their numbers.
             val lines = segments.filterNot { it.background }.map { s ->
                 val who = when {
@@ -303,10 +305,12 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
             val result = summarizer.summarize(
                 lines,
                 CallContext(
-                    call.startedAt, call.incoming, call.contactName,
-                    directionKnown = call.kind != CallKind.VOIP,
+                    // An imported file's name is the file's, not a contact's.
+                    call.startedAt, call.incoming, call.contactName.takeIf { !imported },
+                    directionKnown = call.kind == CallKind.CELLULAR,
                     ownerName = Prefs(host).ownerName.trim().ifEmpty { null },
                     vocabulary = WhisperPrompt.parseList(Prefs(host).vocabulary),
+                    imported = imported,
                 ),
                 ownerLabel = if (known) "אני" else null, otherLabel = if (known) other else null,
                 zone = ZoneId.systemDefault(),
@@ -316,11 +320,14 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
             // Without knowing which speaker is the owner, whose task it is was only a guess: it
             // must not hide a task from the tasks screen as "the other side's". Owner unknown and
             // "לא בטוח" until the user says who is who (the call screen asks) and summarises again.
+            // An imported recording with one voice (a voice message) is the exception: the
+            // speaker is the other side, and the model is told how to read it.
+            val ownerKnown = known || imported && segments.none { it.speaker != null }
             val tasks = result.tasks.mapIndexed { i, t ->
-                TaskEntity(callId = call.id, idx = i, title = t.title, owner = if (known) t.owner else "unknown",
+                TaskEntity(callId = call.id, idx = i, title = t.title, owner = if (ownerKnown) t.owner else "unknown",
                     dueDate = t.dueDate, duePhrase = t.duePhrase, quote = t.sourceQuote,
                     lines = t.lines.joinToString(",").ifEmpty { null },
-                    certain = t.certain && known, createdAt = now, dueTime = t.dueTime)
+                    certain = t.certain && ownerKnown, createdAt = now, dueTime = t.dueTime)
             }
             // Re-summarising shouldn't announce tasks the user has already seen (or ticked off).
             val existing = dao.tasksOf(call.id)
@@ -352,7 +359,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 "${tasks.size} tasks (model: ${result.tasks.count { it.owner == "me" }} mine, " +
                 "${result.tasks.count { it.owner == TaskEntity.OTHER }} the other side's, " +
                 "${result.tasks.count { it.owner != "me" && it.owner != TaskEntity.OTHER }} unknown; ${tasks.count { !it.certain }} unsure, " +
-                "${fresh.size} new, ${repeats.size} repeats)${if (!known) " · who is the owner unknown" else ""} · battery " +
+                "${fresh.size} new, ${repeats.size} repeats)${if (!ownerKnown) " · who is the owner unknown" else ""} · battery " +
                 (used?.let { "%.2f%%".format(it) } ?: "not measured"))
             true
         } catch (e: Throwable) {

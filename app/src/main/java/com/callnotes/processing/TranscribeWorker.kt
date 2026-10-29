@@ -112,10 +112,13 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
                 when (runItem { process(call, t) }) {
                     true -> {
                         done++
-                        // A long call the user transcribed by hand: summarise it too (the
-                        // automatic summary skips calls over the length limit).
+                        // Summarised right after, whatever the automatic settings: a file the
+                        // user imported or shared (it was brought in for its tasks), and a long
+                        // call transcribed by hand (the automatic summary skips calls over the
+                        // length limit).
                         val prefs = Prefs(host)
-                        if (requested && prefs.autoSummarize && prefs.tooLongForAuto(call.endedAt - call.startedAt)) {
+                        if (requested && (call.kind == CallKind.IMPORT ||
+                                prefs.autoSummarize && prefs.tooLongForAuto(call.endedAt - call.startedAt))) {
                             ProcessingStatus.requestSummary(call.id)
                         }
                         host.wakeSummary()
@@ -352,7 +355,8 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
             log("call ${call.id}: $audioSec s of audio")
             var lastLogged = -1
             val asrStarted = System.currentTimeMillis()
-            val words = expectedWords(call.contactName)
+            // An imported file's "contact name" is its file name: not a word to expect.
+            val words = expectedWords(call.contactName.takeIf { call.kind != CallKind.IMPORT })
             if (words.isNotEmpty()) log("call ${call.id}: ${words.count { it == ',' } + 1} expected words given to Whisper")
             val transcript = transcriber.transcribe(audio, vocabulary = words) { done, total ->
                 val pct = if (total > 0) done * 100 / total else 0

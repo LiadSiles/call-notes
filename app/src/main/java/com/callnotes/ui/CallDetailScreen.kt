@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.callnotes.CallNotesApp
 import com.callnotes.capture.CallTrace
 import com.callnotes.data.CallEntity
+import com.callnotes.data.Caller
 import com.callnotes.data.CallStatus
 import com.callnotes.data.SegmentEntity
 import com.callnotes.data.SpeakerResult
@@ -624,7 +625,7 @@ private fun SpeakerFixDialog(
     onSetBackground: (Boolean) -> Unit,
 ) {
     val speaker = seg.speaker ?: 0
-    val other = c.contactName ?: c.number ?: "הצד השני"
+    val other = Caller.otherSide(c)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (seg.background) "דיבור ברקע" else "מי אמר את זה?") },
@@ -702,7 +703,7 @@ private fun speakerLabel(c: CallEntity, speaker: Int?): String = when {
     speaker == null -> ""
     c.meSpeaker == null -> "דובר ${speaker + 1}"
     speaker == c.meSpeaker -> "אני"
-    else -> c.contactName ?: c.number ?: "הצד השני"
+    else -> Caller.otherSide(c)
 }
 
 /** One line of the conversation as a chat bubble: mine on the start side, theirs on the end side. */

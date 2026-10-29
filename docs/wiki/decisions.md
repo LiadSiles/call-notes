@@ -3,6 +3,31 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-29 — Share audio to the app, including WhatsApp voice messages (0.21.0)
+Owner: accept ready recordings of any kind, WhatsApp's included; the app should appear in
+WhatsApp's share sheet and start producing the tasks as soon as something is shared.
+- `ShareActivity` (exported, translucent, no screen): SEND / SEND_MULTIPLE of `audio/*` and
+  `application/ogg` (WhatsApp shares voice messages as Ogg/Opus, sometimes with a
+  `; codecs=opus` parameter — the wildcard matches it). Copies each `content://` file while
+  the activity holds the read grant (not `file://`, not our own FileProvider), queues it
+  for transcription as a request, shows a toast and finishes: the user stays in WhatsApp;
+  progress is in the notification rows and new tasks get their notifications. No app
+  lock: it shows nothing. Rejected: opening the app on every share (interrupts the chat).
+- Decoding already covered every format MediaExtractor reads (Ogg/Opus, M4A/AAC, MP3,
+  AMR, WAV, 3GP, FLAC); the importer now checks for an audio track before adding the
+  entry. Names: "PTT-…-WA…" → "הודעה קולית מוואטסאפ", "AUD-…"/"WhatsApp Audio …" →
+  "הקלטה מוואטסאפ". Date: from the file name or its metadata (an older message's "מחר"
+  counts from its own day, at noon), else now.
+- An imported file (shared, or picked with "ייבוא אודיו") is summarised right after its
+  transcription whatever the automatic switches and length limit — it was brought in for
+  its tasks. The in-app import now queues it as a request too.
+- Prompt: an imported recording is "not a phone call"; with one voice it is most likely a
+  voice message to the owner — what the speaker asks the listener is the owner's task,
+  what they will do themselves is "other". Lines without speakers say so instead of
+  "דובר 1/2". Its file name is not given as a contact or to Whisper as an expected word;
+  "the other side" is "הצד השני". A one-voice import keeps the model's owners (not the
+  "unknown" of 0.20.1, which is for calls whose two voices weren't told apart).
+
 ### 2026-10-28 — Release build, lighter list, storage page; tasks of unknown speakers stay visible (0.20.1)
 Owner: tasks don't reach the tasks screen after a summary; the app is slow (scrolling);
 it takes almost 90 GB.

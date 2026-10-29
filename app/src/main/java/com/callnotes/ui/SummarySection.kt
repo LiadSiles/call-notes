@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.callnotes.data.AnalysisStatus
 import com.callnotes.data.CallEntity
+import com.callnotes.data.Caller
 import com.callnotes.data.TaskEntity
 import com.callnotes.inference.AnalysisPrompt
 import com.callnotes.inference.CallAnalysis
@@ -136,7 +137,7 @@ fun SummarySection(
                 Tasks(mine)
             }
             if (theirs.isNotEmpty()) {
-                val other = c.contactName ?: "הצד השני"
+                val other = Caller.otherSide(c)
                 Text("ממתין מ$other", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 14.dp))
                 Text("מה ש$other התחייב לעשות. לא נכנס למשימות שלך ואין לזה תזכורת; אם זה בעצם שלך, אפשר לשנות בעריכה.",
                     style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)

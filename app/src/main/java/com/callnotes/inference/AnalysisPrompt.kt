@@ -47,7 +47,8 @@ object AnalysisPrompt {
     ): String {
         val date = Instant.ofEpochMilli(call.startedAt).atZone(zone).toLocalDate()
         return buildString {
-            appendLine("You read the transcript of a phone call and return a single JSON object. Write every text value in Hebrew.")
+            appendLine("You read the transcript of ${if (call.imported) "a recording" else "a phone call"} and return a single JSON object. " +
+                "Write every text value in Hebrew.")
             appendLine("Cover everything that was said, accurately: leave nothing out, and never guess.")
             appendLine()
             append(context(lines, call, ownerLabel, otherLabel, zone, firstLine, part, parts))
@@ -138,6 +139,10 @@ object AnalysisPrompt {
         appendLine("Call details:")
         appendLine("- Date: $date (${date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.ENGLISH)}), time ${time.format(DateTimeFormatter.ofPattern("HH:mm"))}")
         appendLine("- " + when {
+            call.imported -> "Not a phone call: a recording the owner imported or shared to the app (for example a " +
+                "WhatsApp voice message, or another app's recording). If only one person speaks, it is most likely a " +
+                "voice message to the phone's owner: what the speaker asks the listener to do is the owner's task " +
+                "(\"me\"); what the speaker says they will do themselves is \"other\"."
             !call.directionKnown -> "Internet call: it is not known who called whom."
             call.incoming -> "Incoming call: the other side called the phone's owner."
             else -> "Outgoing call: the phone's owner made the call."
@@ -148,10 +153,12 @@ object AnalysisPrompt {
         }
         if (ownerLabel != null && otherLabel != null) {
             appendLine("- The phone's owner appears as \"$ownerLabel\". The other side appears as \"$otherLabel\".")
+        } else if (lines.all { it.speaker.isEmpty() }) {
+            appendLine("- Lines are not marked by speaker: one voice, or the voices could not be told apart.")
         } else {
             appendLine("- Speakers appear as \"דובר 1\" and \"דובר 2\"; it is not known which one is the phone's owner." +
                 when {
-                    !call.directionKnown -> ""
+                    !call.directionKnown || call.imported -> ""
                     // Whoever picks up usually speaks first ("הלו").
                     call.incoming -> " In an incoming call the owner answers, so the first speaker is usually the owner."
                     else -> " In an outgoing call the other side answers, so the first speaker is usually the other side."

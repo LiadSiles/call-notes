@@ -47,6 +47,23 @@
             </intent-filter>
         </activity>
 
+        <!-- Share target for audio (a WhatsApp voice message, a recorder's file…): no screen of
+             its own; copies the file in and queues it for its tasks (ShareActivity). -->
+        <activity
+            android:name=".ui.ShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density|locale|layoutDirection"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+            </intent-filter>
+        </activity>
+
         <!-- Restarts the app after the encryption setting changes (own process, no UI). -->
         <activity
             android:name=".ui.RestartActivity"

@@ -93,6 +93,8 @@ data class CallContext(
     val ownerName: String? = null,
     /** Names and words that come up in the owner's calls (settings), spelled right. */
     val vocabulary: List<String> = emptyList(),
+    /** A file the owner imported or shared to the app (a WhatsApp voice message…), not a call. */
+    val imported: Boolean = false,
 )
 
 /** What the summariser extracted from a call (JSON from the model, checked in code). */

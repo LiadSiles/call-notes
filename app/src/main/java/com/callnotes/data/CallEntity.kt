@@ -49,6 +49,13 @@ object Caller {
             CallKind.IMPORT -> "קובץ מיובא"
             else -> if (incoming) "שיחה נכנסת" else "שיחה יוצאת"
         }
+
+    /**
+     * Who "the other side" is when speaking about [call]: the contact or number — or just
+     * "הצד השני" for an imported file, whose name is the file's, not a person's.
+     */
+    fun otherSide(call: CallEntity): String =
+        if (call.kind == CallKind.IMPORT) "הצד השני" else call.contactName ?: call.number ?: "הצד השני"
 }
 
 @Entity(tableName = "calls")

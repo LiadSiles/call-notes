@@ -21,15 +21,18 @@ change that made it stale.
 The owner's Hebrew planning document (claude.ai artifact "אפליקציית סיכום שיחות –
 תכנון מקצה לקצה") is the product-level source; this wiki is the engineering one.
 
-## UI map (0.19.1)
+## UI map (0.21.0)
 
 `ui/MainActivity.kt` (three tabs, notification taps, app lock) →
-- **Calls:** `CallsScreen` (list, search via `SearchResults`) → `CallDetailScreen` (player,
-  `SummarySection`, transcript with background-speech toggle, speaker fixes).
+- **Calls:** `CallsScreen` (list, search via `SearchResults`, "ייבוא אודיו" → `Importer`) →
+  `CallDetailScreen` (player, `SummarySection` with "which one is you?", transcript with
+  background-speech toggle, speaker fixes).
 - **Tasks:** `TasksScreen` (+ `TaskEditor`, `VoiceTask` record dialog and voice-note cards,
   `TaskExtras` edit/calendar row).
 - **Settings:** `SettingsScreen` hub → pages built from `SettingsSections`,
   `TranscriptionSwitches`, `ModelSection`, `SpeedSection`, `SpeakerSection`,
-  `PrivacySection`, `SetupChecks`.
+  `PrivacySection` (+ `StorageSection`), `SetupChecks`.
+- **Share target:** `ShareActivity` (no screen) — audio shared from WhatsApp or any app →
+  `Importer` → queued for transcription and tasks.
 
 Design system (`Design.kt`, `Components.kt`, `theme/`) — see [design.md](design.md).

@@ -132,4 +132,18 @@ class AnalysisPromptRepairTest {
         assertTrue(q.contains("לבדוק את מחיר ההובלה ולחזור ליוסי"))
         assertTrue(SummaryPrompts.review().contains("would not understand without the call"))
     }
+
+    @Test fun anImportedVoiceMessageIsNotTreatedAsACall() {
+        val one = listOf(AnalysisPrompt.Line("", "תזכיר לי לשלוח לך את החוזה עד מחר"))
+        val p = AnalysisPrompt.build(
+            one, CallContext(1_792_580_000_000, incoming = false, contactName = null, directionKnown = false, imported = true),
+            ownerLabel = null, otherLabel = null, zone = ZoneId.of("Asia/Jerusalem"),
+        )
+        assertTrue(p.contains("Not a phone call"))
+        assertTrue(p.contains("what the speaker asks the listener to do is the owner's task"))
+        assertTrue(p.contains("Lines are not marked by speaker"))
+        assertFalse(p.contains("Internet call"))
+        assertFalse(p.contains("Speakers appear as"))
+        assertTrue(p.startsWith("You read the transcript of a recording"))
+    }
 }
