@@ -111,6 +111,7 @@ fun AutoTranscribeSettings(prefs: Prefs) {
 fun SummaryModeSettings(prefs: Prefs) {
     var precise by remember { mutableStateOf(prefs.preciseSummary) }
     var thinking by remember { mutableStateOf(prefs.summaryThinking) }
+    var gpu by remember { mutableStateOf(prefs.summaryOnGpu) }
     CardGroup {
         ChipChoice(
             "אופן הסיכום",
@@ -127,6 +128,13 @@ fun SummaryModeSettings(prefs: Prefs) {
                 "מתאים במיוחד עם \"רק בזמן טעינה\".",
             thinking,
         ) { thinking = it; prefs.summaryThinking = it }
+        RowDivider(inset = false)
+        SwitchRow(
+            "סיכום במעבד הגרפי",
+            "מהיר יותר ותופס הרבה פחות זיכרון. אם המעבד הגרפי של הטלפון לא מצליח להריץ את המודל, הסיכום עובר למעבד הרגיל; " +
+                "אם האפליקציה נסגרה בזמן סיכום במעבד הגרפי, האפשרות נכבית מעצמה.",
+            gpu,
+        ) { gpu = it; prefs.summaryOnGpu = it }
     }
     Note("כל השיחה נלקחת בחשבון: שיחה ארוכה מחולקת לחלקים, כל חלק מסוכם, והחלקים מאוחדים לסיכום אחד בלי לאבד פרטים. " +
         "שינוי חל על הסיכומים הבאים; שיחה שכבר סוכמה אפשר לסכם מחדש במסך שלה.")

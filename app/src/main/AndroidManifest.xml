@@ -113,7 +113,7 @@
             android:name=".util.TaskReminders$ActionReceiver"
             android:exported="false" />
 
-        <!-- Optional GPU acceleration for LiteRT-LM (CPU is used today). -->
+        <!-- The GPU for Gemma (LiteRT-LM, OpenCL); without them it runs on the CPU. -->
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
 

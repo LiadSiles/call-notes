@@ -171,6 +171,13 @@ class Prefs(context: Context) {
     /** Gemma "thinks" before each answer: more careful, 2–4× slower (experimental, off). */
     var summaryThinking by bool(KEY_THINKING, false)
 
+    /**
+     * Gemma runs on the GPU (0.24.0; on by default). Turned off by itself if the app's process
+     * dies while Gemma loads or works on the GPU (CallNotesApp.recoverDeadRun), so a GPU
+     * driver that crashes can't take the app down again and again.
+     */
+    var summaryOnGpu by bool(KEY_GPU, true)
+
     // ---- Tasks -------------------------------------------------------------------------
 
     /** A pop-up notification when a task is due (its time, or the morning of its date). */
@@ -267,6 +274,7 @@ class Prefs(context: Context) {
         private const val KEY_SNOOZE = "snooze_minutes"
         private const val KEY_PRECISE = "precise_summary"
         private const val KEY_THINKING = "summary_thinking"
+        private const val KEY_GPU = "summary_on_gpu"
         private const val KEY_BACKGROUND = "filter_background"
         private const val KEY_AUDIO_DAYS = "audio_retention_days"
         private const val KEY_CALL_DAYS = "call_retention_days"
@@ -280,7 +288,7 @@ class Prefs(context: Context) {
         /** What "restore defaults" resets. */
         private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
-            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_THINKING, KEY_BACKGROUND, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
+            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_THINKING, KEY_GPU, KEY_BACKGROUND, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
             KEY_AUTO_SUMMARY, KEY_T_CHARGING, KEY_S_CHARGING,
         )
 

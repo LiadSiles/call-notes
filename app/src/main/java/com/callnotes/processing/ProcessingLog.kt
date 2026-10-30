@@ -70,6 +70,8 @@ object ProcessingLog {
      */
     data class Death(val stage: String, val nativeCrash: Boolean, val memory: Boolean) {
         val summaryCall: Long? get() = SUMMARY_STAGE.find(stage)?.groupValues?.get(1)?.toLongOrNull()
+        /** Gemma was loading or working on the GPU. */
+        val onGpu: Boolean get() = stage.startsWith("[summary]") && "on the GPU" in stage
     }
 
     /** What [SummaryWorker] writes as its stage while it works on a call. */

@@ -3,6 +3,16 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-30 — Gemma on the GPU (0.24.0)
+Owner: "I want all the models to run on the GPU." Gemma first, since it is the one that
+breaks: LiteRT-LM's GPU backend (OpenCL), CPU if the GPU engine won't open. The model card
+puts E4B at ~0.7 GB of the app's memory on the GPU vs ~3.3 GB on the CPU (we saw 8.5 GB).
+If the process dies while Gemma loads or works on the GPU (a driver crash, or the memory
+line), the "סיכום במעבד הגרפי" switch turns itself off so it can't loop; the log says so.
+Where Gemma runs is part of the stage and of the "loaded" log line.
+Whisper on the GPU (whisper.cpp's Vulkan backend on this phone's Mali GPU) is a separate,
+riskier step — not in this version. The speaker models are small and stay on the CPU.
+
 ### 2026-10-30 — Swapping out made it worse; reverted (0.23.3)
 0.23.2 on the phone: the buffers went to swap (4.1, then 8.3 GB advised), yet PSS did not
 drop — Android's PSS counts swapped pages too (SwapPss) — and the model kept growing to

@@ -59,8 +59,13 @@ chip-specific (Tensor G5/G6, Qualcomm sm8750…) variants — unused for now.
   excluded, peak-limited) in the model's temp copy only.
 - Gemma 4's model card names no speech languages (just "35+ supported, 140+
   pre-trained") and reports no per-language ASR numbers; Hebrew quality is unverified.
-- **CPU backend** on purpose: community reports say GPU init crashes on phones with
-  < 12 GB RAM. E4B on CPU ≈ 3.3 GB RSS (S26 Ultra figure).
+- **GPU first, CPU fallback** (0.24.0; CPU only before). Model card figures for E4B on an
+  S26 Ultra: CPU 3283 MB peak RSS, prefill 195 tok/s, decode 17.7; GPU 710 MB of CPU
+  memory, prefill 1293 tok/s, decode 22.1. On the owner's POCO X6 Pro the CPU path reached
+  8.5 GB (unexplained; far above the card) and HyperOS stops apps past 6 GB. Earlier
+  community reports of GPU init crashing on < 12 GB phones are why the GPU switches itself
+  off after a process death on it. Manifest: `uses-native-library` libOpenCL.so and
+  libvndksupport.so (required="false").
 - APK is limited to `arm64-v8a` to keep the native libraries small.
 
 Facts about Gemma 4 below come from Google's model cards and the LiteRT-LM docs.

@@ -22,7 +22,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
- * Summary + tasks with Gemma 4 on the device (LiteRT-LM, CPU, text only). Answers in JSON
+ * Summary + tasks with Gemma 4 on the device (LiteRT-LM, text only) — on the GPU, or on the
+ * CPU if the phone's GPU can't run it ([backend] says which). Answers in JSON
  * (prompts and checks in [CallSummarizer]). Greedy decoding: this is extraction, not
  * creative writing. [thinking]: the model reasons before each answer (more careful, much
  * slower; the reasoning is not part of the answer) — it gets a larger context and longer
@@ -37,6 +38,8 @@ class GemmaAnalyzer(
     private val spec: ModelSpec,
     private val modelFile: File,
     private val thinking: Boolean = false,
+    /** Try the GPU first (else the CPU only). */
+    private val gpu: Boolean = true,
 ) : Analyzer {
 
     override val modelId: String get() = spec.id
@@ -48,21 +51,48 @@ class GemmaAnalyzer(
     var contextTokens = 0
         private set
 
+    /** "GPU" or "CPU": where the model runs. */
+    var backend = ""
+        private set
+
+    /** Why the GPU wasn't used, if it wasn't (for the log). */
+    var gpuFailure: String? = null
+        private set
+
+    /**
+     * GPU first (0.24.0): Google's figures for E4B on a phone are ~0.7 GB of the app's memory
+     * on the GPU against ~3.3 GB on the CPU, and prefill is several times faster. On the
+     * owner's phone the CPU path went past HyperOS's 6 GB line (see decisions.md). A phone
+     * whose GPU can't run the model gets the CPU, as before.
+     */
     override suspend fun load() = withContext(InferenceThreads.dispatcher) {
         if (engine != null) return@withContext
-        engine = if (thinking) {
-            // Reasoning needs room; fall back to the usual size if the model file refuses it.
-            runCatching { open(THINKING_CONTEXT) }.getOrElse { open(CONTEXT) }
-        } else {
-            open(CONTEXT)
+        val sizes = if (thinking) listOf(THINKING_CONTEXT, CONTEXT) else listOf(CONTEXT)
+        engine = if (!gpu) openFirst(Backend.CPU(), "CPU", sizes)
+        else runCatching { openFirst(Backend.GPU(), "GPU", sizes) }.getOrElse { e ->
+            gpuFailure = "${e.javaClass.simpleName}: ${e.message}".take(200)
+            openFirst(Backend.CPU(), "CPU", sizes)
         }
     }
 
-    private fun open(tokens: Int): Engine {
+    /** The engine on [where] with the first context size that opens. */
+    private fun openFirst(where: Backend, name: String, sizes: List<Int>): Engine {
+        var last: Throwable? = null
+        for (tokens in sizes) {
+            try {
+                return open(where, tokens).also { backend = name }
+            } catch (t: Throwable) {
+                last = t
+            }
+        }
+        throw last!!
+    }
+
+    private fun open(where: Backend, tokens: Int): Engine {
         val e = Engine(
             EngineConfig(
                 modelPath = modelFile.absolutePath,
-                backend = Backend.CPU(),
+                backend = where,
                 maxNumTokens = tokens,
                 cacheDir = context.cacheDir.absolutePath,
             )

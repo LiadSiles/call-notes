@@ -259,13 +259,19 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
         step("loading analysis model ${spec.id} · ${ProcessingLog.freeRam(host)} · ${workingCopy(file)}")
         val started = System.currentTimeMillis()
         thinking = Prefs(host).summaryThinking
-        val g = GemmaAnalyzer(host, spec, file, thinking)
+        val gpu = Prefs(host).summaryOnGpu
+        // Stage while loading: if the GPU driver takes the process down here, the next start
+        // reads it and turns the GPU off (CallNotesApp.recoverDeadRun).
+        if (gpu) step("loading analysis model on the GPU")
+        val g = GemmaAnalyzer(host, spec, file, thinking, gpu)
         modelFile = file.name
         return try {
             g.load()
             modelLoaded = true
-            log("analysis model loaded in ${secs(started)} · ${ProcessingLog.freeRam(host)} · " +
-                "thinking ${if (thinking) "on" else "off"}, context ${g.contextTokens} tokens")
+            // A stage, not just a line: it now says where Gemma runs (see the GPU note above).
+            step("analysis model loaded in ${secs(started)} on the ${g.backend} · ${ProcessingLog.freeRam(host)} · " +
+                "thinking ${if (thinking) "on" else "off"}, context ${g.contextTokens} tokens" +
+                (g.gpuFailure?.let { " · GPU not usable: $it" } ?: ""))
             g
         } catch (e: Throwable) {
             runCatching { g.close() }
@@ -314,7 +320,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 AnalysisPrompt.Line(who, s.text, number = s.idx + 1)
             }
             val precise = Prefs(host).preciseSummary
-            step("call ${call.id}: summarising ${if (precise) "precisely (3 questions per part)" else "quickly"} · " +
+            step("call ${call.id}: summarising${if ((analyzer as? GemmaAnalyzer)?.backend == "GPU") " on the GPU" else ""} " +
+                "${if (precise) "precisely (3 questions per part)" else "quickly"} · " +
                 "${lines.size} lines, ${lines.sumOf { it.text.length }} chars")
             var lastShown = 0L
             var doing = "קורא את השיחה…"

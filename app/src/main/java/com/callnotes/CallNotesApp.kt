@@ -137,6 +137,12 @@ class CallNotesApp : Application() {
             death.memory -> "הטלפון סגר את האפליקציה כי השתמשה ביותר מדי זיכרון"
             else -> "האפליקציה נסגרה"
         }
+        // The GPU driver (or the model on it) took the process down: Gemma uses the CPU from
+        // now on, until the user turns the GPU on again in the summary settings.
+        if (death.onGpu && Prefs(this).summaryOnGpu) {
+            Prefs(this).summaryOnGpu = false
+            ProcessingLog.write(this, "the app stopped while Gemma was on the GPU — summaries use the CPU from now on")
+        }
         // A call being transcribed when the process died is marked failed (one bad file must
         // not take the app down on every start); the user can retry it by hand.
         appScope.launch { database.calls().failInterrupted("$what באמצע התמלול. אפשר לנסות שוב ממסך השיחה.") }
