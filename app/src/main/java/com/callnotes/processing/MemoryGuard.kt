@@ -18,62 +18,33 @@ import kotlinx.coroutines.launch
  * HyperOS force-stops an app whose memory (PSS) passes 6 GB — the owner's log (0.22.1):
  * "[FORCE STOP] stop com.callnotes due to used too many pss resource, pss used: 8524200kb,
  * pss threshold: 6291456kb". A force stop also takes the app off the enabled accessibility
- * services, so recording stops until the user turns it on again.
+ * services, so recording stops until the user turns it on again. The guard stops the
+ * summary just before that line instead.
  *
- * Where it is (0.23.0 log): almost all in the model's own buffers — 5.5–6.1 GB within seconds
- * of the first answer, with the model file and LiteRT-LM's working copy barely resident. Under
- * memory pressure the phone compresses rarely used pages into its swap, which PSS doesn't
- * count — likely why summaries used to finish when the phone had 2–3 GB free and fail with
- * 6 GB free. Near the line the guard does that itself: it hands the model file's pages back
- * and moves the model's large buffers to swap (MADV_PAGEOUT); pages in use come back when
- * touched. Only if memory still passes the line is the summary stopped.
+ * What it can't do (tried in 0.23.0–0.23.2, see decisions.md): free memory under it. The
+ * memory is the model's own buffers, not file pages; moving them to swap doesn't help
+ * (Android's PSS counts swapped pages too) and filled the phone's swap until Android closed
+ * the app for low memory.
  *
  * Sampling is cheap: the resident size (/proc/self/statm) every half second; the exact
  * PSS only once the resident size is near the line.
  */
-class MemoryGuard(private val modelFile: String?) {
+class MemoryGuard {
 
     /** Highest PSS seen (bytes; resident size until it got near the line). */
     @Volatile var peak = 0L
         private set
 
-    /** Times pages were handed back, and the most memory that freed at once. */
-    @Volatile var releases = 0
-        private set
-    @Volatile var freedMost = 0L
-        private set
-
-    private var lastRelease = 0L
-
     /**
-     * Runs [block]; if memory passes [LIMIT] even after releasing pages, it calls [onOver]
-     * (stop the native work), cancels [block] and throws [TooMuchMemory]. [onRelease] reports
-     * each release: PSS before, after, and the bytes of model file and of buffers the kernel
-     * was told about (negative: an errno).
+     * Runs [block]; if memory passes [LIMIT] it calls [onOver] (stop the native work),
+     * cancels [block] and throws [TooMuchMemory].
      */
-    suspend fun <T> watch(
-        onRelease: (before: Long, after: Long, file: Long, buffers: Long) -> Unit,
-        onOver: (Long) -> Unit,
-        block: suspend () -> T,
-    ): T = coroutineScope {
+    suspend fun <T> watch(onOver: (Long) -> Unit, block: suspend () -> T): T = coroutineScope {
         val over = AtomicLong()
         val work = async { block() }
         val watcher = launch {
             while (true) {
-                var used = resident()
-                if (used > NEAR) {
-                    used = pss()
-                    if (used > RELEASE_AT && System.currentTimeMillis() - lastRelease > 2_000) {
-                        val file = modelFile?.let { NativeMemory.release(it) } ?: 0L
-                        val buffers = NativeMemory.releaseAnonymous(BUFFER_MIN)
-                        lastRelease = System.currentTimeMillis()
-                        val after = pss()
-                        releases++
-                        if (used - after > freedMost) freedMost = used - after
-                        onRelease(used, after, file, buffers)
-                        used = after
-                    }
-                }
+                val used = resident().let { if (it > NEAR) pss() else it }
                 if (used > peak) peak = used
                 if (used > LIMIT) {
                     over.set(used)
@@ -94,33 +65,18 @@ class MemoryGuard(private val modelFile: String?) {
         }
     }
 
-    /** For the log: "peak memory 5.1 GB · released pages 3× (up to 2.4 GB)". */
-    fun summary(): String = "peak memory ${gb(peak)} GB" +
-        if (releases > 0) " · released pages $releases× (up to ${gb(freedMost)} GB)" else ""
+    /** For the log. */
+    fun summary(): String = "peak memory ${gb(peak)} GB"
 
     class TooMuchMemory(val bytes: Long) : Exception("memory ${gb(bytes)} GB, over the ${gb(LIMIT)} GB line")
 
     companion object {
         /** The phone's line is 6 GiB of PSS; stop a little before it (sampled every 0.5 s). */
         const val LIMIT = 5_900L * 1024 * 1024
-        /** Past this PSS, release pages (at most every 2 s; memory can jump 2 GB in a second). */
-        private const val RELEASE_AT = 4_800L * 1024 * 1024
         /** Above this resident size, measure the PSS itself. */
         private const val NEAR = 4_600L * 1024 * 1024
 
-        /** Buffers at least this big are the model's (the app's own allocations are far smaller). */
-        private const val BUFFER_MIN = 32L * 1024 * 1024
-
         private val pageSize = Os.sysconf(OsConstants._SC_PAGESIZE)
-
-        /** The phone's swap, for the log: "swap 3.1 of 6.0 GB free" (or "no swap"). */
-        fun swap(): String = runCatching {
-            val m = File("/proc/meminfo").readLines().associate { l ->
-                l.substringBefore(':') to (l.substringAfter(':').trim().substringBefore(' ').toLongOrNull() ?: 0L) * 1024
-            }
-            val total = m["SwapTotal"] ?: 0L
-            if (total == 0L) "no swap" else "swap ${gb(m["SwapFree"] ?: 0L)} of ${gb(total)} GB free"
-        }.getOrDefault("swap not measured")
 
         /** Resident memory of this process (bytes). */
         fun resident(): Long = runCatching {

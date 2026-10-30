@@ -11,7 +11,6 @@
 -keep class com.google.ai.edge.** { *; }
 -keep class net.zetetic.database.** { *; }
 -keep class com.callnotes.inference.whisper.WhisperNative { *; }
--keep class com.callnotes.processing.NativeMemory { *; }
 -keep interface com.callnotes.inference.whisper.WhisperNative$ProgressListener { *; }
 -keepclasseswithmembernames,includedescriptorclasses class * { native <methods>; }
 

@@ -3,6 +3,14 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-30 — Swapping out made it worse; reverted (0.23.3)
+0.23.2 on the phone: the buffers went to swap (4.1, then 8.3 GB advised), yet PSS did not
+drop — Android's PSS counts swapped pages too (SwapPss) — and the model kept growing to
+~10 GB, filling 11.5 of 12 GB of swap until Android closed the app for low memory. With
+thinking on (context 16384) the model wanted ~10 GB; with 8192, HyperOS saw 8.5 GB. Both
+page releases (0.23.0 file pages, 0.23.2 buffers) and the native helper are removed; the
+guard only stops the summary before the line, and logs where the memory is.
+
 ### 2026-10-30 — The model's buffers, not the files: move them to swap near the line (0.23.2)
 0.23.1 log, every summary (2–13 lines): within ~7 s of the first answer, 5.5–6.1 GB in
 the model's own (anonymous) memory; model file and working copy ~0 GB resident; PSS

@@ -52,7 +52,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
     /** The loaded model reasons before answering (setting read when it is loaded). */
     private var thinking = false
     @Volatile private var currentRequested = false
-    /** File name of the loaded model (its pages may be handed back, see [MemoryGuard]). */
+    /** File name of the loaded model (the memory breakdown in the log names it). */
     private var modelFile: String? = null
     /** The last summary was stopped for memory: unload Gemma before the next one. */
     private var unloadAfter = false
@@ -160,9 +160,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 try {
                     val zone = ZoneId.systemDefault()
                     val recordedAt = java.time.LocalDateTime.ofInstant(Instant.ofEpochMilli(memo.createdAt), zone)
-                    val guard = MemoryGuard(modelFile)
+                    val guard = MemoryGuard()
                     val answer = guard.watch(
-                        onRelease = { _, _, _, _ -> },
                         onOver = { used ->
                             log("voice note ${memo.id}: memory ${MemoryGuard.gb(used)} GB (${MemoryGuard.breakdown(modelFile)}) — stopping before the phone closes the app")
                             a.abort()
@@ -294,7 +293,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
 
     private suspend fun analyse(call: CallEntity, analyzer: Analyzer): Boolean {
         val started = System.currentTimeMillis()
-        val guard = MemoryGuard(modelFile)
+        val guard = MemoryGuard()
         val battery = Energy.read(host)
         val title = "מסכם: ${label(call)}"
         publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.ANALYZING))
@@ -345,11 +344,6 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 override fun log(text: String) = this@SummaryWorker.log("call ${call.id}: $text")
             })
             val result = guard.watch(
-                onRelease = { before, after, file, buffers ->
-                    fun told(bytes: Long) = if (bytes >= 0) "${MemoryGuard.gb(bytes)} GB" else "error ${-bytes}"
-                    if (guard.releases <= 3) log("call ${call.id}: memory ${MemoryGuard.gb(before)} → ${MemoryGuard.gb(after)} GB after releasing " +
-                        "pages (model file ${told(file)}, buffers ${told(buffers)}) · now ${MemoryGuard.breakdown(modelFile)} · ${MemoryGuard.swap()}")
-                },
                 onOver = { used ->
                     log("call ${call.id}: memory ${MemoryGuard.gb(used)} GB while \"$doing\" (${MemoryGuard.breakdown(modelFile)}) — stopping before the phone closes the app")
                     analyzer.abort()
