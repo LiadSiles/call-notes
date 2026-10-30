@@ -3,6 +3,38 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-30 — Full code review against 0.20.0 (0.24.1)
+Owner asked for a high-level review: clean, structured, per the plan, nothing broken,
+compared with the last version that worked (0.20.0 — summaries finished on his phone until
+27.10). Every change in bc20d5d..0.24.0 (38 files) was read; the whole tree was scanned
+for code nothing uses and for leftovers of reverted experiments. Findings and what was done:
+- **Cleanups counted as failures.** A summary killed by clearing recent apps
+  ("SwipeUpClean") or by the Security app counted toward "failed after two deaths", and a
+  GPU summary killed that way would have turned the GPU switch off. Both happen often on
+  the owner's phone. Now a cleanup just lets the summary run again; the GPU switch turns
+  off only after a native crash or the memory line (`ProcessingLog.isCleanup`, tested).
+  Same for transcription: a cleanup puts the call back to waiting (`requeueInterrupted`)
+  instead of marking it failed.
+- **Gemma's thread pool.** The only change to the Gemma path between 0.20.0 and the first
+  failing summary was 0.20.1 moving it from `Dispatchers.IO` to `InferenceThreads` (nice +5,
+  fixed pool). No mechanism links that to the 8.5 GB seen, but it is the one difference in
+  code, so Gemma is back on `Dispatchers.IO` as in 0.20.0. Whisper and the speakers keep
+  `InferenceThreads` (they worked throughout).
+- **Unused code:** `VoiceClusters.Window.gapBeforeMs` — only read by its own test since the
+  windows stopped being clustered in 0.18. Removed. Nothing else unused found (scan of
+  ~2950 declarations); no leftovers of the reverted recorder process, page releases or swap.
+- **Log noise:** loading Gemma wrote two stage lines; now one ("… on the GPU" when it is).
+- **Everything else checked and kept:** request queue and cancel paths, stop-all, the
+  summary death counter, Whisper stall retry (bounded: greedy, no temperature retries),
+  share/import path (imports are always summarised; file names not treated as contacts or
+  expected words), storage page (deletes only unused models, other speed copies, stale
+  cache files and leftovers), the call list (one lazy item per call), the processing log.
+  Behaviour differences from 0.20.0 are all intended features or fixes listed above.
+- **Open:** why the CPU path needs ~8.5 GB on this phone (model card: ~3.3 GB). The GPU
+  path (0.24.0) is the way forward; if it fails too, next suspects are LiteRT-LM's cache
+  files and the context size.
+- New page `architecture.md` describes the system end to end.
+
 ### 2026-10-30 — Gemma on the GPU (0.24.0)
 Owner: "I want all the models to run on the GPU." Gemma first, since it is the one that
 breaks: LiteRT-LM's GPU backend (OpenCL), CPU if the GPU engine won't open. The model card

@@ -7,6 +7,7 @@ change that made it stale.
 | Page | Read it when |
 |---|---|
 | [product.md](product.md) | You need the goal, scope and user-facing behaviour |
+| [architecture.md](architecture.md) | You need the big picture: components, the path of a call, threads, failure handling |
 | [android-call-audio.md](android-call-audio.md) | Touching anything about how a call gets recorded |
 | [capture.md](capture.md) | Working in `capture/` — paths A and B, speaker logic, diagnostics |
 | [storage.md](storage.md) | Anything about files, the database, retention or what leaves the device |
@@ -21,7 +22,7 @@ change that made it stale.
 The owner's Hebrew planning document (claude.ai artifact "אפליקציית סיכום שיחות –
 תכנון מקצה לקצה") is the product-level source; this wiki is the engineering one.
 
-## UI map (0.21.0)
+## UI map (0.24.1)
 
 `ui/MainActivity.kt` (three tabs, notification taps, app lock) →
 - **Calls:** `CallsScreen` (list, search via `SearchResults`, "ייבוא אודיו" → `Importer`) →

@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.ThinkingConfig
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -65,7 +66,11 @@ class GemmaAnalyzer(
      * owner's phone the CPU path went past HyperOS's 6 GB line (see decisions.md). A phone
      * whose GPU can't run the model gets the CPU, as before.
      */
-    override suspend fun load() = withContext(InferenceThreads.dispatcher) {
+    // On Dispatchers.IO as in 0.20.0, the last version whose summaries finished on the owner's
+    // phone (0.20.1 moved it to InferenceThreads — the one change to the Gemma path before
+    // the memory trouble; kept out of it until that is explained). Not a blocking call
+    // after initialize(): answers stream back through callbacks.
+    override suspend fun load() = withContext(Dispatchers.IO) {
         if (engine != null) return@withContext
         val sizes = if (thinking) listOf(THINKING_CONTEXT, CONTEXT) else listOf(CONTEXT)
         engine = if (!gpu) openFirst(Backend.CPU(), "CPU", sizes)
@@ -107,7 +112,7 @@ class GemmaAnalyzer(
         return e
     }
 
-    override suspend fun <T> conversation(block: suspend (Analyzer.Chat) -> T): T = withContext(InferenceThreads.dispatcher) {
+    override suspend fun <T> conversation(block: suspend (Analyzer.Chat) -> T): T = withContext(Dispatchers.IO) {
         load()
         val config = ConversationConfig(
             samplerConfig = SamplerConfig(topK = 1, topP = 1.0, temperature = 0.0),

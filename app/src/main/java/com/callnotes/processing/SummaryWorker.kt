@@ -256,13 +256,12 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
     ): Analyzer? {
         publish(ProcessingStatus.State(running = true, callId = callId, phase = Phase.LOADING_ANALYZER, memoId = memoId))
         host.showWork(this, title, "טוען את מודל הסיכום…")
-        step("loading analysis model ${spec.id} · ${ProcessingLog.freeRam(host)} · ${workingCopy(file)}")
         val started = System.currentTimeMillis()
         thinking = Prefs(host).summaryThinking
         val gpu = Prefs(host).summaryOnGpu
-        // Stage while loading: if the GPU driver takes the process down here, the next start
-        // reads it and turns the GPU off (CallNotesApp.recoverDeadRun).
-        if (gpu) step("loading analysis model on the GPU")
+        // The stage says "on the GPU": if the GPU driver takes the process down while loading,
+        // the next start reads it and turns the GPU off (CallNotesApp.recoverDeadRun).
+        step("loading analysis model ${spec.id}${if (gpu) " on the GPU" else ""} · ${ProcessingLog.freeRam(host)} · ${workingCopy(file)}")
         val g = GemmaAnalyzer(host, spec, file, thinking, gpu)
         modelFile = file.name
         return try {
@@ -283,10 +282,10 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
     }
 
     /**
-     * LiteRT-LM keeps the weights prepared for this phone's CPU in the cache folder, named
-     * after the model file with its time and size. Without it (first load, the system cleared
-     * the cache, or the name no longer matches) it is made again during the first answer —
-     * slower and with more memory — so the log says which case this load is.
+     * LiteRT-LM keeps what it prepares from the model for this phone (the weights laid out
+     * for the CPU, compiled GPU programs) in the cache folder, in files named after the model
+     * file. Without them it prepares them again; the log lists them, and the model file's
+     * time (part of their names — LiteRT-LM issue 3772), for each load.
      */
     private fun workingCopy(model: java.io.File): String {
         val copies = host.cacheDir.listFiles { f -> f.name.startsWith(model.name) }.orEmpty()

@@ -2,7 +2,7 @@
 
 _Last verified: 2026-10-25 (code at 0.18.3)._
 
-## Where things are (0.20.0)
+## Where things are (0.24.1)
 
 | Piece | Where |
 |---|---|
@@ -20,7 +20,9 @@ _Last verified: 2026-10-25 (code at 0.18.3)._
 | Dates checked against the words said | `inference/DueWords.kt` |
 | Repeats of a task across calls | `inference/TaskMatcher.kt` |
 | Voice note → task prompt | `inference/TaskPrompt.kt` (see [tasks.md](tasks.md)) |
-| Gemma via LiteRT-LM (text; multi-question conversations) | `inference/GemmaAnalyzer.kt` |
+| Gemma via LiteRT-LM (text; multi-question conversations; GPU first, CPU fallback) | `inference/GemmaAnalyzer.kt` |
+| Memory line during summaries (HyperOS stops apps past 6 GB) | `processing/MemoryGuard.kt` |
+| Whisper run with no progress for 4 min → read again plainly | `inference/whisper/WhisperTranscriber.kt` (`STALL_MS`) |
 | Two parallel workers in a foreground service; the request queue (`ProcessingStatus.queue`: first asked, first served, nothing in progress interrupted); one notification row per item in progress or waiting | `processing/` (+ `RequestQueueTest`), `util/Notifications.kt` |
 
 All of the above except the JNI/LiteRT-LM/ONNX wrappers is pure Kotlin with unit tests in

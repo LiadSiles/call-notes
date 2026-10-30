@@ -328,6 +328,18 @@ abstract class CallDao {
     @Query("UPDATE calls SET status = 'transcribe_failed', error = :error WHERE status = 'transcribing'")
     abstract suspend fun failInterrupted(error: String)
 
+    @Query("SELECT id FROM calls WHERE status = 'transcribing'")
+    abstract suspend fun transcribingIds(): List<Long>
+
+    /**
+     * The process was ended by a cleanup (recent apps cleared), not by the call's audio:
+     * calls that were being transcribed go back to where they were, to run again.
+     */
+    @Transaction
+    open suspend fun requeueInterrupted() {
+        transcribingIds().forEach { revertTranscription(it, CallStatus.RECORDED) }
+    }
+
     /** Changes the status and clears the error, keeping the model of an existing transcript. */
     @Query("UPDATE calls SET status = :status, error = NULL WHERE id = :id")
     abstract suspend fun setStatusOnly(id: Long, status: String)

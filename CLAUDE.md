@@ -3,7 +3,7 @@
 Android app that records phone calls, transcribes and summarizes them **on the device**
 with Gemma 4, and turns what was said into tasks. Hebrew-first UI. Owner: Liad.
 
-Read `docs/wiki/README.md` before changing anything non-trivial. The wiki holds the
+Read `docs/wiki/README.md` (and `architecture.md` for the big picture) before changing anything non-trivial. The wiki holds the
 facts that are expensive to rediscover (Android call-audio rules, device findings,
 decisions already taken and why).
 
@@ -49,10 +49,12 @@ app/src/main/java/com/callnotes/
               whisper/ (JNI, presets, quantization, expected words, second look at missed speech);
               speakers/ (loudness + voice per word, background speech);
               summaries (CallSummarizer, prompts, date checks), voice-note task prompt, Gemma
-  processing/ foreground service with two parallel workers (transcribe, summary), request queue, log
+  processing/ foreground service with two parallel workers (transcribe, summary), request queue, log,
+              memory guard, recovery after a dead process
   security/   optional extra encryption (Keystore-wrapped key, SQLCipher, sealed files)
-  ui/         Compose UI (design system in Design.kt + theme/), settings pages, tasks, app lock
-  util/       prefs, notifications, task reminders/actions, voice notes, retention, energy
+  ui/         Compose UI (design system in Design.kt + theme/), settings pages, tasks, app lock,
+              share target (ShareActivity) and audio import (Importer)
+  util/       prefs, notifications, task reminders/actions, voice notes, retention, energy, storage page
 app/src/main/java/com/k2fsa/sherpa/onnx/  sherpa-onnx Kotlin API (verbatim copy)
 app/src/main/cpp/   JNI bridge to whisper.cpp (third_party/whisper.cpp submodule; local fixes in patches/)
 scripts/fetch-sherpa-onnx.sh  prebuilt sherpa-onnx runtime for voice fingerprints (run before building)

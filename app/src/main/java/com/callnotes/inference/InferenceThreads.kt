@@ -7,7 +7,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Threads for background processing (Whisper, voice fingerprints, Gemma) at a lower
+ * Threads for background processing (Whisper, voice fingerprints, the workers' own steps;
+ * not Gemma — see GemmaAnalyzer.load) at a lower
  * priority than the screen. The native engines start their worker threads from these, and
  * those inherit the priority, so scrolling stays smooth while a call is processed; with
  * nothing on screen to compete with, processing runs as fast as before. Nice +5, not

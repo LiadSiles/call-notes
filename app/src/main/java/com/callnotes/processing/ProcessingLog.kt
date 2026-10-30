@@ -66,13 +66,21 @@ object ProcessingLog {
 
     /**
      * A run the process died in: the stage it was at, whether Android reports a native crash
-     * or a stop for using too much memory, and the call being summarised, if it was a summary.
+     * or a stop for using too much memory, whether it was a cleanup the user (or a cleaner
+     * app) started — not the work's fault — and the call being summarised, if any.
      */
-    data class Death(val stage: String, val nativeCrash: Boolean, val memory: Boolean) {
+    data class Death(val stage: String, val nativeCrash: Boolean, val memory: Boolean, val cleanup: Boolean = false) {
         val summaryCall: Long? get() = SUMMARY_STAGE.find(stage)?.groupValues?.get(1)?.toLongOrNull()
         /** Gemma was loading or working on the GPU. */
         val onGpu: Boolean get() = stage.startsWith("[summary]") && "on the GPU" in stage
     }
+
+    /**
+     * Android's description of an exit names a cleanup: HyperOS's "SwipeUpClean" (recent apps
+     * cleared) or "… from process:com.miui.securitycenter" (the Security app's cleanup).
+     */
+    fun isCleanup(description: String?): Boolean =
+        description != null && ("SwipeUpClean" in description || "securitycenter" in description)
 
     /** What [SummaryWorker] writes as its stage while it works on a call. */
     private val SUMMARY_STAGE = Regex("""^\[summary] call (\d+):""")
@@ -92,7 +100,7 @@ object ProcessingLog {
         // HyperOS: "[FORCE STOP] stop com.callnotes due to used too many pss resource …".
         val memory = exit != null && (exit.reason == REASON_LOW_MEMORY ||
             exit.description?.contains("pss", ignoreCase = true) == true)
-        return Death(stage, exit?.reason == REASON_CRASH_NATIVE, memory)
+        return Death(stage, exit?.reason == REASON_CRASH_NATIVE, memory, isCleanup(exit?.description))
     }
 
     /**

@@ -135,26 +135,37 @@ class CallNotesApp : Application() {
         val what = when {
             death.nativeCrash -> "העיבוד קרס"
             death.memory -> "הטלפון סגר את האפליקציה כי השתמשה ביותר מדי זיכרון"
+            death.cleanup -> "האפליקציה נסגרה בניקוי אפליקציות"
             else -> "האפליקציה נסגרה"
         }
-        // The GPU driver (or the model on it) took the process down: Gemma uses the CPU from
-        // now on, until the user turns the GPU on again in the summary settings.
-        if (death.onGpu && Prefs(this).summaryOnGpu) {
+        // The GPU driver (or the model on it) took the process down — a native crash or the
+        // memory line, not a cleanup: Gemma uses the CPU from now on, until the user turns the
+        // GPU on again in the summary settings.
+        if (death.onGpu && (death.nativeCrash || death.memory) && Prefs(this).summaryOnGpu) {
             Prefs(this).summaryOnGpu = false
             ProcessingLog.write(this, "the app stopped while Gemma was on the GPU — summaries use the CPU from now on")
         }
         // A call being transcribed when the process died is marked failed (one bad file must
-        // not take the app down on every start); the user can retry it by hand.
-        appScope.launch { database.calls().failInterrupted("$what באמצע התמלול. אפשר לנסות שוב ממסך השיחה.") }
+        // not take the app down on every start); the user can retry it by hand. After a
+        // cleanup it simply goes back to the queue. Before any worker starts (a starting
+        // transcription worker fails whatever is still "transcribing").
+        runBlocking(Dispatchers.IO) {
+            if (death.cleanup) database.calls().requeueInterrupted()
+            else database.calls().failInterrupted("$what באמצע התמלול. אפשר לנסות שוב ממסך השיחה.")
+        }
         val call = death.summaryCall
         if (call == null) {
-            TranscriptionService.note(this, "$what באמצע התמלול.")
+            TranscriptionService.note(this, if (death.cleanup) "$what באמצע התמלול. ההקלטה חזרה לממתינות לתמלול." else "$what באמצע התמלול.")
+            return
+        }
+        // Recent apps cleared, or a cleaner app: not the summary's fault — it just runs again.
+        if (death.cleanup) {
+            TranscriptionService.note(this, "$what באמצע סיכום. הסיכום ימשיך.")
             return
         }
         // A summary is otherwise picked up again on every start: when it is what kills the
         // app, that is a loop, and each forced stop also turns accessibility off (0.22.2).
-        // One more try (the first death may have been the user clearing recent apps), then
-        // it is marked failed and only runs again when the user asks.
+        // One more try, then it is marked failed and only runs again when the user asks.
         val prefs = Prefs(this)
         val deaths = prefs.summaryDeaths(call) + 1
         if (deaths < 2) {
