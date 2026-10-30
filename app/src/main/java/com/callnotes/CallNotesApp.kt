@@ -138,10 +138,11 @@ class CallNotesApp : Application() {
             death.cleanup -> "האפליקציה נסגרה בניקוי אפליקציות"
             else -> "האפליקציה נסגרה"
         }
-        // The GPU driver (or the model on it) took the process down — a native crash or the
-        // memory line, not a cleanup: Gemma uses the CPU from now on, until the user turns the
-        // GPU on again in the summary settings.
-        if (death.onGpu && (death.nativeCrash || death.memory) && Prefs(this).summaryOnGpu) {
+        // The process ended while Gemma was on the GPU, and not by a cleanup: Gemma uses the
+        // CPU from now on, until the user turns the GPU on again in the summary settings. Any
+        // reason counts — a native crash, the memory line, or the whole phone going down
+        // (0.24.1 on the owner's phone: after a phone restart Android reports neither).
+        if (death.onGpu && !death.cleanup && Prefs(this).summaryOnGpu) {
             Prefs(this).summaryOnGpu = false
             ProcessingLog.write(this, "the app stopped while Gemma was on the GPU — summaries use the CPU from now on")
         }

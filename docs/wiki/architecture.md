@@ -103,7 +103,7 @@ transcribe_failed / held); `calls.analysisStatus` = null (not yet) → done / fa
 | Process dies mid-summary | Next start: a cleanup (recent apps cleared, Security app) → the summary just runs again; otherwise one more try, then `failed` (no automatic retry loop). |
 | Gemma passes HyperOS's 6 GB memory line | `MemoryGuard` stops the summary just before it (a force stop would also turn accessibility off); the call shows why. |
 | GPU can't open Gemma | CPU, logged ("GPU not usable: …"). |
-| Process dies while Gemma is on the GPU (native crash or memory) | The "סיכום במעבד הגרפי" switch turns itself off; summaries use the CPU. |
+| Process (or the phone) dies while Gemma is on the GPU, other than a cleanup | The "סיכום במעבד הגרפי" switch turns itself off; summaries use the CPU. |
 | Whisper makes no progress for 4 minutes | That run stops; the call is read again greedy with no temperature retries. |
 | "עצירת הכל" | Cancels what runs (not retried automatically), empties the queue; switches untouched. |
 | Accessibility on but service not running | Settings show "on but not running" with the fix; the process exit reason is in the log. |

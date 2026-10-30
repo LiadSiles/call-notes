@@ -3,6 +3,14 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-30 — Any death on the GPU turns the GPU off (0.24.2)
+Owner, on 0.24.1: the app "crashes during a summary and takes the whole phone down". With
+Gemma on the GPU that points at the GPU driver or at GPU memory the phone runs out of
+(GPU buffers aren't in the app's PSS, so `MemoryGuard` can't see them). 0.24.1 turned the
+GPU switch off only for a native crash or the memory line; after a phone restart Android
+reports neither, so the next summary would have gone to the GPU again. Now any death while
+Gemma is on the GPU, other than a cleanup, turns it off.
+
 ### 2026-10-30 — Full code review against 0.20.0 (0.24.1)
 Owner asked for a high-level review: clean, structured, per the plan, nothing broken,
 compared with the last version that worked (0.20.0 — summaries finished on his phone until
