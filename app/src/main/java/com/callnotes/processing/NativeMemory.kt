@@ -12,5 +12,13 @@ object NativeMemory {
      */
     fun release(fileName: String): Long = if (loaded) pageOut(fileName) else -1
 
+    /**
+     * Moves this process's large anonymous buffers (at least [minBytes] each: the model's own
+     * memory, not the Java heap) to the phone's compressed swap (MADV_PAGEOUT). Pages in use
+     * come back when touched. Returns the bytes of mappings advised, or a negative errno.
+     */
+    fun releaseAnonymous(minBytes: Long): Long = if (loaded) pageOutAnonymous(minBytes) else -1
+
     private external fun pageOut(fileName: String): Long
+    private external fun pageOutAnonymous(minBytes: Long): Long
 }

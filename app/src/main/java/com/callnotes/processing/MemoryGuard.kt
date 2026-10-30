@@ -20,18 +20,18 @@ import kotlinx.coroutines.launch
  * pss threshold: 6291456kb". A force stop also takes the app off the enabled accessibility
  * services, so recording stops until the user turns it on again.
  *
- * Most of that memory is not the app's own: it is pages of the files LiteRT-LM maps — the
- * model file (3.7 GB) and its working copy of the weights (2.3 GB on the owner's phone).
- * PSS counts every page of them that was touched and is still in RAM, and when the phone has
- * RAM to spare nothing pushes them out (0.22.x: the summaries that died started with 6 GB
- * free; the ones that finished, with 3–4 GB). So near the line the guard first hands the
- * pages of [releasable] back to the kernel (they are read again from storage if needed),
- * and only if that isn't enough stops the summary just before the line.
+ * Where it is (0.23.0 log): almost all in the model's own buffers — 5.5–6.1 GB within seconds
+ * of the first answer, with the model file and LiteRT-LM's working copy barely resident. Under
+ * memory pressure the phone compresses rarely used pages into its swap, which PSS doesn't
+ * count — likely why summaries used to finish when the phone had 2–3 GB free and fail with
+ * 6 GB free. Near the line the guard does that itself: it hands the model file's pages back
+ * and moves the model's large buffers to swap (MADV_PAGEOUT); pages in use come back when
+ * touched. Only if memory still passes the line is the summary stopped.
  *
  * Sampling is cheap: the resident size (/proc/self/statm) every half second; the exact
  * PSS only once the resident size is near the line.
  */
-class MemoryGuard(private val releasable: String?) {
+class MemoryGuard(private val modelFile: String?) {
 
     /** Highest PSS seen (bytes; resident size until it got near the line). */
     @Volatile var peak = 0L
@@ -48,10 +48,11 @@ class MemoryGuard(private val releasable: String?) {
     /**
      * Runs [block]; if memory passes [LIMIT] even after releasing pages, it calls [onOver]
      * (stop the native work), cancels [block] and throws [TooMuchMemory]. [onRelease] reports
-     * each release: PSS before, after, and what the kernel was told (bytes, or -errno).
+     * each release: PSS before, after, and the bytes of model file and of buffers the kernel
+     * was told about (negative: an errno).
      */
     suspend fun <T> watch(
-        onRelease: (before: Long, after: Long, result: Long) -> Unit,
+        onRelease: (before: Long, after: Long, file: Long, buffers: Long) -> Unit,
         onOver: (Long) -> Unit,
         block: suspend () -> T,
     ): T = coroutineScope {
@@ -62,13 +63,14 @@ class MemoryGuard(private val releasable: String?) {
                 var used = resident()
                 if (used > NEAR) {
                     used = pss()
-                    if (used > RELEASE_AT && releasable != null && System.currentTimeMillis() - lastRelease > 5_000) {
+                    if (used > RELEASE_AT && System.currentTimeMillis() - lastRelease > 2_000) {
+                        val file = modelFile?.let { NativeMemory.release(it) } ?: 0L
+                        val buffers = NativeMemory.releaseAnonymous(BUFFER_MIN)
                         lastRelease = System.currentTimeMillis()
-                        val result = NativeMemory.release(releasable)
                         val after = pss()
                         releases++
                         if (used - after > freedMost) freedMost = used - after
-                        onRelease(used, after, result)
+                        onRelease(used, after, file, buffers)
                         used = after
                     }
                 }
@@ -79,7 +81,7 @@ class MemoryGuard(private val releasable: String?) {
                     work.cancel()
                     break
                 }
-                delay(500)
+                delay(if (used > NEAR) 250 else 500)
             }
         }
         try {
@@ -101,12 +103,24 @@ class MemoryGuard(private val releasable: String?) {
     companion object {
         /** The phone's line is 6 GiB of PSS; stop a little before it (sampled every 0.5 s). */
         const val LIMIT = 5_900L * 1024 * 1024
-        /** Past this PSS, hand the model file's pages back (at most every 5 s). */
+        /** Past this PSS, release pages (at most every 2 s; memory can jump 2 GB in a second). */
         private const val RELEASE_AT = 4_800L * 1024 * 1024
         /** Above this resident size, measure the PSS itself. */
         private const val NEAR = 4_600L * 1024 * 1024
 
+        /** Buffers at least this big are the model's (the app's own allocations are far smaller). */
+        private const val BUFFER_MIN = 32L * 1024 * 1024
+
         private val pageSize = Os.sysconf(OsConstants._SC_PAGESIZE)
+
+        /** The phone's swap, for the log: "swap 3.1 of 6.0 GB free" (or "no swap"). */
+        fun swap(): String = runCatching {
+            val m = File("/proc/meminfo").readLines().associate { l ->
+                l.substringBefore(':') to (l.substringAfter(':').trim().substringBefore(' ').toLongOrNull() ?: 0L) * 1024
+            }
+            val total = m["SwapTotal"] ?: 0L
+            if (total == 0L) "no swap" else "swap ${gb(m["SwapFree"] ?: 0L)} of ${gb(total)} GB free"
+        }.getOrDefault("swap not measured")
 
         /** Resident memory of this process (bytes). */
         fun resident(): Long = runCatching {

@@ -3,6 +3,19 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-30 — The model's buffers, not the files: move them to swap near the line (0.23.2)
+0.23.1 log, every summary (2–13 lines): within ~7 s of the first answer, 5.5–6.1 GB in
+the model's own (anonymous) memory; model file and working copy ~0 GB resident; PSS
+jumped from 5.1 to 7.3 GB in one second. Releasing the model file freed nothing. So E4B
+on this phone needs more than HyperOS's 6 GB of PSS by itself. Summaries finished until
+27.10 with 2–3 GB free at load — under pressure the kernel compresses rarely used pages
+into swap, which PSS doesn't count; with 4–6 GB free (29–30.10) nothing is swapped. Near
+the line (4.8 GB, every 250 ms, at most every 2 s) the guard now also MADV_PAGEOUTs the
+large anonymous mappings (≥ 32 MB, not the Java heap or stacks) — the same thing the
+kernel does under pressure; pages in use come back on touch, the rarely used ones (most
+of the embedding tables) stay out. The log shows swap size/free. If it doesn't hold, the
+remaining options are a smaller context (thinking mode doubles it to 16384) or Gemma 4 E2B.
+
 ### 2026-10-30 — A stuck Whisper run is read again plainly (0.23.1)
 Call 39 (31 s) showed no progress for 5 minutes, twice; other calls the same evening took
 ~1 min. With beam search and its retries at higher temperatures (up to 6 decodes of up to

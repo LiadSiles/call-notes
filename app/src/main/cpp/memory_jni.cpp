@@ -42,3 +42,34 @@ Java_com_callnotes_processing_NativeMemory_pageOut(JNIEnv* env, jobject /* this 
     env->ReleaseStringUTFChars(jname, name);
     return advised > 0 ? advised : -lastError;
 }
+
+// The model's own large buffers (anonymous private memory of at least minBytes, not the Java
+// heap or a stack): MADV_PAGEOUT moves their pages to the phone's compressed swap, where PSS
+// no longer counts them; pages in use come back on the next touch, the rarely used ones
+// (most of a model's embedding tables) stay out. Returns the bytes of mappings advised, or
+// a negative errno.
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_callnotes_processing_NativeMemory_pageOutAnonymous(JNIEnv*, jobject /* this */, jlong minBytes) {
+    FILE* maps = fopen("/proc/self/maps", "re");
+    if (maps == nullptr) return -errno;
+    char line[4096];
+    jlong advised = 0;
+    int lastError = 0;
+    while (fgets(line, sizeof line, maps) != nullptr) {
+        unsigned long start = 0, end = 0;
+        char perms[8] = {0};
+        int pathAt = 0;
+        if (sscanf(line, "%lx-%lx %7s %*s %*s %*s %n", &start, &end, perms, &pathAt) < 3 || end <= start) continue;
+        if (static_cast<jlong>(end - start) < minBytes) continue;
+        if (perms[0] != 'r' || perms[1] != 'w' || perms[3] != 'p') continue;
+        const char* path = line + pathAt;
+        // Unnamed mappings and native allocator regions; not files, not the Java heap or stacks.
+        const bool anonymous = *path == '\n' || *path == '\0' ||
+            (strncmp(path, "[anon:", 6) == 0 && strncmp(path, "[anon:dalvik", 12) != 0 && strstr(path, "stack") == nullptr);
+        if (!anonymous) continue;
+        if (madvise(reinterpret_cast<void*>(start), end - start, MADV_PAGEOUT) == 0) advised += static_cast<jlong>(end - start);
+        else lastError = errno;
+    }
+    fclose(maps);
+    return advised > 0 ? advised : -lastError;
+}

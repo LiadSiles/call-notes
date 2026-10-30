@@ -162,7 +162,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                     val recordedAt = java.time.LocalDateTime.ofInstant(Instant.ofEpochMilli(memo.createdAt), zone)
                     val guard = MemoryGuard(modelFile)
                     val answer = guard.watch(
-                        onRelease = { _, _, _ -> },
+                        onRelease = { _, _, _, _ -> },
                         onOver = { used ->
                             log("voice note ${memo.id}: memory ${MemoryGuard.gb(used)} GB (${MemoryGuard.breakdown(modelFile)}) — stopping before the phone closes the app")
                             a.abort()
@@ -345,10 +345,10 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 override fun log(text: String) = this@SummaryWorker.log("call ${call.id}: $text")
             })
             val result = guard.watch(
-                onRelease = { before, after, result ->
-                    if (guard.releases == 1) log("call ${call.id}: memory ${MemoryGuard.gb(before)} → ${MemoryGuard.gb(after)} GB after handing " +
-                        "the model file's pages back (" + (if (result >= 0) "${MemoryGuard.gb(result)} GB mapped" else "failed: error ${-result}") +
-                        ") · now ${MemoryGuard.breakdown(modelFile)}")
+                onRelease = { before, after, file, buffers ->
+                    fun told(bytes: Long) = if (bytes >= 0) "${MemoryGuard.gb(bytes)} GB" else "error ${-bytes}"
+                    if (guard.releases <= 3) log("call ${call.id}: memory ${MemoryGuard.gb(before)} → ${MemoryGuard.gb(after)} GB after releasing " +
+                        "pages (model file ${told(file)}, buffers ${told(buffers)}) · now ${MemoryGuard.breakdown(modelFile)} · ${MemoryGuard.swap()}")
                 },
                 onOver = { used ->
                     log("call ${call.id}: memory ${MemoryGuard.gb(used)} GB while \"$doing\" (${MemoryGuard.breakdown(modelFile)}) — stopping before the phone closes the app")
