@@ -10,7 +10,6 @@ import com.callnotes.data.MemoState
 import com.callnotes.data.SegmentEntity
 import com.callnotes.data.SpeakerResult
 import com.callnotes.data.VoiceMemoEntity
-import com.callnotes.inference.InferenceThreads
 import com.callnotes.inference.ModelCatalog
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
@@ -112,13 +111,10 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
                 when (runItem { process(call, t) }) {
                     true -> {
                         done++
-                        // Summarised right after, whatever the automatic settings: a file the
-                        // user imported or shared (it was brought in for its tasks), and a long
-                        // call transcribed by hand (the automatic summary skips calls over the
-                        // length limit).
+                        // A long call the user transcribed by hand: summarise it too (the
+                        // automatic summary skips calls over the length limit).
                         val prefs = Prefs(host)
-                        if (requested && (call.kind == CallKind.IMPORT ||
-                                prefs.autoSummarize && prefs.tooLongForAuto(call.endedAt - call.startedAt))) {
+                        if (requested && prefs.autoSummarize && prefs.tooLongForAuto(call.endedAt - call.startedAt)) {
                             ProcessingStatus.requestSummary(call.id)
                         }
                         host.wakeSummary()
@@ -309,7 +305,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
         host.showWork(this, title, "מכין גרסה מהירה של מודל התמלול (פעם אחת)…")
         preparing = true
         val err = try {
-            withContext(InferenceThreads.dispatcher) {
+            withContext(Dispatchers.IO) {
                 val finished = java.util.concurrent.atomic.AtomicBoolean(false)
                 coroutineScope {
                     val watcher = launch {
@@ -355,8 +351,7 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
             log("call ${call.id}: $audioSec s of audio")
             var lastLogged = -1
             val asrStarted = System.currentTimeMillis()
-            // An imported file's "contact name" is its file name: not a word to expect.
-            val words = expectedWords(call.contactName.takeIf { call.kind != CallKind.IMPORT })
+            val words = expectedWords(call.contactName)
             if (words.isNotEmpty()) log("call ${call.id}: ${words.count { it == ',' } + 1} expected words given to Whisper")
             val transcript = transcriber.transcribe(audio, vocabulary = words) { done, total ->
                 val pct = if (total > 0) done * 100 / total else 0
@@ -374,9 +369,6 @@ class TranscribeWorker(host: TranscriptionService) : Worker(host, Stage.TRANSCRI
             speed?.let { s ->
                 if (audioSec > 0) Prefs(host).addSpeedSample(s.name, audioSec * 1000, asrMs)
                 log("call ${call.id}: speech recognition ${"%.2f".format(asrMs / 1000.0 / audioSec.coerceAtLeast(1))}× call length (preset ${s.name})")
-            }
-            if (transcript.stuckRetried) {
-                log("call ${call.id}: Whisper got stuck (no progress for 4 min) — read again with one plain pass per window")
             }
             if (transcript.secondLook > 0) {
                 log("call ${call.id}: second look at ${transcript.secondLook} stretch(es) of missed speech · " +

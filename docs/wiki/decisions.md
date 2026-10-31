@@ -3,6 +3,19 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-31 — Back to 0.20.0's code ("0.20.0-restored", versionCode 63)
+Owner: "I want to go back to version 20, which worked." The 0.20.0 release still exists
+(page 2 of the releases), but versionCode 45 can't install over 62 without uninstalling,
+which deletes every call, transcript and task. So main now carries `app/src` exactly as at
+bc20d5d (0.20.0) with only the version raised; the database is version 12 in both, so it
+installs as an update and keeps the data. Build files, CI and keep rules stay current.
+Everything built after 0.20.0 (share target, storage page, memory guard, crash/kill
+recovery, GPU, Whisper stall retry, stop-all keeping settings…) is not in this build; it
+is on branch `dev/0.24.5` (release v0.24.5-build.158) to bring back once the test is done.
+Also a decisive test: if summaries fail on this build too, the cause is not in the code.
+Without 0.21+'s loop protection, a summary that takes the app down is retried on every
+start while automatic summaries are on — test with them off, one summary by hand.
+
 ### 2026-10-31 — A switch to let summaries run past the guard (0.24.5)
 Owner's experiment: run without the 5.9 GB stop. Before 29.10 summaries finished although
 HyperOS's line was presumably there; maybe it checks only now and then and short summaries

@@ -106,8 +106,7 @@ private fun SettingsHub(contentPadding: PaddingValues, resumeTick: Int, onOpen: 
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
     }
     val state = remember(resumeTick, noteVersion, models, service, setup) {
-        // The service counts as missing also when it is on in settings but not running.
-        val missing = listOf(setup.permissionsOk, setup.a11yOn && service.connected, setup.batteryOk).count { !it }
+        val missing = listOf(setup.permissionsOk, setup.a11yOn, setup.batteryOk).count { !it }
         val transcribe = models.active(ModelRole.TRANSCRIBE)
         val analyze = models.active(ModelRole.ANALYZE)
         HubState(
@@ -342,7 +341,6 @@ private fun LazyListScope.privacyItems(prefs: Prefs, resetKey: Int) {
     item { GroupLabel("שמירה ומחיקה") }
     item { key(resetKey) { RetentionSection(prefs) } }
     item { GroupLabel("אחסון") }
-    item { StorageSection() }
     item { key(resetKey) { CompressionSection(prefs) } }
     item { GroupLabel("הצפנה") }
     item { EncryptionSection(prefs) }

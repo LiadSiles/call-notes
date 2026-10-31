@@ -47,23 +47,6 @@
             </intent-filter>
         </activity>
 
-        <!-- Share target for audio (a WhatsApp voice message, a recorder's file…): no screen of
-             its own; copies the file in and queues it for its tasks (ShareActivity). -->
-        <activity
-            android:name=".ui.ShareActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|uiMode|density|locale|layoutDirection"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="audio/*" />
-                <data android:mimeType="application/ogg" />
-            </intent-filter>
-        </activity>
-
         <!-- Restarts the app after the encryption setting changes (own process, no UI). -->
         <activity
             android:name=".ui.RestartActivity"
@@ -113,7 +96,7 @@
             android:name=".util.TaskReminders$ActionReceiver"
             android:exported="false" />
 
-        <!-- The GPU for Gemma (LiteRT-LM, OpenCL); without them it runs on the CPU. -->
+        <!-- Optional GPU acceleration for LiteRT-LM (CPU is used today). -->
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
 

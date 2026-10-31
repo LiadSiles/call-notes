@@ -17,7 +17,7 @@ class BackgroundSpeechTest {
 
     private fun run(ws: List<W>, ownerSide: Int? = null, ownerVoice: FloatArray? = null): BackgroundSpeech.Result {
         val windows = ws.mapIndexed { i, w ->
-            VoiceClusters.Window(i, i, (w.startS * 1000).toLong(), ((w.startS + w.lenS) * 1000).toLong())
+            VoiceClusters.Window(i, i, (w.startS * 1000).toLong(), ((w.startS + w.lenS) * 1000).toLong(), 500)
         }
         return BackgroundSpeech.find(
             windows,

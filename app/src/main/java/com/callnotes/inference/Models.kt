@@ -67,8 +67,6 @@ data class Transcript(
     /** Stretches of missed speech read a second time, and how much speech that added. */
     val secondLook: Int = 0,
     val recoveredMs: Long = 0,
-    /** The first pass got stuck (no progress for minutes) and was read again plainly. */
-    val stuckRetried: Boolean = false,
 ) {
     /**
      * [speaker]: 0/1 after speaker separation, null before / without it. [background]:
@@ -95,8 +93,6 @@ data class CallContext(
     val ownerName: String? = null,
     /** Names and words that come up in the owner's calls (settings), spelled right. */
     val vocabulary: List<String> = emptyList(),
-    /** A file the owner imported or shared to the app (a WhatsApp voice message…), not a call. */
-    val imported: Boolean = false,
 )
 
 /** What the summariser extracted from a call (JSON from the model, checked in code). */

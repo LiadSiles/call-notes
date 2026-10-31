@@ -24,8 +24,7 @@ object SummaryPrompts {
         part: Int,
         parts: Int,
     ): String = buildString {
-        appendLine("You will answer several questions about one ${if (call.imported) "recording" else "phone call"}, one at a time. " +
-            "Write every text value in Hebrew.")
+        appendLine("You will answer several questions about one phone call, one at a time. Write every text value in Hebrew.")
         appendLine("Return only JSON, no markdown. Cover everything that was said, accurately: leave nothing out, " +
             "and never guess names, numbers, places or dates.")
         appendLine()

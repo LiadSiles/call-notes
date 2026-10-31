@@ -189,14 +189,15 @@ class ScreenshotTest {
         val queue = listOf(Request(Stage.TRANSCRIBE, callId = 4))
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp)) {
             item { CallsHeader("ההקלטה פעילה" to Tone.Good, canSearch = true) {} }
-            // As CallsScreen: a label per day, each call its own item in a card slice.
             calls.groupBy { dayLabel(it.call.startedAt) }.forEach { (day, list) ->
-                item { GroupLabel(day, Modifier.padding(top = 4.dp)) }
-                list.forEachIndexed { i, c ->
-                    item {
-                        CardSlice(first = i == 0, last = i == list.lastIndex) {
-                            if (i > 0) RowDivider()
-                            CallRow(c, callStage(c.call, processing, ProcessingStatus.State(), c.call.id == 5L, queue)) {}
+                item {
+                    Column {
+                        GroupLabel(day, Modifier.padding(top = 4.dp))
+                        CardGroup {
+                            list.forEachIndexed { i, c ->
+                                if (i > 0) RowDivider()
+                                CallRow(c, processing, ProcessingStatus.State(), manualOnly = c.call.id == 5L, queue = queue) {}
+                            }
                         }
                     }
                 }

@@ -19,14 +19,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import java.io.File
 
-/**
- * Shows a diagnostic log (timings and levels only, never what was said) and lets the user
- * share it: the whole log as a file, plus its newest lines as text — apps that receive text
- * cut it (at about 20,000 characters), which used to drop exactly the newest lines.
- */
+/** Shows a call's diagnostic trace (timings and levels only) and lets the user share it as text. */
 @Composable
 fun TraceDialog(file: File, onDismiss: () -> Unit, title: String = "יומן אבחון") {
     val context = LocalContext.current
@@ -51,21 +46,10 @@ fun TraceDialog(file: File, onDismiss: () -> Unit, title: String = "יומן א�
         },
         confirmButton = {
             TextButton(onClick = {
-                val send = Intent(Intent.ACTION_SEND).setType("text/plain")
-                    .putExtra(Intent.EXTRA_TEXT, if (text.length <= SHARED_TEXT) text else "…\n" + text.takeLast(SHARED_TEXT).substringAfter('\n'))
-                // A copy in the shared cache folder (emptied at app start), readable by the chosen app.
-                runCatching {
-                    val copy = File(File(context.cacheDir, "share").apply { mkdirs() }, "callnotes-log.txt")
-                    file.copyTo(copy, overwrite = true)
-                    send.putExtra(Intent.EXTRA_STREAM, FileProvider.getUriForFile(context, "${context.packageName}.files", copy))
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
                 context.startActivity(Intent.createChooser(send, "שיתוף יומן"))
-            }) { Text("שיתוף") }
+            }) { Text("שיתוף כטקסט") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("סגירה") } },
     )
 }
-
-/** Characters of the log sent as text (the newest); the whole log goes as a file. */
-private const val SHARED_TEXT = 15_000

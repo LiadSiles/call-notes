@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -95,26 +94,6 @@ fun CardGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         Column(Modifier.padding(vertical = 4.dp), content = content)
-    }
-}
-
-/**
- * One row of a card made of several lazy-list items — the card's look ([CardGroup]) with
- * corners only at its ends — so a long card is still drawn row by row while scrolling.
- */
-@Composable
-fun CardSlice(first: Boolean, last: Boolean, content: @Composable ColumnScope.() -> Unit) {
-    val r = MaterialTheme.shapes.medium
-    val none = CornerSize(0)
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = r.copy(
-            topStart = if (first) r.topStart else none, topEnd = if (first) r.topEnd else none,
-            bottomStart = if (last) r.bottomStart else none, bottomEnd = if (last) r.bottomEnd else none,
-        ),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-    ) {
-        Column(Modifier.padding(top = if (first) 4.dp else 0.dp, bottom = if (last) 4.dp else 0.dp), content = content)
     }
 }
 

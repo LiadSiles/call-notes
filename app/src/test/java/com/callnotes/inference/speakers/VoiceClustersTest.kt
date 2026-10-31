@@ -21,6 +21,6 @@ class VoiceClustersTest {
         val w = VoiceClusters.windows(words(4 to 0L, 3 to 800L, 10 to 800L))
         // 4 words (1.9 s) | 3 words | 10 words split by the 3 s cap
         assertEquals(listOf(0, 4, 7, 13), w.map { it.firstWord })
-        assertEquals(800L + 100, w[1].startMs - w[0].endMs) // the pause that split them
+        assertEquals(800L + 100, w[1].gapBeforeMs)
     }
 }

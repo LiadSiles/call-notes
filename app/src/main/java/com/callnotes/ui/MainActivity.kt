@@ -169,9 +169,8 @@ private fun AppRoot() {
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch(Dispatchers.IO) {
             try {
-                // Brought in for its tasks: transcribed now and summarised right after.
-                val id = Importer.import(context, uri)
-                TranscriptionService.start(context, callId = id)
+                Importer.import(context, uri)
+                if (prefs.autoTranscribe) TranscriptionService.start(context)
             } catch (_: Exception) {
                 // Unreadable file: nothing was added.
             }
@@ -265,7 +264,7 @@ private fun AppRoot() {
                             listState = listState,
                             onOpen = { openCallId = it },
                             onOpenSettings = { tab = Tab.Settings },
-                            onImport = { importLauncher.launch(arrayOf("audio/*", "application/ogg")) },
+                            onImport = { importLauncher.launch(arrayOf("audio/*")) },
                             onOpenAt = { callId, segment, text ->
                                 openFocus = segment; openFocusText = text; openCallId = callId
                             },

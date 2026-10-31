@@ -77,7 +77,6 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
         modeMonitor.start() // no permission needed; the pref is checked per call
         instance = this
         ServiceStatus.update { it.copy(connected = true) }
-        ProcessingLog.write(this, "recording service connected")
         ensureMonitoring()
     }
 
@@ -86,7 +85,6 @@ class CallRecorderService : AccessibilityService(), CallStateMonitor.Listener,
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
-        ProcessingLog.write(this, "recording service stopped (turned off in accessibility settings, or the app was updated)")
         if (instance === this) instance = null
         session?.let { finish(it, System.currentTimeMillis()) }
         if (::monitor.isInitialized) monitor.stop()

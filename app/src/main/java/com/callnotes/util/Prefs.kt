@@ -45,26 +45,6 @@ class Prefs(context: Context) {
     /** Either automatic step is on (worth starting the background service for). */
     val anyAuto: Boolean get() = autoTranscribe || autoSummarize
 
-    /** The switches that decide whether things happen by themselves, for the processing log. */
-    fun switchesLine(): String = "recording ${onOff(recordingEnabled)} · auto transcription ${onOff(autoTranscribe)}" +
-        " · auto summary ${onOff(autoSummarize)} · battery-saver pause ${onOff(pauseInBatterySaver)}"
-
-    private fun onOff(b: Boolean) = if (b) "on" else "off"
-
-    /**
-     * Writes each change of those switches to the processing log, whoever makes it (a
-     * setting, "stop all", a banner) — the owner saw them turn off by themselves.
-     * Main process, once; the listener is kept so it isn't collected.
-     */
-    fun logSwitchChanges(onChange: (String) -> Unit) {
-        val watched = setOf(KEY_RECORDING, KEY_AUTO, KEY_AUTO_SUMMARY, KEY_SAVER)
-        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key in watched) onChange("settings changed: ${switchesLine()}")
-        }
-        listener = l
-        sp.registerOnSharedPreferenceChangeListener(l)
-    }
-
     /**
      * Calls longer than this many minutes are not transcribed or summarised automatically
      * (the user starts them by hand); 0 = no limit.
@@ -131,21 +111,6 @@ class Prefs(context: Context) {
         @android.annotation.SuppressLint("ApplySharedPref") // must be on disk before a crash
         set(value) { sp.edit().putString("processing_stage", value).commit() }
 
-    /**
-     * How many times in a row the app's process died while summarising call [callId]
-     * (stored as "id:count"; one call at a time — see CallNotesApp.recoverDeadRun).
-     */
-    fun summaryDeaths(callId: Long): Int {
-        val (id, count) = sp.getString(KEY_SUMMARY_DEATHS, null)?.split(':')?.takeIf { it.size == 2 } ?: return 0
-        return if (id.toLongOrNull() == callId) count.toIntOrNull() ?: 0 else 0
-    }
-
-    fun setSummaryDeaths(callId: Long, count: Int) = sp.edit().putString(KEY_SUMMARY_DEATHS, "$callId:$count").apply()
-
-    fun clearSummaryDeaths(callId: Long) {
-        if (summaryDeaths(callId) > 0) sp.edit().remove(KEY_SUMMARY_DEATHS).apply()
-    }
-
     /** Set aside speech of people not on the call (background talk) after transcription. */
     var filterBackground by bool(KEY_BACKGROUND, true)
 
@@ -170,20 +135,6 @@ class Prefs(context: Context) {
 
     /** Gemma "thinks" before each answer: more careful, 2–4× slower (experimental, off). */
     var summaryThinking by bool(KEY_THINKING, false)
-
-    /**
-     * Gemma runs on the GPU (0.24.0; on by default). Turned off by itself if the app's process
-     * dies while Gemma loads or works on the GPU (CallNotesApp.recoverDeadRun), so a GPU
-     * driver that crashes can't take the app down again and again.
-     */
-    var summaryOnGpu by bool(KEY_GPU, true)
-
-    /**
-     * Stop a summary before HyperOS's 6 GB memory line ([com.callnotes.processing.MemoryGuard]).
-     * Off (the owner's experiment, 0.24.5): the summary runs on; the phone may force-stop the
-     * app, which also turns accessibility off. The peak is logged either way.
-     */
-    var summaryMemoryGuard by bool(KEY_MEMORY_GUARD, true)
 
     // ---- Tasks -------------------------------------------------------------------------
 
@@ -235,9 +186,6 @@ class Prefs(context: Context) {
     /** Active DownloadManager id for the model, or -1. */
     var downloadId by long("download_id", -1L)
 
-    /** Time of the newest process exit already written to the log ([com.callnotes.processing.ProcessingLog.logExits]). */
-    var lastExitLogged by long("last_exit_logged", 0L)
-
     /** Model ids still to download after the current one (comma-separated), for packs. */
     var downloadQueue by string("download_queue", "")
 
@@ -267,7 +215,6 @@ class Prefs(context: Context) {
     }
 
     companion object {
-        private const val KEY_SUMMARY_DEATHS = "summary_deaths"
         private const val KEY_RECORDING = "recording_enabled"
         private const val KEY_VOIP = "record_voip"
         private const val KEY_SPEAKER = "auto_speaker_v2"
@@ -281,8 +228,6 @@ class Prefs(context: Context) {
         private const val KEY_SNOOZE = "snooze_minutes"
         private const val KEY_PRECISE = "precise_summary"
         private const val KEY_THINKING = "summary_thinking"
-        private const val KEY_GPU = "summary_on_gpu"
-        private const val KEY_MEMORY_GUARD = "summary_memory_guard"
         private const val KEY_BACKGROUND = "filter_background"
         private const val KEY_AUDIO_DAYS = "audio_retention_days"
         private const val KEY_CALL_DAYS = "call_retention_days"
@@ -290,13 +235,10 @@ class Prefs(context: Context) {
         private const val KEY_AUTO_MAX = "auto_max_minutes"
         private const val KEY_AUTO_SUMMARY = "auto_summarize"
 
-        /** The one switch-change listener (SharedPreferences holds listeners weakly). */
-        private var listener: SharedPreferences.OnSharedPreferenceChangeListener? = null
-
         /** What "restore defaults" resets. */
         private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
-            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_THINKING, KEY_GPU, KEY_MEMORY_GUARD, KEY_BACKGROUND, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
+            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_THINKING, KEY_BACKGROUND, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
             KEY_AUTO_SUMMARY, KEY_T_CHARGING, KEY_S_CHARGING,
         )
 

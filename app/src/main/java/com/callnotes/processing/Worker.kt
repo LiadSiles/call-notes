@@ -4,7 +4,6 @@ import android.os.PowerManager
 import com.callnotes.CallNotesApp
 import com.callnotes.data.CallEntity
 import com.callnotes.data.VoiceMemoEntity
-import com.callnotes.inference.InferenceThreads
 import com.callnotes.util.Notifications
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -106,7 +105,7 @@ abstract class Worker(protected val host: TranscriptionService, val stage: Stage
     protected suspend fun runItem(block: suspend () -> Boolean): Boolean? {
         // Stopped while the model was loading: don't start the call at all.
         currentCoroutineContext().ensureActive()
-        val work = host.scope.async(InferenceThreads.dispatcher) { block() }
+        val work = host.scope.async { block() }
         item = work
         return try {
             work.await()

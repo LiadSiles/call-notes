@@ -10,7 +10,7 @@ import com.callnotes.inference.Transcript
  */
 object VoiceClusters {
 
-    data class Window(val firstWord: Int, val lastWord: Int, val startMs: Long, val endMs: Long) {
+    data class Window(val firstWord: Int, val lastWord: Int, val startMs: Long, val endMs: Long, val gapBeforeMs: Long) {
         val durationMs get() = endMs - startMs
     }
 
@@ -27,7 +27,8 @@ object VoiceClusters {
                 words[i].startMs - words[i - 1].endMs > PAUSE_MS ||
                 words[i].endMs - words[first].startMs > MAX_WINDOW_MS
             if (end) {
-                out += Window(first, i - 1, words[first].startMs, maxOf(words[i - 1].endMs, words[first].startMs + 1))
+                val gap = if (first == 0) 0 else words[first].startMs - words[first - 1].endMs
+                out += Window(first, i - 1, words[first].startMs, maxOf(words[i - 1].endMs, words[first].startMs + 1), gap)
                 first = i
             }
         }

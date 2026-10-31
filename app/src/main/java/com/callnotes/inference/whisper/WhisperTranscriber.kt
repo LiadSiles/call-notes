@@ -1,22 +1,20 @@
 package com.callnotes.inference.whisper
 
 import com.callnotes.audio.Wav
-import com.callnotes.inference.InferenceThreads
 import com.callnotes.inference.ModelSpec
 import com.callnotes.inference.Transcriber
 import com.callnotes.inference.Transcript
 import com.callnotes.inference.TranscriptText
 import com.callnotes.util.CpuInfo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Hebrew transcription with ivrit.ai's Whisper large-v3-turbo through whisper.cpp,
@@ -39,7 +37,7 @@ class WhisperTranscriber(
     /** Threads used, for the log. */
     val threads: Int = CpuInfo.inferenceThreads()
 
-    override suspend fun load() = withContext(InferenceThreads.dispatcher) {
+    override suspend fun load() = withContext(Dispatchers.IO) {
         if (handle != 0L) return@withContext
         WhisperNative.load()
         var h = WhisperNative.init(modelFile.absolutePath, true, WhisperNative.AHEADS_LARGE_V3_TURBO)
@@ -53,24 +51,11 @@ class WhisperTranscriber(
         languageHint: String,
         vocabulary: String,
         onProgress: (Int, Int) -> Unit,
-    ): Transcript = withContext(InferenceThreads.dispatcher) {
+    ): Transcript = withContext(Dispatchers.IO) {
         load()
         val samples = Wav.readFloats(audio)
         onProgress(0, 100)
-        // A window can send Whisper into a loop: with beam search and its retries at higher
-        // temperatures one 30 s window then takes many minutes (owner's call 39: no progress
-        // in 5 min, where 30 s normally take ~1 min). Stuck → read the call again with one
-        // plain decode per window, which can't run long.
-        var stuck = false
-        val first = clean(
-            decode(samples, languageHint, vocabulary, keepQuiet = false, stallMs = STALL_MS) { onProgress(it * 9 / 10, 100) }
-                ?: run {
-                    stuck = true
-                    onProgress(0, 100)
-                    decode(samples, languageHint, vocabulary, keepQuiet = false, plain = true) { onProgress(it * 9 / 10, 100) }
-                        ?: error("whisper got stuck")
-                }
-        )
+        val first = clean(decode(samples, languageHint, vocabulary, keepQuiet = false) { onProgress(it * 9 / 10, 100) })
 
         // Second look at speech Whisper left out (short answers, a window dropped as "no
         // speech", a loud word over a quiet one), packed into as few runs as possible.
@@ -79,7 +64,7 @@ class WhisperTranscriber(
         val added = ArrayList<Transcript.Word>()
         packs.forEachIndexed { k, pack ->
             ensureActive()
-            val out = clean(decode(MissedSpeech.buffer(samples, pack), languageHint, vocabulary, keepQuiet = true) {} ?: return@forEachIndexed)
+            val out = clean(decode(MissedSpeech.buffer(samples, pack), languageHint, vocabulary, keepQuiet = true) {})
             added += recovered(out.words, pack, runs, first.words + added)
             onProgress(90 + (k + 1) * 10 / packs.size, 100)
         }
@@ -91,7 +76,6 @@ class WhisperTranscriber(
             (first.words + added).sortedBy { it.startMs },
             secondLook = runs.size,
             recoveredMs = added.sumOf { it.endMs - it.startMs },
-            stuckRetried = stuck,
         )
     }
 
@@ -140,50 +124,23 @@ class WhisperTranscriber(
         return out
     }
 
-    /**
-     * One whisper.cpp run over [samples]; cancelling the coroutine aborts it within moments.
-     * [stallMs] > 0: if progress doesn't move for that long the run is stopped and null is
-     * returned. [plain]: greedy, no temperature retries.
-     */
-    private suspend fun decode(
-        samples: FloatArray,
-        language: String,
-        vocabulary: String,
-        keepQuiet: Boolean,
-        stallMs: Long = 0,
-        plain: Boolean = false,
-        onPercent: (Int) -> Unit,
-    ): Transcript? {
+    /** One whisper.cpp run over [samples]; cancelling the coroutine aborts it within moments. */
+    private suspend fun decode(samples: FloatArray, language: String, vocabulary: String, keepQuiet: Boolean, onPercent: (Int) -> Unit): Transcript {
         val finished = AtomicBoolean(false)
-        val stalled = AtomicBoolean(false)
-        val lastProgress = AtomicLong(System.currentTimeMillis())
         val raw = coroutineScope {
             val watcher = launch {
                 try { awaitCancellation() } finally { if (!finished.get()) WhisperNative.abort(handle) }
             }
-            val stallWatch = if (stallMs > 0) launch {
-                while (!finished.get()) {
-                    delay(5_000)
-                    if (System.currentTimeMillis() - lastProgress.get() > stallMs) {
-                        stalled.set(true)
-                        WhisperNative.abort(handle)
-                        break
-                    }
-                }
-            } else null
             try {
-                WhisperNative.transcribe(handle, samples, language, threads, if (plain) 1 else beamSize, vocabulary, keepQuiet, plain) { p ->
-                    lastProgress.set(System.currentTimeMillis())
+                WhisperNative.transcribe(handle, samples, language, threads, beamSize, vocabulary, keepQuiet) { p ->
                     onPercent(p.coerceIn(0, 100))
                 }
             } finally {
                 finished.set(true)
                 watcher.cancel()
-                stallWatch?.cancel()
             }
         }
         currentCoroutineContext().ensureActive() // aborted because the coroutine was cancelled
-        if (stalled.get()) return null
         return WhisperOutput.parse(raw ?: error("whisper failed"))
     }
 
@@ -197,11 +154,6 @@ class WhisperTranscriber(
     override fun abort() {
         val h = handle
         if (h != 0L) WhisperNative.abort(h)
-    }
-
-    private companion object {
-        /** No progress for this long in one run: stuck (a 30 s window normally takes ~1 min). */
-        const val STALL_MS = 4 * 60_000L
     }
 
     override fun close() {
