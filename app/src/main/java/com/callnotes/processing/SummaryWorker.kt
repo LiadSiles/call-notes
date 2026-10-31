@@ -54,6 +54,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
     @Volatile private var currentRequested = false
     /** File name of the loaded model (the memory breakdown in the log names it). */
     private var modelFile: String? = null
+    /** No working files existed when Gemma was loaded: this run rebuilds them (see [workingCopy]). */
+    private var rebuilding = false
     /** The last summary was stopped for memory: unload Gemma before the next one. */
     private var unloadAfter = false
 
@@ -160,7 +162,7 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
                 try {
                     val zone = ZoneId.systemDefault()
                     val recordedAt = java.time.LocalDateTime.ofInstant(Instant.ofEpochMilli(memo.createdAt), zone)
-                    val guard = MemoryGuard()
+                    val guard = guard()
                     val answer = guard.watch(
                         onOver = { used ->
                             log("voice note ${memo.id}: memory ${MemoryGuard.gb(used)} GB (${MemoryGuard.breakdown(modelFile)}) — stopping before the phone closes the app")
@@ -261,7 +263,12 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
         val gpu = Prefs(host).summaryOnGpu
         // The stage says "on the GPU": if the GPU driver takes the process down while loading,
         // the next start reads it and turns the GPU off (CallNotesApp.recoverDeadRun).
-        step("loading analysis model ${spec.id}${if (gpu) " on the GPU" else ""} · ${ProcessingLog.freeRam(host)} · ${workingCopy(file)}")
+        rebuilding = engineFiles().isEmpty()
+        // The stage names the call: if the engine takes the process down while loading (it may
+        // rebuild its working files right there, out of the guard's reach), that death counts
+        // against the call like one during its summary (CallNotesApp.recoverDeadRun).
+        val forWhat = when { callId != null -> " for call $callId"; memoId != null -> " for voice note $memoId"; else -> "" }
+        step("loading analysis model ${spec.id}$forWhat${if (gpu) " on the GPU" else ""} · ${ProcessingLog.freeRam(host)} · ${workingCopy(file)}")
         val g = GemmaAnalyzer(host, spec, file, thinking, gpu)
         modelFile = file.name
         return try {
@@ -288,17 +295,25 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
      * time (part of their names — LiteRT-LM issue 3772), for each load.
      */
     private fun workingCopy(model: java.io.File): String {
-        val copies = host.cacheDir.listFiles { f -> f.name.startsWith(model.name) }.orEmpty()
-        val modified = java.text.SimpleDateFormat("dd.MM HH:mm:ss", java.util.Locale.US).format(java.util.Date(model.lastModified()))
-        val wholeSecond = if (model.lastModified() % 1000 == 0L) ", whole second" else ""
-        val copy = if (copies.isEmpty()) "no working copy (made during the first answer)"
-            else "working copy " + copies.joinToString { "${MemoryGuard.gb(it.length())} GB" }
-        return "$copy · model file modified $modified$wholeSecond"
+        val time = java.text.SimpleDateFormat("dd.MM HH:mm:ss", java.util.Locale.US)
+        // Every file LiteRT-LM keeps in the cache folder (not only those named after the model),
+        // with size and time, so the log shows whether the set is complete and when it was made.
+        val files = engineFiles()
+        val listed = if (files.isEmpty()) "no working files"
+            else "working files: " + files.joinToString { "${it.name.replace(model.name, "<model>")} ${MemoryGuard.mb(it.length())} MB ${time.format(java.util.Date(it.lastModified()))}" }
+        return "$listed · model file modified ${time.format(java.util.Date(model.lastModified()))} (+${model.lastModified() % 1000} ms)"
     }
+
+    /** LiteRT-LM's files in the cache folder (everything there that isn't the app's own temporary files). */
+    private fun engineFiles(): List<java.io.File> = host.cacheDir.walkTopDown().filter { it.isFile }
+        .filterNot { it.name.startsWith("convert_") || it.parentFile?.name in setOf("plain", "share") }
+        .sortedByDescending { it.length() }.toList()
+
+    private fun guard() = MemoryGuard(if (rebuilding) MemoryGuard.REBUILD_LIMIT else MemoryGuard.LIMIT)
 
     private suspend fun analyse(call: CallEntity, analyzer: Analyzer): Boolean {
         val started = System.currentTimeMillis()
-        val guard = MemoryGuard()
+        val guard = guard()
         val battery = Energy.read(host)
         val title = "מסכם: ${label(call)}"
         publish(ProcessingStatus.State(true, call.id, 0, 0, Phase.ANALYZING))

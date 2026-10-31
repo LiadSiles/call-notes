@@ -14,6 +14,12 @@ class DeathTest {
         assertEquals(40L, death("[summary] call 40: summarising precisely (3 questions per part) · 2 lines, 202 chars").summaryCall)
     }
 
+    @Test fun loadingForACallCountsAgainstIt() {
+        assertEquals(43L, death("[summary] loading analysis model gemma-4-e4b for call 43 on the GPU · free RAM 4.8 GB").summaryCall)
+        assertEquals(43L, death("[summary] loading analysis model gemma-4-e4b for call 43 · free RAM 4.8 GB").summaryCall)
+        assertNull(death("[summary] loading analysis model gemma-4-e4b for voice note 7 · free RAM 4.8 GB").summaryCall)
+    }
+
     @Test fun gpuStages() {
         assertTrue(death("[summary] loading analysis model on the GPU").onGpu)
         assertTrue(death("[summary] call 40: summarising on the GPU precisely (3 questions per part) · 2 lines, 202 chars").onGpu)

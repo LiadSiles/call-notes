@@ -45,7 +45,9 @@ object Storage {
         val modelsDir = models.modelsDir.canonicalFile
         val cacheDirs = listOfNotNull(context.cacheDir, context.externalCacheDir).map { it.canonicalFile }
         val activeIds = ModelRole.entries.mapNotNull { models.active(it)?.id }.toSet()
-        val activeAnalyzer = models.active(ModelRole.ANALYZE)?.let { models.fileFor(it).nameWithoutExtension }
+        // Summary models that are not the active one: their LiteRT-LM files in the cache are stale.
+        val otherAnalyzers = ModelCatalog.forRole(ModelRole.ANALYZE).map { models.fileFor(it).nameWithoutExtension } -
+            setOfNotNull(models.active(ModelRole.ANALYZE)?.let { models.fileFor(it).nameWithoutExtension })
         val whisperBase = models.active(ModelRole.TRANSCRIBE)?.let { models.fileFor(it) }
         val currentCopy = whisperBase?.let { WhisperSpeed.current(Prefs(context)).fileFor(it).name }
         val downloading = Prefs(context).downloadModelId?.let { ModelCatalog.byId(it)?.fileName + ".part" }
@@ -77,9 +79,17 @@ object Storage {
                     }
                 }
                 cacheDirs.any { c.startsWith(it) } -> {
-                    // The model's working copy (made on first load, kept to load faster).
-                    if (activeAnalyzer != null && name.startsWith(activeAnalyzer)) add("קבצי עבודה של מודל הסיכום", f)
-                    else { add("קבצים זמניים", f); staleCaches += f }
+                    // Only what the app itself leaves in the cache, and files of a summary model
+                    // no longer in use, may go. Everything else there is LiteRT-LM's working
+                    // set for the active model (weights laid out for this CPU, GPU programs,
+                    // their index files — not all named after the model): deleting part of it
+                    // leaves a set the engine can't use, and the model then needs gigabytes
+                    // more memory (0.24.4; until then other names counted as temporary files).
+                    if (isOwnTemp(f, cacheDirs) || otherAnalyzers.any { name.startsWith(it) }) {
+                        add("קבצים זמניים", f); staleCaches += f
+                    } else {
+                        add("קבצי עבודה של מודל הסיכום", f)
+                    }
                 }
                 c.path.contains("/recordings/") -> add("הקלטות שיחות", f)
                 c.path.contains("/memos/") -> add("הקלטות משימה", f)
@@ -103,6 +113,12 @@ object Storage {
             biggest,
             freeable,
         )
+    }
+
+    /** Temporary files the app itself makes in the cache: converted audio, decrypted copies, shares. */
+    private fun isOwnTemp(f: File, cacheDirs: List<File>): Boolean {
+        val rel = cacheDirs.firstOrNull { f.canonicalFile.startsWith(it) }?.let { f.canonicalFile.relativeTo(it).path } ?: return false
+        return (f.name.startsWith("convert_") && f.name.endsWith(".wav")) || rel.startsWith("plain/") || rel.startsWith("share/")
     }
 
     /** Deletes [items]; returns the bytes freed. The model list is re-read (a model may be gone). */

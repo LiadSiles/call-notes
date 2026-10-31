@@ -70,7 +70,7 @@ object ProcessingLog {
      * app) started — not the work's fault — and the call being summarised, if any.
      */
     data class Death(val stage: String, val nativeCrash: Boolean, val memory: Boolean, val cleanup: Boolean = false) {
-        val summaryCall: Long? get() = SUMMARY_STAGE.find(stage)?.groupValues?.get(1)?.toLongOrNull()
+        val summaryCall: Long? get() = SUMMARY_STAGE.find(stage)?.groupValues?.drop(1)?.firstOrNull { it.isNotEmpty() }?.toLongOrNull()
         /** Gemma was loading or working on the GPU. */
         val onGpu: Boolean get() = stage.startsWith("[summary]") && "on the GPU" in stage
     }
@@ -83,8 +83,8 @@ object ProcessingLog {
     fun isCleanup(description: String?): Boolean =
         description != null && listOf("SwipeUpClean", "OneKeyClean", "securitycenter").any { it in description }
 
-    /** What [SummaryWorker] writes as its stage while it works on a call. */
-    private val SUMMARY_STAGE = Regex("""^\[summary] call (\d+):""")
+    /** What [SummaryWorker] writes as its stage while it loads Gemma for a call or works on it. */
+    private val SUMMARY_STAGE = Regex("""^\[summary] (?:call (\d+):|loading analysis model \S+ for call (\d+))""")
 
     /**
      * Called once per process start. A stage left over means the previous process died

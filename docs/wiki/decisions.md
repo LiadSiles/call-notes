@@ -3,6 +3,34 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-31 — Research: why E4B stopped fitting; the storage page and LiteRT-LM's working files (0.24.4)
+Owner: no phone update; summaries never failed before; find what in the code changed —
+double loading? memory not released?
+- **Double loading / not releasing: ruled out.** One place creates Gemma (SummaryWorker.load),
+  one Whisper (TranscribeWorker), one voice model; each is closed in a `finally` at the end
+  of its worker; the logs show one load per run, and failing runs include fresh processes
+  where nothing else was loaded.
+- **What the log shows instead:** the model's own memory 4.7–4.9 GB (context 8192) while
+  LiteRT-LM's working copy (2.1 GB file) is barely read (0.8 GB). LiteRT-LM keeps a working
+  set in `cacheDir` (weights laid out for this CPU, `*.xnnpack_cache`, named from the model
+  file's name, mtime and size — LiteRT-LM issue 3772; GPU program caches since 0.24.0). When
+  it can't use that set it still runs, with the weights prepared in RAM — "slower to load,
+  more memory" (flutter_edge_ai PR 672). Model card: E4B on CPU ≈ 3.3 GB; ours ≈ 2 GB more,
+  about the size of the working copy. Consistent with the set not being used.
+- **The code change that touches those files:** the storage page (0.20.1) offered to delete
+  every file in `cacheDir` not named after the active model as "temporary". LiteRT-LM's set
+  isn't only files named after the model. If the owner pressed "פינוי" on 28.10 (the day he
+  asked about 90 GB and got the page), part of the set may have gone; the rest is then
+  unusable and every run prepares the weights in RAM, and never finishes rebuilding because
+  it is stopped at the memory line. Not proven — the log never listed the file names.
+- **0.24.4:** the storage page only offers to delete the app's own temporary files and files
+  of a summary model no longer in use; every file in the cache folder is listed by name,
+  size and time in the log at each load; a load that finds no working files is a rebuild
+  and may go up to just under HyperOS's line (6060 MiB) for that run; a death while Gemma
+  loads counts against the call (the stage names it), so a rebuild that takes the app down
+  can't loop. Test: clear the app's cache in Android's app info (removes the whole set),
+  then summarise once with the app on screen.
+
 ### 2026-10-30 — Any death on the GPU turns the GPU off (0.24.2)
 Owner, on 0.24.1: the app "crashes during a summary and takes the whole phone down". With
 Gemma on the GPU that points at the GPU driver or at GPU memory the phone runs out of

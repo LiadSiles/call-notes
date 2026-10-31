@@ -29,14 +29,17 @@ import kotlinx.coroutines.launch
  * Sampling is cheap: the resident size (/proc/self/statm) every half second; the exact
  * PSS only once the resident size is near the line.
  */
-class MemoryGuard {
+class MemoryGuard(
+    /** Stop above this PSS ([LIMIT]; [REBUILD_LIMIT] while LiteRT-LM rebuilds its working files). */
+    private val limit: Long = LIMIT,
+) {
 
     /** Highest PSS seen (bytes; resident size until it got near the line). */
     @Volatile var peak = 0L
         private set
 
     /**
-     * Runs [block]; if memory passes [LIMIT] it calls [onOver] (stop the native work),
+     * Runs [block]; if memory passes the limit it calls [onOver] (stop the native work),
      * cancels [block] and throws [TooMuchMemory].
      */
     suspend fun <T> watch(onOver: (Long) -> Unit, block: suspend () -> T): T = coroutineScope {
@@ -46,7 +49,7 @@ class MemoryGuard {
             while (true) {
                 val used = resident().let { if (it > NEAR) pss() else it }
                 if (used > peak) peak = used
-                if (used > LIMIT) {
+                if (used > limit) {
                     over.set(used)
                     onOver(used)
                     work.cancel()
@@ -68,11 +71,16 @@ class MemoryGuard {
     /** For the log. */
     fun summary(): String = "peak memory ${gb(peak)} GB"
 
-    class TooMuchMemory(val bytes: Long) : Exception("memory ${gb(bytes)} GB, over the ${gb(LIMIT)} GB line")
+    class TooMuchMemory(val bytes: Long) : Exception("memory ${gb(bytes)} GB, over the line")
 
     companion object {
         /** The phone's line is 6 GiB of PSS; stop a little before it (sampled every 0.5 s). */
         const val LIMIT = 5_900L * 1024 * 1024
+        /**
+         * While the engine rebuilds its working files (none at load) it needs more for that one
+         * run; the files are only kept if it finishes, so allow it up to just under the line.
+         */
+        const val REBUILD_LIMIT = 6_060L * 1024 * 1024
         /** Above this resident size, measure the PSS itself. */
         private const val NEAR = 4_600L * 1024 * 1024
 
@@ -87,6 +95,8 @@ class MemoryGuard {
         fun pss(): Long = Debug.getPss() * 1024
 
         fun gb(bytes: Long) = "%.1f".format(Locale.US, bytes / (1024.0 * 1024 * 1024))
+
+        fun mb(bytes: Long) = (bytes / (1024 * 1024)).toString()
 
         private val MAPPING = Regex("""^[0-9a-f]+-[0-9a-f]+ """)
 
