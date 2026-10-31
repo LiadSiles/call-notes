@@ -178,6 +178,13 @@ class Prefs(context: Context) {
      */
     var summaryOnGpu by bool(KEY_GPU, true)
 
+    /**
+     * Stop a summary before HyperOS's 6 GB memory line ([com.callnotes.processing.MemoryGuard]).
+     * Off (the owner's experiment, 0.24.5): the summary runs on; the phone may force-stop the
+     * app, which also turns accessibility off. The peak is logged either way.
+     */
+    var summaryMemoryGuard by bool(KEY_MEMORY_GUARD, true)
+
     // ---- Tasks -------------------------------------------------------------------------
 
     /** A pop-up notification when a task is due (its time, or the morning of its date). */
@@ -275,6 +282,7 @@ class Prefs(context: Context) {
         private const val KEY_PRECISE = "precise_summary"
         private const val KEY_THINKING = "summary_thinking"
         private const val KEY_GPU = "summary_on_gpu"
+        private const val KEY_MEMORY_GUARD = "summary_memory_guard"
         private const val KEY_BACKGROUND = "filter_background"
         private const val KEY_AUDIO_DAYS = "audio_retention_days"
         private const val KEY_CALL_DAYS = "call_retention_days"
@@ -288,7 +296,7 @@ class Prefs(context: Context) {
         /** What "restore defaults" resets. */
         private val RESETTABLE = listOf(
             KEY_RECORDING, KEY_VOIP, KEY_SPEAKER, KEY_AUTO, KEY_WIFI,
-            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_THINKING, KEY_GPU, KEY_BACKGROUND, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
+            KEY_SAVER, KEY_CHARGING, KEY_REMINDERS, KEY_SNOOZE, KEY_PRECISE, KEY_THINKING, KEY_GPU, KEY_MEMORY_GUARD, KEY_BACKGROUND, KEY_AUDIO_DAYS, KEY_CALL_DAYS, KEY_AUTO_MAX,
             KEY_AUTO_SUMMARY, KEY_T_CHARGING, KEY_S_CHARGING,
         )
 

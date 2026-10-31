@@ -309,7 +309,11 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
         .filterNot { it.name.startsWith("convert_") || it.parentFile?.name in setOf("plain", "share") }
         .sortedByDescending { it.length() }.toList()
 
-    private fun guard() = MemoryGuard(if (rebuilding) MemoryGuard.REBUILD_LIMIT else MemoryGuard.LIMIT)
+    private fun guard() = MemoryGuard(when {
+        !Prefs(host).summaryMemoryGuard -> Long.MAX_VALUE // the owner's choice: only measure
+        rebuilding -> MemoryGuard.REBUILD_LIMIT
+        else -> MemoryGuard.LIMIT
+    })
 
     private suspend fun analyse(call: CallEntity, analyzer: Analyzer): Boolean {
         val started = System.currentTimeMillis()

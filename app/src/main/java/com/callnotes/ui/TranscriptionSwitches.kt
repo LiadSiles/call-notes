@@ -112,6 +112,7 @@ fun SummaryModeSettings(prefs: Prefs) {
     var precise by remember { mutableStateOf(prefs.preciseSummary) }
     var thinking by remember { mutableStateOf(prefs.summaryThinking) }
     var gpu by remember { mutableStateOf(prefs.summaryOnGpu) }
+    var guard by remember { mutableStateOf(prefs.summaryMemoryGuard) }
     CardGroup {
         ChipChoice(
             "אופן הסיכום",
@@ -135,6 +136,13 @@ fun SummaryModeSettings(prefs: Prefs) {
                 "אם האפליקציה נסגרה בזמן סיכום במעבד הגרפי, האפשרות נכבית מעצמה.",
             gpu,
         ) { gpu = it; prefs.summaryOnGpu = it }
+        RowDivider(inset = false)
+        SwitchRow(
+            "עצירה לפני קו הזיכרון",
+            "עוצר סיכום לפני 6 GB זיכרון, הקו שמעליו HyperOS סוגר את האפליקציה (ומכבה את הנגישות). " +
+                "כבוי: הסיכום ממשיך, והטלפון עלול לסגור את האפליקציה — אז צריך להפעיל שוב את הנגישות.",
+            guard,
+        ) { guard = it; prefs.summaryMemoryGuard = it }
     }
     Note("כל השיחה נלקחת בחשבון: שיחה ארוכה מחולקת לחלקים, כל חלק מסוכם, והחלקים מאוחדים לסיכום אחד בלי לאבד פרטים. " +
         "שינוי חל על הסיכומים הבאים; שיחה שכבר סוכמה אפשר לסכם מחדש במסך שלה.")

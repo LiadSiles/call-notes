@@ -3,6 +3,13 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-31 — A switch to let summaries run past the guard (0.24.5)
+Owner's experiment: run without the 5.9 GB stop. Before 29.10 summaries finished although
+HyperOS's line was presumably there; maybe it checks only now and then and short summaries
+end first. A settings switch ("עצירה לפני קו הזיכרון", default on) rather than removing the
+guard: off, the guard only measures and logs the peak. Risk accepted by the owner: a force
+stop also turns accessibility off; the death handling keeps it from looping.
+
 ### 2026-10-31 — Result: a fresh working set changes nothing; the storage page was not the cause
 Owner confirmed he had pressed "פינוי". Test on 0.24.4 after clearing the app's cache:
 load with no working files took 9.7 s and wrote one file,
