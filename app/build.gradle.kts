@@ -17,6 +17,7 @@ android {
         applicationId = "com.callnotes"
         minSdk = 29
         targetSdk = 36
+        // 0.20.0's app code under a higher version, so it installs as an update (decisions.md).
         versionCode = 63
         versionName = "0.20.0-restored"
 
