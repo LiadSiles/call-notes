@@ -19,6 +19,13 @@ file's pages near the line.
 0.23.1: the memory is the model's own buffers (5.5–6.1 GB anonymous), not the files.
 "[FORCE STOP] … from process:com.miui.securitycenter" (Security app cleanup) also stops
 the app and turns accessibility off.
+0.24.x, POCO X6 Pro (Mali GPU): Gemma E4B **on the GPU** finished one summary at 1.3 GB
+of app memory, but loading took 15–35 s, free RAM fell to ~0.8 GB, the UI froze ("Input
+dispatching timed out", the owner felt the whole phone hang) and once the app crashed —
+the GPU switch then turned itself off as designed. On the CPU with thinking off (context
+8192): 5.8–5.9 GB within ~20 s (working copy 0.8, the rest 4.7–4.9 GB) — just over the
+guard. Gemma 4 E2B is the remaining option on this phone.
+"OneKeyClean" (HyperOS one-tap clean) is a cleanup like "SwipeUpClean".
 "SwipeUpClean" (clearing recent apps) also kills the app with its foreground service.
 `mediaProcessing` foreground services hit Android's daily time limit ("Time limit already
 exhausted"); the fallback to `dataSync` works.

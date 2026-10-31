@@ -77,10 +77,11 @@ object ProcessingLog {
 
     /**
      * Android's description of an exit names a cleanup: HyperOS's "SwipeUpClean" (recent apps
-     * cleared) or "… from process:com.miui.securitycenter" (the Security app's cleanup).
+     * cleared), "OneKeyClean" (the one-tap clean), or "… from process:com.miui.securitycenter"
+     * (the Security app's cleanup).
      */
     fun isCleanup(description: String?): Boolean =
-        description != null && ("SwipeUpClean" in description || "securitycenter" in description)
+        description != null && listOf("SwipeUpClean", "OneKeyClean", "securitycenter").any { it in description }
 
     /** What [SummaryWorker] writes as its stage while it works on a call. */
     private val SUMMARY_STAGE = Regex("""^\[summary] call (\d+):""")

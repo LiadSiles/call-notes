@@ -419,7 +419,8 @@ class SummaryWorker(host: TranscriptionService) : Worker(host, Stage.SUMMARY) {
             log("call ${call.id}: summary FAILED after ${secs(started)}: ${describe(e)} · ${guard.summary()}")
             val why = if (e is MemoryGuard.TooMuchMemory) {
                 unloadAfter = true
-                "הסיכום נעצר: מודל הסיכום הגיע ל-${MemoryGuard.gb(e.bytes)} GB זיכרון, ומעל 6 GB הטלפון סוגר את האפליקציה (וגם מכבה את הנגישות). אפשר לנסות שוב ממסך השיחה."
+                "הסיכום נעצר: מודל הסיכום הגיע ל-${MemoryGuard.gb(e.bytes)} GB זיכרון, ומעל 6 GB הטלפון סוגר את האפליקציה (וגם מכבה את הנגישות). " +
+                    "המודל הקטן (Gemma 4 E2B, בהגדרות הסיכום) צריך הרבה פחות זיכרון. אפשר לנסות שוב ממסך השיחה."
             } else {
                 "${e.javaClass.simpleName}: ${e.message ?: ""}".take(300)
             }

@@ -25,6 +25,7 @@ class DeathTest {
     @Test fun cleanupsAreRecognised() {
         // Exit descriptions from the owner's log.
         assertTrue(ProcessingLog.isCleanup("SwipeUpClean"))
+        assertTrue(ProcessingLog.isCleanup("OneKeyClean"))
         assertTrue(ProcessingLog.isCleanup("[FORCE STOP] stop com.callnotes due to from process:com.miui.securitycenter"))
         assertFalse(ProcessingLog.isCleanup("[FORCE STOP] stop com.callnotes due to used too many pss resource,pss used:8524200kb,pss threshold:6291456kb"))
         assertFalse(ProcessingLog.isCleanup("stop com.callnotes due to installPackageLI"))
