@@ -3,6 +3,18 @@
 Newest first. Each entry: what was decided, why, and what was rejected. Add an entry
 whenever a choice would surprise a future contributor.
 
+### 2026-10-31 — Result: a fresh working set changes nothing; the storage page was not the cause
+Owner confirmed he had pressed "פינוי". Test on 0.24.4 after clearing the app's cache:
+load with no working files took 9.7 s and wrote one file,
+`<model>_1792522163_3659530240.xnnpack_cache` (2107 MB) — the whole set; the next load took
+1.2 s from it. Both runs: 5.9 GB within ~23 s, of which the model's own memory 5.2 GB and
+the working copy 0.2–0.5 GB. So the set is used and the memory is the same: the hypothesis
+below is wrong. Kept from 0.24.4 anyway: the storage page must not delete the engine's files,
+and the log lists them. Remaining explanation for the 5.2 GB: the main weights LiteRT-LM
+always keeps in RAM (2.24 GB) plus what is sized by the context (8192 tokens: KV cache,
+prefill buffers) — untested. Options: a smaller context for short calls (experiment), or
+Gemma 4 E2B (no code change; selectable in the summary settings).
+
 ### 2026-10-31 — Research: why E4B stopped fitting; the storage page and LiteRT-LM's working files (0.24.4)
 Owner: no phone update; summaries never failed before; find what in the code changed —
 double loading? memory not released?
